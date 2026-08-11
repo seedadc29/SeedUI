@@ -1,0 +1,204 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Source\GameObjects">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Physics">
+      <UniqueIdentifier>{A1D5C6A0-1F2A-4B3C-9D8E-1B2F3E4D5C6F}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\UI">
+      <UniqueIdentifier>{8C5F2C7E-1A3B-4D6E-9F0A-2B4C6D8E0F1A}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Assets">
+      <UniqueIdentifier>{92FCD529-E158-4F31-899F-B7EC8CD45343}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ThirdParty">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ThirdParty\raylib">
+      <UniqueIdentifier>{25F6B15A-8B73-4871-9C52-6E3238C5E78F}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ThirdParty\glm">
+      <UniqueIdentifier>{6DF7C921-F7D0-44BC-8F0E-49E5998B0C9F}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ThirdParty\imgui">
+      <UniqueIdentifier>{05A0E2AE-22F8-4D21-A4DF-C5B5A76E03D2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ThirdParty\Jolt">
+      <UniqueIdentifier>{5B3C10D2-3B7C-4E3F-9A4F-17C0D11C0A11}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Tools">
+      <UniqueIdentifier>{23A28EF6-6C0A-4F78-B7E2-49C8D5C5C77A}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="$(ProjectDir)Source\Main.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ProjectDir)Source\App.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ProjectDir)Source\GameObject.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ProjectDir)Source\Scene.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ProjectDir)Source\CameraController.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ProjectDir)Source\GameObjects\TerrainObject.cpp">
+      <Filter>Source\GameObjects</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ProjectDir)Source\GameObjects\PlayerObject.cpp">
+      <Filter>Source\GameObjects</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ProjectDir)Source\GameObjects\PickupObject.cpp">
+      <Filter>Source\GameObjects</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ProjectDir)Source\Physics\Physics.cpp">
+      <Filter>Source\Physics</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ProjectDir)Source\Assets\FbxModel.cpp">
+      <Filter>Source\Assets</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ProjectDir)Source\Assets\TextureLoader.cpp">
+      <Filter>Source\Assets</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ProjectDir)Source\GameScene.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ProjectDir)Source\MenuScene.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ProjectDir)Source\UI\Settings.cpp">
+      <Filter>Source\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ProjectDir)Source\UI\GameUI.cpp">
+      <Filter>Source\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ProjectDir)Source\UI\SettingsScreen.cpp">
+      <Filter>Source\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ProjectDir)Source\UI\LoadingScreen.cpp">
+      <Filter>Source\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ProjectDir)ThirdParty\raylib\src\raudio.c">
+      <Filter>ThirdParty\raylib</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ProjectDir)ThirdParty\raylib\src\rcore.c">
+      <Filter>ThirdParty\raylib</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ProjectDir)ThirdParty\raylib\src\rglfw.c">
+      <Filter>ThirdParty\raylib</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ProjectDir)ThirdParty\raylib\src\rmodels.c">
+      <Filter>ThirdParty\raylib</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ProjectDir)ThirdParty\raylib\src\rshapes.c">
+      <Filter>ThirdParty\raylib</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ProjectDir)ThirdParty\raylib\src\rtext.c">
+      <Filter>ThirdParty\raylib</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ProjectDir)ThirdParty\raylib\src\rtextures.c">
+      <Filter>ThirdParty\raylib</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ProjectDir)ThirdParty\imgui\imgui.cpp">
+      <Filter>ThirdParty\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ProjectDir)ThirdParty\imgui\imgui_draw.cpp">
+      <Filter>ThirdParty\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ProjectDir)ThirdParty\imgui\imgui_tables.cpp">
+      <Filter>ThirdParty\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ProjectDir)ThirdParty\imgui\imgui_widgets.cpp">
+      <Filter>ThirdParty\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ProjectDir)ThirdParty\Jolt\Jolt\**\*.cpp" Exclude="$(ProjectDir)ThirdParty\Jolt\Jolt\Compute\**\*.cpp;$(ProjectDir)ThirdParty\Jolt\Jolt\Shaders\**\*.cpp">
+      <Filter>ThirdParty\Jolt</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="$(ProjectDir)Source\App.h">
+      <Filter>Source</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ProjectDir)Source\GameObject.h">
+      <Filter>Source</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ProjectDir)Source\Scene.h">
+      <Filter>Source</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ProjectDir)Source\CameraController.h">
+      <Filter>Source</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ProjectDir)Source\GameObjects\TerrainObject.h">
+      <Filter>Source\GameObjects</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ProjectDir)Source\GameObjects\PlayerObject.h">
+      <Filter>Source\GameObjects</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ProjectDir)Source\GameObjects\PickupObject.h">
+      <Filter>Source\GameObjects</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ProjectDir)Source\Inventory.h">
+      <Filter>Source</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ProjectDir)Source\Physics\Physics.h">
+      <Filter>Source\Physics</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ProjectDir)Source\Assets\FbxModel.h">
+      <Filter>Source\Assets</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ProjectDir)Source\Assets\TextureLoader.h">
+      <Filter>Source\Assets</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ProjectDir)Source\GameScene.h">
+      <Filter>Source</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ProjectDir)Source\MenuScene.h">
+      <Filter>Source</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ProjectDir)Source\UI\Settings.h">
+      <Filter>Source\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ProjectDir)Source\UI\GameUI.h">
+      <Filter>Source\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ProjectDir)Source\UI\SettingsScreen.h">
+      <Filter>Source\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ProjectDir)Source\UI\LoadingScreen.h">
+      <Filter>Source\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ProjectDir)ThirdParty\raylib\src\raylib.h">
+      <Filter>ThirdParty\raylib</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ProjectDir)ThirdParty\raylib\src\raymath.h">
+      <Filter>ThirdParty\raylib</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ProjectDir)ThirdParty\raylib\src\rlgl.h">
+      <Filter>ThirdParty\raylib</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ProjectDir)ThirdParty\raylib\src\config.h">
+      <Filter>ThirdParty\raylib</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ProjectDir)ThirdParty\imgui\imgui.h">
+      <Filter>ThirdParty\imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ProjectDir)ThirdParty\glm\glm\glm.hpp">
+      <Filter>ThirdParty\glm</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="$(ProjectDir)..\Tools\AssetCooker.py">
+      <Filter>Tools</Filter>
+    </None>
+  </ItemGroup>
+</Project>

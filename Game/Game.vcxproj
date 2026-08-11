@@ -1,0 +1,210 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Development|x64">
+      <Configuration>Development</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{44948AC4-6303-4CB6-A628-1B84AA26D618}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>Game</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>$(DefaultPlatformToolset)</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Development|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>$(DefaultPlatformToolset)</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>$(DefaultPlatformToolset)</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Development|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>$(ProjectDir)..\Build\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)..\Build\Intermediate\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Development|x64'">
+    <OutDir>$(ProjectDir)..\Build\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)..\Build\Intermediate\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>$(ProjectDir)..\Build\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)..\Build\Intermediate\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Label="Vcpkg" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;ASSIMP_BUILD_NO_ARMATUREPOPULATE_PROCESS;_DEBUG;GAME_BUILD_MODE=Debug;PLATFORM_DESKTOP;GRAPHICS_API_OPENGL_33;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)Source;$(ProjectDir)ThirdParty\raylib\src;$(ProjectDir)ThirdParty\raylib\src\external\glfw\include;$(ProjectDir)ThirdParty\glm;$(ProjectDir)ThirdParty\imgui;$(ProjectDir)ThirdParty\imgui\backends;$(ProjectDir)ThirdParty\Jolt;$(ProjectDir)ThirdParty\assimp\include;$(ProjectDir)ThirdParty\qoi;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>assimp.lib;kernel32.lib;user32.lib;gdi32.lib;winmm.lib;shell32.lib;opengl32.lib;advapi32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;winspool.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ProjectDir)ThirdParty\assimp\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Development|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;ASSIMP_BUILD_NO_ARMATUREPOPULATE_PROCESS;GAME_BUILD_MODE=Development;PLATFORM_DESKTOP;GRAPHICS_API_OPENGL_33;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)Source;$(ProjectDir)ThirdParty\raylib\src;$(ProjectDir)ThirdParty\raylib\src\external\glfw\include;$(ProjectDir)ThirdParty\glm;$(ProjectDir)ThirdParty\imgui;$(ProjectDir)ThirdParty\imgui\backends;$(ProjectDir)ThirdParty\Jolt;$(ProjectDir)ThirdParty\assimp\include;$(ProjectDir)ThirdParty\qoi;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>assimp.lib;kernel32.lib;user32.lib;gdi32.lib;winmm.lib;shell32.lib;opengl32.lib;advapi32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;winspool.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ProjectDir)ThirdParty\assimp\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;ASSIMP_BUILD_NO_ARMATUREPOPULATE_PROCESS;NDEBUG;GAME_BUILD_MODE=Release;PLATFORM_DESKTOP;GRAPHICS_API_OPENGL_33;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)Source;$(ProjectDir)ThirdParty\raylib\src;$(ProjectDir)ThirdParty\raylib\src\external\glfw\include;$(ProjectDir)ThirdParty\glm;$(ProjectDir)ThirdParty\imgui;$(ProjectDir)ThirdParty\Jolt;$(ProjectDir)ThirdParty\assimp\include;$(ProjectDir)ThirdParty\qoi;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <DebugInformationFormat>None</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <AdditionalDependencies>assimp.lib;kernel32.lib;user32.lib;gdi32.lib;winmm.lib;shell32.lib;opengl32.lib;advapi32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;winspool.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ProjectDir)ThirdParty\assimp\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="$(ProjectDir)Source\Main.cpp" />
+    <ClCompile Include="$(ProjectDir)Source\App.cpp" />
+    <ClCompile Include="$(ProjectDir)Source\GameObject.cpp" />
+    <ClCompile Include="$(ProjectDir)Source\Scene.cpp" />
+    <ClCompile Include="$(ProjectDir)Source\CameraController.cpp" />
+    <ClCompile Include="$(ProjectDir)Source\GameObjects\TerrainObject.cpp" />
+    <ClCompile Include="$(ProjectDir)Source\GameObjects\PlayerObject.cpp" />
+    <ClCompile Include="$(ProjectDir)Source\GameObjects\PickupObject.cpp" />
+    <ClCompile Include="$(ProjectDir)Source\GameObjects\EnemyObject.cpp" />
+    <ClCompile Include="$(ProjectDir)Source\GameObjects\NatureObject.cpp" />
+    <ClCompile Include="$(ProjectDir)Source\GameScene.cpp" />
+    <ClCompile Include="$(ProjectDir)Source\MenuScene.cpp" />
+    <ClCompile Include="$(ProjectDir)Source\UI\Settings.cpp" />
+    <ClCompile Include="$(ProjectDir)Source\UI\GameUI.cpp" />
+    <ClCompile Include="$(ProjectDir)Source\UI\SettingsScreen.cpp" />
+    <ClCompile Include="$(ProjectDir)Source\UI\LoadingScreen.cpp" />
+    <ClCompile Include="$(ProjectDir)Source\Physics\Physics.cpp" />
+    <ClCompile Include="$(ProjectDir)Source\Assets\FbxModel.cpp" />
+    <ClCompile Include="$(ProjectDir)Source\Assets\TextureLoader.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="$(ProjectDir)ThirdParty\raylib\src\raudio.c" />
+    <ClCompile Include="$(ProjectDir)ThirdParty\raylib\src\rcore.c" />
+    <ClCompile Include="$(ProjectDir)ThirdParty\raylib\src\rglfw.c" />
+    <ClCompile Include="$(ProjectDir)ThirdParty\raylib\src\rmodels.c" />
+    <ClCompile Include="$(ProjectDir)ThirdParty\raylib\src\rshapes.c" />
+    <ClCompile Include="$(ProjectDir)ThirdParty\raylib\src\rtext.c" />
+    <ClCompile Include="$(ProjectDir)ThirdParty\raylib\src\rtextures.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="$(ProjectDir)ThirdParty\imgui\imgui.cpp" />
+    <ClCompile Include="$(ProjectDir)ThirdParty\imgui\imgui_draw.cpp" />
+    <ClCompile Include="$(ProjectDir)ThirdParty\imgui\imgui_tables.cpp" />
+    <ClCompile Include="$(ProjectDir)ThirdParty\imgui\imgui_widgets.cpp" />
+    <ClCompile Include="$(ProjectDir)ThirdParty\imgui\backends\imgui_impl_glfw.cpp" />
+    <ClCompile Include="$(ProjectDir)ThirdParty\imgui\backends\imgui_impl_opengl3.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="$(ProjectDir)ThirdParty\Jolt\Jolt\**\*.cpp" Exclude="$(ProjectDir)ThirdParty\Jolt\Jolt\Compute\**\*.cpp;$(ProjectDir)ThirdParty\Jolt\Jolt\Shaders\**\*.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="$(ProjectDir)Source\App.h" />
+    <ClInclude Include="$(ProjectDir)Source\GameObject.h" />
+    <ClInclude Include="$(ProjectDir)Source\Scene.h" />
+    <ClInclude Include="$(ProjectDir)Source\CameraController.h" />
+    <ClInclude Include="$(ProjectDir)Source\GameObjects\TerrainObject.h" />
+    <ClInclude Include="$(ProjectDir)Source\GameObjects\PlayerObject.h" />
+    <ClInclude Include="$(ProjectDir)Source\GameObjects\PickupObject.h" />
+    <ClInclude Include="$(ProjectDir)Source\GameObjects\EnemyObject.h" />
+    <ClInclude Include="$(ProjectDir)Source\GameObjects\NatureObject.h" />
+    <ClInclude Include="$(ProjectDir)Source\Inventory.h" />
+    <ClInclude Include="$(ProjectDir)Source\GameScene.h" />
+    <ClInclude Include="$(ProjectDir)Source\MenuScene.h" />
+    <ClInclude Include="$(ProjectDir)Source\UI\Settings.h" />
+    <ClInclude Include="$(ProjectDir)Source\UI\GameUI.h" />
+    <ClInclude Include="$(ProjectDir)Source\UI\SettingsScreen.h" />
+    <ClInclude Include="$(ProjectDir)Source\UI\LoadingScreen.h" />
+    <ClInclude Include="$(ProjectDir)Source\Physics\Physics.h" />
+    <ClInclude Include="$(ProjectDir)Source\Assets\FbxModel.h" />
+    <ClInclude Include="$(ProjectDir)Source\Assets\TextureLoader.h" />
+    <ClInclude Include="$(ProjectDir)ThirdParty\raylib\src\raylib.h" />
+    <ClInclude Include="$(ProjectDir)ThirdParty\raylib\src\raymath.h" />
+    <ClInclude Include="$(ProjectDir)ThirdParty\raylib\src\rlgl.h" />
+    <ClInclude Include="$(ProjectDir)ThirdParty\raylib\src\config.h" />
+    <ClInclude Include="$(ProjectDir)ThirdParty\imgui\imgui.h" />
+    <ClInclude Include="$(ProjectDir)ThirdParty\glm\glm\glm.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="$(ProjectDir)..\Tools\AssetCooker.py" />
+  </ItemGroup>
+  <ItemDefinitionGroup>
+    <PreBuildEvent>
+      <Command>if exist "$(ProjectDir)..\.venv\Scripts\python.exe" ("$(ProjectDir)..\.venv\Scripts\python.exe" "$(ProjectDir)..\Tools\AssetCooker.py" "$(ConfigurationName)" "$(OutDir).") else (python "$(ProjectDir)..\Tools\AssetCooker.py" "$(ConfigurationName)" "$(OutDir).")</Command>
+      <Message>Running AssetCooker...</Message>
+    </PreBuildEvent>
+  </ItemDefinitionGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

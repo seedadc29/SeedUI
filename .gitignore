@@ -1,0 +1,55 @@
+# Build
+Build/*
+!Build/**/
+Build/*/Intermediate/
+
+# Visual Studio
+.vs/
+*.vcxproj.user
+*.sln.docstates
+x64/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Editor
+imgui.ini
+
+# Misc
+*.log
+UpgradeLog.htm
+.tmp-*
+
+# Local db & cache
+.freebuff/
+
+# Third-party kit packs: keep only the models/textures used by AssetCooker.py
+Game/Assets/Kit assets/*
+!Game/Assets/Kit assets/Ultimate Monsters/
+!Game/Assets/Kit assets/Stylized Nature MegaKit[Standard]/
+Game/Assets/Kit assets/Ultimate Monsters/*
+!Game/Assets/Kit assets/Ultimate Monsters/Blob/
+!Game/Assets/Kit assets/Ultimate Monsters/Big/
+!Game/Assets/Kit assets/Ultimate Monsters/Flying/
+Game/Assets/Kit assets/Ultimate Monsters/*/Blends/
+Game/Assets/Kit assets/Ultimate Monsters/*/FBX/
+Game/Assets/Kit assets/Ultimate Monsters/*/OBJ/
+!Game/Assets/Kit assets/Ultimate Monsters/*/glTF/
+Game/Assets/Kit assets/Ultimate Monsters/*/glTF/*
+!Game/Assets/Kit assets/Ultimate Monsters/*/glTF/*.gltf
+!Game/Assets/Kit assets/Ultimate Monsters/*/glTF/Atlas_Monsters.png
+
+# Nature kit: keep the glTF folder (gltf + bin + textures, textures resized to 512px)
+Game/Assets/Kit assets/Stylized Nature MegaKit\[Standard]/*
+!Game/Assets/Kit assets/Stylized Nature MegaKit\[Standard]/
+!Game/Assets/Kit assets/Stylized Nature MegaKit\[Standard]/glTF/
+
+# SeedUI — artefatos em tempo de execução e de teste
+seedui_capture*.png
+diretrizes/
+*.VC.db
+
+# Garantia: nenhum conteúdo de pasta Build entra no versionamento
+**/Build/
