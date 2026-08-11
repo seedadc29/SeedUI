@@ -18,14 +18,14 @@ namespace seedui
                           alpha);
         }
 
-        // Paleta oficial (identidade Blender + Photoshop)
-        inline const ImVec4 BackgroundWindow = Hex(0x212121);
-        inline const ImVec4 BackgroundPanel   = Hex(0x2b2b2b);
-        inline const ImVec4 BackgroundChild   = Hex(0x1f1f1f);
-        inline const ImVec4 PanelHeader       = Hex(0x3a3a3a);
-        inline const ImVec4 MenuBar           = Hex(0x323232);
-        inline const ImVec4 Border            = Hex(0x3f3f3f);
-        inline const ImVec4 BorderLight       = Hex(0x4a4a4a);
+        // Paleta premium inspirada no Visual Studio dark.
+        inline const ImVec4 BackgroundWindow = Hex(0x1e1e1e);
+        inline const ImVec4 BackgroundPanel   = Hex(0x252526);
+        inline const ImVec4 BackgroundChild   = Hex(0x1b1b1c);
+        inline const ImVec4 PanelHeader       = Hex(0x333333);
+        inline const ImVec4 MenuBar           = Hex(0x2d2d30);
+        inline const ImVec4 Border            = Hex(0x3c3c3c);
+        inline const ImVec4 BorderLight       = Hex(0x505050);
         inline const ImVec4 TextPrimary       = Hex(0xececec);
         inline const ImVec4 TextSecondary     = Hex(0xa0a0a0);
         inline const ImVec4 TextDisabled      = Hex(0x6a6a6a);
@@ -39,7 +39,7 @@ namespace seedui
         inline const ImVec4 GridMajor         = Hex(0x2e2e2e);
 
         // Cor do ClearBackground (raylib)
-        inline const Color RaylibWindowBg = { 33, 33, 33, 255 };
+        inline const Color RaylibWindowBg = { 30, 30, 30, 255 };
 
         void Apply();
         void LoadFonts();

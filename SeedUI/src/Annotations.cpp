@@ -12,9 +12,9 @@ namespace seedui
     namespace
     {
         constexpr float kLabelW = 240.0f;
-        constexpr float kLabelH = 68.0f;
+        constexpr float kLabelMinH = 68.0f;
         constexpr float kPopupW = 360.0f;
-        constexpr float kPopupH = 300.0f;
+        constexpr float kPopupH = 202.0f; // edição individual compacta; exportação é global na barra inferior
 
         const ImU32 kAnnotColors[] = {
             IM_COL32(241, 196, 15, 255),   // amarelo
@@ -25,6 +25,13 @@ namespace seedui
         };
         constexpr int kColorCount = 5;
 
+        float LabelHeight(const Annotation& a)
+        {
+            const char* preview = a.text.empty() ? "Clique para editar..." : a.text.c_str();
+            const float textH = ImGui::CalcTextSize(preview, nullptr, false,
+                                                    kLabelW - 16.0f).y;
+            return std::max(kLabelMinH, 34.0f + textH + 8.0f);
+        }
         bool PointInRect(const ImVec2& p, const ImVec2& a, const ImVec2& b)
         {
             return p.x >= a.x && p.x <= b.x && p.y >= a.y && p.y <= b.y;
@@ -45,9 +52,11 @@ namespace seedui
         }
     }
 
-    AnnotationsPopupRect AnnotationsPopupRectFor(const ImVec2& label, const ImVec2& viewportSize)
+    AnnotationsPopupRect AnnotationsPopupRectFor(const Annotation& annotation,
+                                                 const ImVec2& viewportSize)
     {
-        ImVec2 anchor(label.x, label.y + kLabelH + 8.0f); // abaixo do rótulo
+        const ImVec2 label = annotation.label;
+        ImVec2 anchor(label.x, label.y + LabelHeight(annotation) + 8.0f); // abaixo do rótulo
         if (anchor.x + kPopupW > viewportSize.x) anchor.x = viewportSize.x - kPopupW;
         if (anchor.x < 0.0f) anchor.x = 0.0f;
         if (anchor.y + kPopupH > viewportSize.y)
@@ -69,9 +78,9 @@ namespace seedui
         a.id = st.nextId++;
         a.min = min;
         a.max = max;
-        a.label = ImVec2(max.x + 14.0f, max.y - kLabelH - 8.0f);
-        a.color = kAnnotColors[(a.id - 1) % kColorCount];
         a.text = text ? text : "";
+        a.label = ImVec2(max.x + 14.0f, max.y - LabelHeight(a) - 8.0f);
+        a.color = kAnnotColors[(a.id - 1) % kColorCount];
         st.items.push_back(a);
         st.selected = (int)st.items.size() - 1;
         st.editedIndex = -1;
@@ -99,7 +108,7 @@ namespace seedui
             for (int i = (int)st.items.size() - 1; i >= 0; --i)
             {
                 const Annotation& a = st.items[i];
-                if (PointInRect(mouse, a.label, ImVec2(a.label.x + kLabelW, a.label.y + kLabelH)))
+                if (PointInRect(mouse, a.label, ImVec2(a.label.x + kLabelW, a.label.y + LabelHeight(a))))
                 {
                     hitLabel = i;
                     break;
@@ -154,7 +163,7 @@ namespace seedui
                 a.label.x = mouse.x - st.dragOffset.x;
                 a.label.y = mouse.y - st.dragOffset.y;
                 const float boundX = std::max(0.0f, viewportSize.x - kLabelW);
-                const float boundY = std::max(0.0f, viewportSize.y - kLabelH);
+                const float boundY = std::max(0.0f, viewportSize.y - LabelHeight(a));
                 a.label.x = std::min(std::max(a.label.x, 0.0f), boundX);
                 a.label.y = std::min(std::max(a.label.y, 0.0f), boundY);
             }
@@ -186,7 +195,7 @@ namespace seedui
             for (const Annotation& a : st.items)
             {
                 if (PointInRect(mouse, a.min, a.max) ||
-                    PointInRect(mouse, a.label, ImVec2(a.label.x + kLabelW, a.label.y + kLabelH)))
+                    PointInRect(mouse, a.label, ImVec2(a.label.x + kLabelW, a.label.y + LabelHeight(a))))
                 {
                     onAny = true;
                     break;
@@ -207,7 +216,7 @@ namespace seedui
             // Não desenha por cima da janela de edição aberta
             const bool overPopup = clipPopup &&
                 (RectsOverlap(a.min, a.max, popupMin, popupMax) ||
-                 RectsOverlap(a.label, ImVec2(a.label.x + kLabelW, a.label.y + kLabelH),
+                 RectsOverlap(a.label, ImVec2(a.label.x + kLabelW, a.label.y + LabelHeight(a)),
                               popupMin, popupMax));
             if (overPopup) continue;
 
@@ -234,7 +243,7 @@ namespace seedui
 
             // Rótulo flutuante
             const ImVec2 l0 = a.label;
-            const ImVec2 l1(l0.x + kLabelW, l0.y + kLabelH);
+            const ImVec2 l1(l0.x + kLabelW, l0.y + LabelHeight(a));
 
             // Seta do rótulo para a área
             const ImVec2 from((l0.x + l1.x) * 0.5f, l1.y);
@@ -257,8 +266,11 @@ namespace seedui
             dl->AddText(ImVec2(l0.x + 8.0f, l0.y + 6.0f), col, tb);
 
             const char* preview = a.text.empty() ? "Clique para editar..." : a.text.c_str();
+            dl->PushClipRect(ImVec2(l0.x + 8.0f, l0.y + 24.0f),
+                             ImVec2(l1.x - 8.0f, l1.y - 6.0f), true);
             dl->AddText(font, 13.0f, ImVec2(l0.x + 8.0f, l0.y + 26.0f),
                         IM_COL32(236, 236, 236, 255), preview, nullptr, kLabelW - 16.0f);
+            dl->PopClipRect();
         }
 
         // Pré-visualização do retângulo em criação
@@ -292,7 +304,7 @@ namespace seedui
 
         // Popup sempre DENTRO da janela (abaixo do rótulo; acima dele se não couber)
         const AnnotationsPopupRect pr =
-            AnnotationsPopupRectFor(a.label, ImGui::GetMainViewport()->Size);
+            AnnotationsPopupRectFor(a, ImGui::GetMainViewport()->Size);
         ImGui::SetNextWindowPos(pr.min, ImGuiCond_Always);
         ImGui::SetNextWindowSize(ImVec2(kPopupW, kPopupH), ImGuiCond_Always);
 
@@ -345,15 +357,9 @@ namespace seedui
             return AnnotationsEdit_Deleted;
         }
 
-        ImGui::Spacing();
-        if (ImGui::Button("Exportar diretrizes (.txt + print)", ImVec2(-1.0f, 0.0f)))
-        {
-            ImGui::End();
-            return AnnotationsEdit_Export;
-        }
 
         ImGui::TextColored(Theme::TextDisabled,
-                           "O texto já fica salvo enquanto você digita. Esc fecha esta caixa.");
+                           "Salvamento automático · Esc fecha");
         ImGui::End();
         return AnnotationsEdit_None;
     }

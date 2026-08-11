@@ -40,7 +40,7 @@ namespace seedui
 
     // Retângulo do popup de edição de uma anotação, sempre DENTRO da janela:
     // fica abaixo do rótulo; se não couber, aparece acima dele.
-    AnnotationsPopupRect AnnotationsPopupRectFor(const ImVec2& label,
+    AnnotationsPopupRect AnnotationsPopupRectFor(const Annotation& annotation,
                                                  const ImVec2& viewportSize);
 
     // Cria uma anotação programaticamente (ex.: amostra em modo captura)
@@ -65,7 +65,6 @@ namespace seedui
         AnnotationsEdit_None = 0,   // popup fechado ou sem ação
         AnnotationsEdit_Confirmed,  // Confirmar ✓ / X / Esc (fecha mantendo o texto)
         AnnotationsEdit_Deleted,    // Apagar anotação
-        AnnotationsEdit_Export,     // Exportar diretrizes (.txt + print)
     };
 
     // Janela flutuante de digitação da anotação selecionada.

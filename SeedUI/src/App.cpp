@@ -1,16 +1,20 @@
 // Não incluímos <windows.h> inteiro: nomes dele (CloseWindow, ShowCursor, DrawText...)
 // colidem com funções do raylib. Declaramos apenas o que realmente usamos.
 #pragma comment(lib, "Shell32.lib")
+#pragma comment(lib, "Dwmapi.lib")
 extern "C"
 {
     // HINSTANCE é um ponteiro; retornamos void* (o valor não é usado)
     __declspec(dllimport) void* ShellExecuteA(void* hwnd, const char* operation,
                                               const char* file, const char* parameters,
                                               const char* directory, int showCmd);
+    __declspec(dllimport) int DwmSetWindowAttribute(void* hwnd, unsigned int attribute,
+                                                    const void* value, unsigned int valueSize);
 }
 
 #include "App.h"
 
+#include "FileDialogs.h"
 #include "Theme.h"
 #include "Icons.h"
 #include "Manual.h"
@@ -51,9 +55,26 @@ namespace seedui
         }
 
         constexpr float kToolbarWidth = 50.0f;
-        constexpr float kRightPanelWidth = 320.0f;
-        constexpr float kStatusBarHeight = 26.0f;
-        constexpr float kToolButtonSize = 34.0f;
+        constexpr float kActionBarHeight = 42.0f;
+        constexpr float kStatusBarHeight = 34.0f;
+        constexpr float kToolButtonSize = 32.0f;
+        constexpr float kRightPanelMinWidth = 260.0f;
+        constexpr float kRightPanelMaxWidth = 520.0f;
+        constexpr float kRightRailWidth = 50.0f;
+
+        void EnableDarkTitleBar()
+        {
+            void* hwnd = GetWindowHandle();
+            if (!hwnd) return;
+
+            const int enabled = 1;
+            DwmSetWindowAttribute(hwnd, 20, &enabled, sizeof enabled);
+            DwmSetWindowAttribute(hwnd, 19, &enabled, sizeof enabled);
+
+            const unsigned int dark = 0x001e1e1e;
+            DwmSetWindowAttribute(hwnd, 35, &dark, sizeof dark);
+            DwmSetWindowAttribute(hwnd, 36, &dark, sizeof dark);
+        }
 
         void MenuItemSoon(const char* label, const char* milestone)
         {
@@ -61,13 +82,16 @@ namespace seedui
         }
 
         // Cabeçalho de painel no estilo Blender (faixa de título)
-        bool PanelBegin(const char* title)
+        bool PanelBegin(IconId icon, const char* title)
         {
             ImGui::PushStyleColor(ImGuiCol_Header, Theme::PanelHeader);
             ImGui::PushStyleColor(ImGuiCol_HeaderHovered, Theme::BorderLight);
             ImGui::PushStyleColor(ImGuiCol_HeaderActive, Theme::PanelHeader);
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 7));
-            const bool open = ImGui::CollapsingHeader(title, ImGuiTreeNodeFlags_DefaultOpen);
+            const std::string label = std::string("        ") + title;
+            const bool open = ImGui::CollapsingHeader(label.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+            const ImVec2 headerMin = ImGui::GetItemRectMin();
+            DrawIconAt(icon, headerMin.x + 33.0f, headerMin.y + 6.0f, 18.0f);
             ImGui::PopStyleVar();
             ImGui::PopStyleColor(3);
             return open;
@@ -123,6 +147,7 @@ namespace seedui
         const int winH = (kWindowHeight > capH) ? capH : kWindowHeight;
         TraceLog(LOG_INFO, "JANELA: monitor %dx%d, janela %dx%d", monitorW, monitorH, winW, winH);
         InitWindow(winW, winH, "SeedUI - Editor Visual de Interfaces");
+        EnableDarkTitleBar();
         SetExitKey(0);
         SetTargetFPS(60);
         SetTextureFilter(GetFontDefault().texture, TEXTURE_FILTER_BILINEAR);
@@ -244,11 +269,279 @@ namespace seedui
         TakeScreenshot(pngPath.c_str());
 
         // Mensagem curta: a pasta já abre sozinha; o caminho completo fica no log
-        mStatusMsg = "Diretrizes exportadas (pasta diretrizes/ aberta)";
+        mStatusMsg = "Diretrizes exportadas em Build/Debug/diretrizes";
         mStatusMsgUntil = GetTime() + 8.0;
 
         // Abre a pasta para o usuário ver o .txt e o print (SW_SHOWDEFAULT = 10)
         ShellExecuteA(nullptr, "open", dir.c_str(), nullptr, nullptr, 10);
+    }
+
+    void App::NovoProjeto()
+    {
+        mShowNovoProjeto = true;
+    }
+
+    void App::AbrirProjeto()
+    {
+        const std::string path = AbrirDialogoProjeto();
+        if (path.empty()) return; // cancelado
+
+        std::string texto;
+        FILE* f = fopen(path.c_str(), "rb");
+        if (!f)
+        {
+            mStatusMsg = "Não foi possível abrir o arquivo.";
+            mStatusMsgUntil = GetTime() + 6.0;
+            return;
+        }
+        char buf[65536];
+        size_t n;
+        while ((n = fread(buf, 1, sizeof buf, f)) > 0) texto.append(buf, n);
+        fclose(f);
+
+        Project novo;
+        const std::string erro = Project::Desserializar(novo, texto);
+        if (!erro.empty())
+        {
+            mStatusMsg = "Erro ao abrir: " + erro;
+            mStatusMsgUntil = GetTime() + 8.0;
+            TraceLog(LOG_ERROR, "%s", erro.c_str());
+            return;
+        }
+
+        mProject = std::move(novo);
+        mProject.caminhoArquivo = path;
+        mUltimoCaminho = path;
+        mHasProject = true;
+        mProjectDirty = false;
+        mTelaAtiva = 0;
+        mModoAtivo = 0;
+        mSelectedElementId.clear();
+        mStatusMsg = "Projeto aberto: " + mProject.nome;
+        mStatusMsgUntil = GetTime() + 6.0;
+        TraceLog(LOG_INFO, "Projeto aberto: %s (telas=%d)", path.c_str(),
+                 (int)mProject.telas.size());
+    }
+
+    void App::SalvarProjeto(bool salvarComo)
+    {
+        if (!mHasProject) return;
+
+        std::string path = mUltimoCaminho;
+        if (salvarComo || path.empty())
+        {
+            std::string sugerido = mProject.nome;
+            if (sugerido.empty()) sugerido = "projeto";
+            path = SalvarDialogoProjeto(sugerido);
+            if (path.empty()) return; // cancelado
+        }
+
+        // Garante a extensão .ui.json
+        if (path.size() < 8 ||
+            path.compare(path.size() - 8, 8, ".ui.json") != 0)
+        {
+            path += ".ui.json";
+        }
+
+        mProject.modificadoEm = Project::StampAtual();
+        const std::string js = Project::Serializar(mProject);
+
+        FILE* f = fopen(path.c_str(), "wb");
+        if (!f)
+        {
+            mStatusMsg = "Não foi possível salvar: " + path;
+            mStatusMsgUntil = GetTime() + 8.0;
+            TraceLog(LOG_ERROR, "Falha ao gravar %s", path.c_str());
+            return;
+        }
+        fputs(js.c_str(), f);
+        fclose(f);
+
+        mUltimoCaminho = path;
+        mProject.caminhoArquivo = path;
+        mProjectDirty = false;
+        mStatusMsg = "Salvo: " + path;
+        mStatusMsgUntil = GetTime() + 6.0;
+        TraceLog(LOG_INFO, "Projeto salvo: %s", path.c_str());
+    }
+
+    void App::FecharProjeto()
+    {
+        if (!mHasProject) return;
+        mHasProject = false;
+        mProjectDirty = false;
+        mProject = Project(); // volta para o estado vazio (tela inicial)
+        mUltimoCaminho.clear();
+        mTelaAtiva = 0;
+        mModoAtivo = 0;
+        mSelectedElementId.clear();
+        mStatusMsg = "Projeto fechado.";
+        mStatusMsgUntil = GetTime() + 5.0;
+    }
+
+    void App::MarcarTudoSalvo()
+    {
+        mProjectDirty = false;
+    }
+
+    void App::AdicionarComponente(const char* tipo, const char* nome)
+    {
+        if (!mHasProject || mProject.telas.empty()) return;
+        if (mTelaAtiva < 0 || mTelaAtiva >= (int)mProject.telas.size()) return;
+
+        Tela& tela = mProject.telas[mTelaAtiva];
+        if (tela.modos.empty()) return;
+        if (mModoAtivo < 0 || mModoAtivo >= (int)tela.modos.size()) mModoAtivo = 0;
+
+        Modo& modo = tela.modos[mModoAtivo];
+        const std::string base = tipo ? tipo : "elemento";
+        std::string id;
+        for (int i = 1; i < 10000; ++i)
+        {
+            id = base + "_" + std::to_string(i);
+            if (!Project::ResolverId(mProject, id)) break;
+        }
+
+        const int index = (int)modo.raiz.size();
+        Element e;
+        e.id = id;
+        e.tipo = base;
+        e.nome = nome ? nome : base.c_str();
+        e.transformacao = {
+            { "x", 80 + (index % 5) * 28 },
+            { "y", 80 + (index % 7) * 24 },
+            { "largura", 180 },
+            { "altura", 42 }
+        };
+
+        if (base == "janela" || base == "painel")
+        {
+            e.transformacao["largura"] = 320;
+            e.transformacao["altura"] = base == "janela" ? 220 : 160;
+        }
+        else if (base == "texto")
+        {
+            e.transformacao["largura"] = 220;
+            e.transformacao["altura"] = 32;
+            e.propriedades["texto"] = "Texto";
+        }
+        else if (base == "botao")
+        {
+            e.propriedades["texto"] = "Botao";
+        }
+        else if (base == "campo_numerico")
+        {
+            e.propriedades["valor"] = 0;
+        }
+        else if (base == "slider")
+        {
+            e.propriedades["valor"] = 50;
+            e.propriedades["min"] = 0;
+            e.propriedades["max"] = 100;
+        }
+
+        modo.raiz.push_back(std::move(e));
+        mSelectedElementId = id;
+        mProjectDirty = true;
+        mStatusMsg = "Componente adicionado: " + id;
+        mStatusMsgUntil = GetTime() + 5.0;
+    }
+
+    void App::DrawElementTree(Element& element)
+    {
+        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow |
+                                   ImGuiTreeNodeFlags_SpanAvailWidth;
+        if (element.filhos.empty()) flags |= ImGuiTreeNodeFlags_Leaf;
+        if (element.id == mSelectedElementId) flags |= ImGuiTreeNodeFlags_Selected;
+
+        const std::string label = element.nome.empty()
+            ? element.id + "##" + element.id
+            : element.nome + "##" + element.id;
+
+        const bool open = ImGui::TreeNodeEx(label.c_str(), flags);
+        if (ImGui::IsItemClicked())
+            mSelectedElementId = element.id;
+
+        if (ImGui::BeginPopupContextItem())
+        {
+            if (ImGui::MenuItem(element.visivel ? "Ocultar" : "Mostrar"))
+            {
+                element.visivel = !element.visivel;
+                mProjectDirty = true;
+            }
+            if (ImGui::MenuItem(element.bloqueado ? "Desbloquear" : "Bloquear"))
+            {
+                element.bloqueado = !element.bloqueado;
+                mProjectDirty = true;
+            }
+            ImGui::EndPopup();
+        }
+
+        if (open)
+        {
+            ImGui::TextColored(Theme::TextDisabled, "%s", element.id.c_str());
+            for (Element& child : element.filhos)
+                DrawElementTree(child);
+            ImGui::TreePop();
+        }
+    }
+
+    void App::DrawNovoProjetoDialog()
+    {
+        if (!mShowNovoProjeto) return;
+
+        ImGui::SetNextWindowSize(ImVec2(460, 0), ImGuiCond_Always);
+        if (!ImGui::Begin("Novo projeto", &mShowNovoProjeto,
+                          ImGuiWindowFlags_NoResize))
+        {
+            ImGui::End();
+            return;
+        }
+
+        ImGui::TextWrapped("Nome do projeto (vira o arquivo .ui.json):");
+        ImGui::InputText("##nome", mNovoNome, sizeof mNovoNome);
+
+        ImGui::Spacing();
+        ImGui::TextWrapped("Descrição (opcional, guardada nos metadados):");
+        ImGui::InputTextMultiline("##desc", mNovoDescricao, sizeof mNovoDescricao,
+                                  ImVec2(-1.0f, 60.0f));
+
+        ImGui::Spacing();
+        ImGui::Text("Tela de referência (base do canvas):");
+        ImGui::SetNextItemWidth(90.0f);
+        ImGui::InputInt("Largura", &mNovoLargura, 0, 0);
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(90.0f);
+        ImGui::InputInt("Altura", &mNovoAltura, 0, 0);
+
+        ImGui::Spacing();
+        const char* hint =
+            "Cria telas & modos: uma tela \"Tela principal\" com o modo \"Padrão\". "
+            "Adicione mais em HIERARQUIA depois.";
+        ImGui::PushStyleColor(ImGuiCol_Text, Theme::TextDisabled);
+        ImGui::TextWrapped("%s", hint);
+        ImGui::PopStyleColor();
+
+        ImGui::Spacing();
+        const bool nomeOk = mNovoNome[0] != 0;
+        if (!nomeOk) ImGui::BeginDisabled();
+        if (ImGui::Button("Criar e começar a desenhar", ImVec2(-1.0f, 0.0f)))
+        {
+            mProject.CriarNovo(nomeOk ? mNovoNome : "Novo projeto",
+                               mNovoLargura, mNovoAltura);
+            mHasProject = true;
+            mProjectDirty = false;
+            mTelaAtiva = 0;
+            mModoAtivo = 0;
+            mSelectedElementId.clear();
+            mUltimoCaminho.clear();
+            mShowNovoProjeto = false;
+            mStatusMsg = "Projeto criado: " + mProject.nome + " (salve com Ctrl+S)";
+            mStatusMsgUntil = GetTime() + 8.0;
+        }
+        if (!nomeOk) ImGui::EndDisabled();
+
+        ImGui::End();
     }
 
     void App::DrawWorkspace()
@@ -271,6 +564,21 @@ namespace seedui
         {
             ImGui::SetClipboardText(AnnotationsToText(mAnnot, mGlobalDirectives).c_str());
         }
+        if (ImGui::GetIO().KeyCtrl && !ImGui::GetIO().KeyShift &&
+            ImGui::IsKeyPressed(ImGuiKey_S, false))
+        {
+            if (mHasProject) SalvarProjeto(false);
+        }
+        if (ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyShift &&
+            ImGui::IsKeyPressed(ImGuiKey_S, false))
+        {
+            if (mHasProject) SalvarProjeto(true);
+        }
+        if (ImGui::GetIO().KeyCtrl && !ImGui::GetIO().KeyShift &&
+            ImGui::IsKeyPressed(ImGuiKey_O, false))
+        {
+            AbrirProjeto();
+        }
 
         const ImGuiViewport* vp = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(vp->Pos);
@@ -288,6 +596,17 @@ namespace seedui
 
             if (mHasProject)
             {
+                // 42 px = 5 px de margem + botão de 32 px + 5 px de margem.
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 5.0f));
+                ImGui::BeginChild("##actionbar", ImVec2(0, kActionBarHeight), false,
+                                  ImGuiWindowFlags_NoScrollbar);
+                DrawActionBar();
+                ImGui::EndChild();
+                ImGui::PopStyleVar();
+                // ItemSize acrescenta ItemSpacing.y após o child. Removemos esse
+                // espaço para a barra terminar exatamente onde começa o workspace.
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetStyle().ItemSpacing.y);
+
                 const float availY = ImGui::GetContentRegionAvail().y - kStatusBarHeight;
 
                 ImGui::BeginChild("##toolbar", ImVec2(kToolbarWidth, availY), false,
@@ -297,14 +616,33 @@ namespace seedui
 
                 ImGui::SameLine();
 
-                ImGui::BeginChild("##canvas", ImVec2(-kRightPanelWidth, availY), true);
-                CanvasDraw();
+                const float rightWidth = mRightPanelCollapsed ? kRightRailWidth : mRightPanelWidth;
+                ImGui::BeginChild("##canvas", ImVec2(-(rightWidth + 6.0f), availY), true);
+                if (mHasProject)
+                    CanvasDraw(&mProject, mTelaAtiva, mModoAtivo);
+                else
+                    CanvasDraw(nullptr);
                 ImGui::EndChild();
 
                 ImGui::SameLine();
 
-                ImGui::BeginChild("##panels", ImVec2(kRightPanelWidth, availY), false);
-                DrawRightPanels();
+                ImGui::PushStyleColor(ImGuiCol_Button, Theme::Border);
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Theme::BorderLight);
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, Theme::AccentBlue);
+                ImGui::Button("##right_splitter", ImVec2(6.0f, availY));
+                if (!mRightPanelCollapsed && ImGui::IsItemActive())
+                {
+                    mRightPanelWidth -= ImGui::GetIO().MouseDelta.x;
+                    if (mRightPanelWidth < kRightPanelMinWidth) mRightPanelWidth = kRightPanelMinWidth;
+                    if (mRightPanelWidth > kRightPanelMaxWidth) mRightPanelWidth = kRightPanelMaxWidth;
+                }
+                ImGui::PopStyleColor(3);
+
+                ImGui::SameLine();
+
+                ImGui::BeginChild("##panels", ImVec2(rightWidth, availY), false);
+                if (mRightPanelCollapsed) DrawRightRail();
+                else DrawRightPanels();
                 ImGui::EndChild();
 
                 DrawStatusBar();
@@ -330,7 +668,7 @@ namespace seedui
                 mAnnot.selected < (int)mAnnot.items.size())
             {
                 const AnnotationsPopupRect pr =
-                    AnnotationsPopupRectFor(mAnnot.items[mAnnot.selected].label, vp->Size);
+                    AnnotationsPopupRectFor(mAnnot.items[mAnnot.selected], vp->Size);
                 popupMin = pr.min;
                 popupMax = pr.max;
                 clipPopup = true;
@@ -338,15 +676,15 @@ namespace seedui
             AnnotationsDraw(mAnnot, clipPopup, popupMin, popupMax);
         }
 
-        // Popup de edição da anotação selecionada (pode pedir exportação)
+        // Popup de edição da anotação selecionada
         if (mHasProject)
         {
-            const int action = AnnotationsEditWindow(mAnnot);
-            if (action == AnnotationsEdit_Export) ExportDirectives();
+            AnnotationsEditWindow(mAnnot);
         }
 
         if (mShowManual) DrawManualWindow();
         if (mShowAbout) DrawAboutWindow();
+        DrawNovoProjetoDialog();
     }
 
     void App::DrawMenuBar()
@@ -356,13 +694,16 @@ namespace seedui
         if (ImGui::BeginMenu("Arquivo"))
         {
             if (mHasProject && ImGui::MenuItem("Fechar projeto (voltar à tela inicial)"))
-                mHasProject = false;
-            MenuItemSoon("Novo projeto", "M03");
+                FecharProjeto();
+            if (ImGui::MenuItem("Novo projeto")) NovoProjeto();
             MenuItemSoon("Novo a partir de modelo", "M09");
-            MenuItemSoon("Abrir projeto", "M03");
+            if (ImGui::MenuItem("Abrir projeto", "Ctrl+O")) AbrirProjeto();
             ImGui::Separator();
-            MenuItemSoon("Salvar", "M03");
-            MenuItemSoon("Salvar como", "M03");
+            const bool salvarHabilitado = mHasProject;
+            if (!salvarHabilitado) ImGui::BeginDisabled();
+            if (ImGui::MenuItem("Salvar", "Ctrl+S")) SalvarProjeto(false);
+            if (ImGui::MenuItem("Salvar como", "Ctrl+Shift+S")) SalvarProjeto(true);
+            if (!salvarHabilitado) ImGui::EndDisabled();
             MenuItemSoon("Exportar pacote", "M13");
             ImGui::Separator();
             if (ImGui::MenuItem("Sair", "Alt+F4")) mRunning = false;
@@ -417,12 +758,14 @@ namespace seedui
 
         if (ImGui::BeginMenu("Inserir"))
         {
-            MenuItemSoon("Painel", "M04");
-            MenuItemSoon("Janela", "M04");
-            MenuItemSoon("Texto", "M04");
-            MenuItemSoon("Botão", "M04");
-            MenuItemSoon("Campo numérico", "M04");
-            MenuItemSoon("Slider", "M04");
+            if (!mHasProject) ImGui::BeginDisabled();
+            if (ImGui::MenuItem("Painel")) AdicionarComponente("painel", "Painel");
+            if (ImGui::MenuItem("Janela")) AdicionarComponente("janela", "Janela");
+            if (ImGui::MenuItem("Texto")) AdicionarComponente("texto", "Texto");
+            if (ImGui::MenuItem("Botao")) AdicionarComponente("botao", "Botao");
+            if (ImGui::MenuItem("Campo numerico")) AdicionarComponente("campo_numerico", "Campo numerico");
+            if (ImGui::MenuItem("Slider")) AdicionarComponente("slider", "Slider");
+            if (!mHasProject) ImGui::EndDisabled();
             ImGui::EndMenu();
         }
 
@@ -451,112 +794,341 @@ namespace seedui
             ImGui::EndMenu();
         }
 
-        // Seletor de tela/modo (estilo Blender) — funcional a partir do M03/M10
+        // Seletor de tela/modo (estilo Blender) — funcional a partir do M03
         ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 310.0f);
-        ImGui::BeginDisabled();
-        ImGui::SetNextItemWidth(150.0f);
-        ImGui::Combo("##tela", &mToolComboDummy, "Tela: — (M03)\0\0");
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(150.0f);
-        ImGui::Combo("##modo", &mModeComboDummy, "Modo: — (M03)\0\0");
-        ImGui::EndDisabled();
+
+        if (mHasProject && !mProject.telas.empty())
+        {
+            if (mTelaAtiva >= (int)mProject.telas.size()) mTelaAtiva = 0;
+            Tela& tela = mProject.telas[mTelaAtiva];
+
+            // Combo de telas
+            auto telasPreview = [&]() {
+                return std::string("Tela: ") + tela.nome;
+            };
+            ImGui::SetNextItemWidth(150.0f);
+            if (ImGui::BeginCombo("##tela", telasPreview().c_str()))
+            {
+                for (int i = 0; i < (int)mProject.telas.size(); ++i)
+                {
+                    const bool sel = (i == mTelaAtiva);
+                    if (ImGui::Selectable(mProject.telas[i].nome.c_str(), sel))
+                    {
+                        mTelaAtiva = i;
+                        mModoAtivo = 0;
+                    }
+                    if (sel) ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+
+            ImGui::SameLine();
+
+            // Combo de modos da tela ativa
+            if (mModoAtivo >= (int)tela.modos.size()) mModoAtivo = 0;
+            std::string modoNome = tela.modos.empty()
+                                       ? "Modo: —"
+                                       : "Modo: " + tela.modos[mModoAtivo].nome;
+            ImGui::SetNextItemWidth(150.0f);
+            if (ImGui::BeginCombo("##modo", modoNome.c_str()))
+            {
+                for (int i = 0; i < (int)tela.modos.size(); ++i)
+                {
+                    const bool sel = (i == mModoAtivo);
+                    if (ImGui::Selectable(tela.modos[i].nome.c_str(), sel))
+                        mModoAtivo = i;
+                    if (sel) ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+        }
+        else
+        {
+            ImGui::SetNextItemWidth(150.0f);
+            ImGui::BeginDisabled();
+            ImGui::Combo("##tela", &mTelaAtiva, "Tela: —\0\0");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(150.0f);
+            ImGui::Combo("##modo", &mModoAtivo, "Modo: —\0\0");
+            ImGui::EndDisabled();
+        }
 
         ImGui::EndMenuBar();
     }
 
+    void App::DrawActionBar()
+    {
+        constexpr float button = 32.0f;
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(5, 0));
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Theme::BorderLight);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, Theme::Hex(0x4f8cff, 0.28f));
+
+        auto separator = [&]()
+        {
+            ImGui::SameLine(0, 10);
+            const ImVec2 p = ImGui::GetCursorScreenPos();
+            ImGui::GetWindowDrawList()->AddLine(ImVec2(p.x, p.y + 5.0f),
+                                                ImVec2(p.x, p.y + button - 5.0f),
+                                                ImGui::ColorConvertFloat4ToU32(Theme::BorderLight));
+            ImGui::Dummy(ImVec2(1.0f, button));
+            ImGui::SameLine(0, 10);
+        };
+
+        if (IconButton(IconId::New, "Arquivo · Novo projeto", button)) NovoProjeto();
+        ImGui::SameLine();
+        if (IconButton(IconId::Open, "Arquivo · Abrir projeto (Ctrl+O)", button)) AbrirProjeto();
+        ImGui::SameLine();
+        if (!mHasProject) ImGui::BeginDisabled();
+        if (IconButton(IconId::Save, "Arquivo · Salvar (Ctrl+S)", button)) SalvarProjeto(false);
+        if (!mHasProject) ImGui::EndDisabled();
+
+        separator();
+        IconButton(IconId::Undo, "Histórico · Desfazer (M05)", button);
+        ImGui::SameLine();
+        IconButton(IconId::Redo, "Histórico · Refazer (M05)", button);
+
+        separator();
+        IconButton(IconId::Copy, "Edição · Copiar (M05)", button);
+        ImGui::SameLine();
+        IconButton(IconId::Paste, "Edição · Colar (M05)", button);
+        ImGui::SameLine();
+        IconButton(IconId::Trash, "Edição · Apagar (M05)", button);
+
+        separator();
+        IconButton(IconId::Model, "Projeto · Galeria de modelos (M09)", button);
+        ImGui::SameLine();
+        IconButton(IconId::Download, "Projeto · Exportar pacote (M13)", button);
+
+        const float rightX = ImGui::GetWindowContentRegionMax().x - button * 2.0f - 5.0f;
+        if (ImGui::GetCursorPosX() + 12.0f < rightX)
+            ImGui::SameLine(rightX);
+        else
+            ImGui::SameLine();
+        if (IconButton(IconId::Question, "Ajuda · Manual (F1)", button)) mShowManual = true;
+        ImGui::SameLine();
+        IconButton(IconId::Gear, "Sistema · Preferências (M14)", button);
+        ImGui::PopStyleColor(3);
+        ImGui::PopStyleVar();
+    }
     void App::DrawToolbar()
     {
+        // Somente ferramentas que atuam diretamente no canvas.
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6, 6));
         ImGui::Spacing();
 
-        ToolButton(IconId::Select, "Selecionar (V)");
-        ToolButton(IconId::Move, "Mover (M)");
-        ToolButton(IconId::Text, "Texto (T)");
-        ToolButton(IconId::ZoomIn, "Zoom (+)");
-        ToolButton(IconId::Pan, "Mão / navegar (H)");
-        ToolButton(IconId::Color, "Conta-gotas / cor (I)");
-        ToolButton(IconId::Grid, "Grade (G)");
+        ToolButton(IconId::Select, "Seleção · Selecionar (V)");
+        ToolButton(IconId::Move, "Transformação · Mover (M)");
+
+        ImGui::Separator();
+        ImGui::Spacing();
+        ToolButton(IconId::Text, "Criação · Texto (T)");
+        ToolButton(IconId::Color, "Aparência · Conta-gotas (I)");
+
+        ImGui::Separator();
+        ImGui::Spacing();
+        ToolButton(IconId::ZoomIn, "Navegação · Zoom (+)");
+        ToolButton(IconId::Pan, "Navegação · Mão (H)");
+        ToolButton(IconId::Grid, "Visualização · Grade (G)");
+
+        ImGui::Separator();
+        ImGui::Spacing();
         ToolButton(IconId::Annotate,
-                   "Anotar (modo debug) — marque a área e escreva a alteração para a IA (A)");
-
-        ImGui::Separator();
-        ImGui::Spacing();
-
-        IconButton(IconId::New, "Novo projeto (M03)", kToolButtonSize);
-        IconButton(IconId::Open, "Abrir projeto (M03)", kToolButtonSize);
-        IconButton(IconId::Save, "Salvar (M03)", kToolButtonSize);
-
-        ImGui::Separator();
-        ImGui::Spacing();
-
-        IconButton(IconId::Undo, "Desfazer (M05)", kToolButtonSize);
-        IconButton(IconId::Redo, "Refazer (M05)", kToolButtonSize);
-        IconButton(IconId::Copy, "Copiar (M05)", kToolButtonSize);
-        IconButton(IconId::Paste, "Colar (M05)", kToolButtonSize);
-        IconButton(IconId::Trash, "Apagar (M05)", kToolButtonSize);
-
-        ImGui::Separator();
-        ImGui::Spacing();
-
-        IconButton(IconId::Model, "Galeria de modelos (M09)", kToolButtonSize);
-        IconButton(IconId::Download, "Exportar pacote (M13)", kToolButtonSize);
-
-        ImGui::Spacing();
-        ImGui::Separator();
-        ImGui::Spacing();
-
-        if (IconButton(IconId::Question, "Manual (F1)", kToolButtonSize)) mShowManual = true;
-        IconButton(IconId::Gear, "Preferências (M14)", kToolButtonSize);
+                   "Revisão · Anotar para a IA (A)");
 
         ImGui::PopStyleVar();
     }
-
     void App::ToolButton(IconId id, const char* tip)
     {
+        // Centro geométrico da coluna: (50 - 32) / 2 = 9 px.
+        ImGui::SetCursorPosX((kToolbarWidth - kToolButtonSize) * 0.5f);
         const bool active = (mCurrentTool == ToolFromIcon(id));
         if (active) ImGui::PushStyleColor(ImGuiCol_Button, Theme::Hex(0x4f8cff, 0.30f));
         if (IconButton(id, tip, kToolButtonSize)) mCurrentTool = ToolFromIcon(id);
         if (active) ImGui::PopStyleColor();
     }
 
+    void App::DrawRightRail()
+    {
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 8));
+        if (IconButton(IconId::CaretRight, "Expandir painel direito", 32.0f))
+            mRightPanelCollapsed = false;
+        ImGui::Separator();
+        IconButton(IconId::List, "Hierarquia", 32.0f);
+        IconButton(IconId::Inspector, "Inspetor", 32.0f);
+        IconButton(IconId::Plus, "Biblioteca", 32.0f);
+        IconButton(IconId::Directives, "Diretrizes", 32.0f);
+        IconButton(IconId::Assets, "Recursos", 32.0f);
+        IconButton(IconId::History, "Historico", 32.0f);
+        ImGui::PopStyleVar();
+    }
+
     void App::DrawRightPanels()
     {
-        if (PanelBegin("HIERARQUIA"))
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6, 5));
+        if (ImGui::Button("<", ImVec2(28.0f, 24.0f)))
+            mRightPanelCollapsed = true;
+        ImGui::SameLine();
+        ImGui::TextColored(Theme::TextSecondary, "Painel direito");
+        ImGui::Separator();
+
+        if (PanelBegin(IconId::List, "HIERARQUIA"))
         {
-            PanelHint("Nenhum projeto aberto. Crie um projeto (Arquivo → Novo, M03) ou use um modelo (M09).");
+            if (!mHasProject)
+            {
+                PanelHint("Nenhum projeto aberto. Crie um projeto (Arquivo → Novo) ou use um modelo (M09).");
+            }
+            else
+            {
+                if (mProject.telas.empty())
+                {
+                    PanelHint("Projeto sem telas. A primeira tela vem com o modo \"Padrão\".");
+                }
+                else for (int ti = 0; ti < (int)mProject.telas.size(); ++ti)
+                {
+                    Tela& t = mProject.telas[ti];
+                    ImGui::PushID(ti);
+                    const bool isAtiva = (ti == mTelaAtiva);
+                    if (isAtiva) ImGui::PushStyleColor(ImGuiCol_Header, Theme::Hex(0x4f8cff, 0.22f));
+                    if (ImGui::TreeNodeEx(t.nome.c_str(),
+                                          ImGuiTreeNodeFlags_DefaultOpen |
+                                              ImGuiTreeNodeFlags_OpenOnArrow))
+                    {
+                        if (isAtiva)
+                        {
+                            ImGui::PushStyleColor(ImGuiCol_Text, Theme::TextPrimary);
+                            ImGui::TextColored(Theme::TextDisabled, "id: %s", t.id.c_str());
+                            ImGui::PopStyleColor();
+                        }
+                        for (int mi = 0; mi < (int)t.modos.size(); ++mi)
+                        {
+                            Modo& mo = t.modos[mi];
+                            const bool modoAtivo = (ti == mTelaAtiva && mi == mModoAtivo);
+                            if (modoAtivo) ImGui::PushStyleColor(ImGuiCol_Text, Theme::AccentOrange);
+                            if (ImGui::Selectable(("  " + mo.nome).c_str(), modoAtivo))
+                            {
+                                mTelaAtiva = ti;
+                                mModoAtivo = mi;
+                                mSelectedElementId.clear();
+                            }
+                            if (modoAtivo) ImGui::PopStyleColor();
+
+                            if (modoAtivo)
+                            {
+                                if (mo.raiz.empty())
+                                {
+                                    ImGui::TextColored(Theme::TextDisabled,
+                                                       "  Nenhum elemento neste modo.");
+                                }
+                                else
+                                {
+                                    ImGui::Indent(14.0f);
+                                    for (Element& e : mo.raiz)
+                                        DrawElementTree(e);
+                                    ImGui::Unindent(14.0f);
+                                }
+                            }
+                        }
+                        ImGui::TreePop();
+                    }
+                    if (isAtiva) ImGui::PopStyleColor();
+                    ImGui::PopID();
+                }
+            }
         }
 
-        if (PanelBegin("INSPETOR"))
+        if (PanelBegin(IconId::Inspector, "INSPETOR"))
         {
+            Element* selected = mSelectedElementId.empty()
+                ? nullptr
+                : Project::ResolverId(mProject, mSelectedElementId);
+            if (selected)
+            {
+                ImGui::TextWrapped("%s", selected->nome.empty() ? selected->id.c_str() : selected->nome.c_str());
+                ImGui::TextColored(Theme::TextDisabled, "id: %s", selected->id.c_str());
+                ImGui::TextColored(Theme::TextDisabled, "tipo: %s", selected->tipo.c_str());
+
+                const bool beforeVisible = selected->visivel;
+                const bool beforeLocked = selected->bloqueado;
+                ImGui::Checkbox("Visivel", &selected->visivel);
+                ImGui::Checkbox("Bloqueado", &selected->bloqueado);
+                if (beforeVisible != selected->visivel || beforeLocked != selected->bloqueado)
+                    mProjectDirty = true;
+                ImGui::Separator();
+            }
+
             PanelHint("Selecione um elemento no canvas para editar posição, tamanho, cores e estados (M06).");
         }
 
-        if (PanelBegin("BIBLIOTECA"))
+        if (PanelBegin(IconId::Plus, "BIBLIOTECA"))
         {
-            static const char* kComponents[] = {
-                "Painel", "Janela", "Caixa", "Grupo", "Texto", "Título",
-                "Botão", "Botão com ícone", "Alternância", "Caixa de seleção",
-                "Campo de texto", "Campo numérico", "Campo de senha", "Área de texto",
-                "Lista", "Lista suspensa", "Slider", "Slider com valor",
-                "Barra de progresso", "Indicador circular", "Seletor de cor",
-                "Separador", "Barra de rolagem", "Tooltip", "Menu de contexto",
-                "Janela modal", "Diálogo", "Notificação", "Inspetor", "Viewport",
+            struct ComponentButton { const char* tipo; const char* nome; IconId icon; };
+            static const ComponentButton kBasicComponents[] = {
+                { "painel",         "Painel",          IconId::Library },
+                { "janela",         "Janela",          IconId::Model },
+                { "texto",          "Texto",           IconId::Text },
+                { "botao",          "Botão",           IconId::Check },
+                { "campo_numerico", "Campo numérico",  IconId::Plus },
+                { "slider",         "Slider",          IconId::Inspector },
             };
 
-            ImGui::BeginDisabled();
-            for (const char* name : kComponents)
+            auto componentRow = [&](const char* id, const char* name, IconId icon, bool enabled)
             {
-                ImGui::Selectable(name);
-            }
-            ImGui::EndDisabled();
+                ImGui::PushID(id);
+                if (!enabled) ImGui::BeginDisabled();
+                const float rowW = ImGui::GetContentRegionAvail().x;
+                const bool clicked = ImGui::Selectable("##component", false,
+                    ImGuiSelectableFlags_None, ImVec2(rowW, 32.0f));
+                const ImVec2 rowMin = ImGui::GetItemRectMin();
+                const ImU32 textColor = ImGui::ColorConvertFloat4ToU32(
+                    enabled ? Theme::TextPrimary : Theme::TextDisabled);
+                DrawIconAt(icon, rowMin.x + 9.0f, rowMin.y + 7.0f, 18.0f);
+                ImGui::GetWindowDrawList()->AddText(ImVec2(rowMin.x + 38.0f,
+                                                           rowMin.y + 8.0f),
+                                                    textColor, name);
+                if (!enabled) ImGui::EndDisabled();
+                ImGui::PopID();
+                return clicked && enabled;
+            };
 
-            ImGui::PushStyleColor(ImGuiCol_Text, Theme::TextDisabled);
-            ImGui::TextWrapped("Arraste para o canvas a partir do M04.");
-            ImGui::PopStyleColor();
+            if (mHasProject)
+            {
+                for (const ComponentButton& c : kBasicComponents)
+                {
+                    if (componentRow(c.tipo, c.nome, c.icon, true))
+                        AdicionarComponente(c.tipo, c.nome);
+                }
+                ImGui::Separator();
+            }
+
+            ImGui::TextColored(Theme::TextSecondary, "Componentes planejados");
+            struct PlannedComponent { const char* nome; IconId icon; };
+            static const PlannedComponent kPlannedComponents[] = {
+                { "Caixa", IconId::Library }, { "Grupo", IconId::Hierarchy },
+                { "Título", IconId::Text }, { "Botão com ícone", IconId::Check },
+                { "Alternância", IconId::Redo }, { "Caixa de seleção", IconId::Check },
+                { "Campo de texto", IconId::Text }, { "Campo de senha", IconId::Lock },
+                { "Área de texto", IconId::Directives }, { "Lista", IconId::List },
+                { "Lista suspensa", IconId::CaretDown }, { "Slider com valor", IconId::Inspector },
+                { "Barra de progresso", IconId::History }, { "Indicador circular", IconId::Redo },
+                { "Seletor de cor", IconId::Palette }, { "Separador", IconId::List },
+                { "Barra de rolagem", IconId::Inspector }, { "Tooltip", IconId::Question },
+                { "Menu de contexto", IconId::List }, { "Janela modal", IconId::Model },
+                { "Diálogo", IconId::Directives }, { "Notificação", IconId::Warning },
+                { "Inspetor", IconId::Inspector }, { "Viewport", IconId::Image },
+            };
+            int plannedIndex = 0;
+            for (const PlannedComponent& c : kPlannedComponents)
+            {
+                const std::string id = std::string("planned_") + std::to_string(plannedIndex++);
+                componentRow(id.c_str(), c.nome, c.icon, false);
+            }
+
+            ImGui::TextColored(Theme::TextDisabled,
+                               "Clique para inserir. Arrastar para o canvas entra no M04.");
             ImGui::Spacing();
         }
-
-        if (PanelBegin("DIRETRIZES"))
+        if (PanelBegin(IconId::Directives, "DIRETRIZES"))
         {
             ImGui::TextWrapped("Comentário geral do programa (o que você quer comunicar à IA sobre o SeedUI):");
             if (!mGlobalBufLoaded)
@@ -572,9 +1144,7 @@ namespace seedui
             {
                 ImGui::SetClipboardText(AnnotationsToText(mAnnot, mGlobalDirectives).c_str());
             }
-            ImGui::Spacing();
-            if (ImGui::Button("Exportar diretrizes (.txt + print)", ImVec2(-1.0f, 0.0f)))
-                ExportDirectives();
+
             ImGui::Spacing();
             ImGui::PushStyleColor(ImGuiCol_Text, Theme::TextDisabled);
             ImGui::TextWrapped("Use a ferramenta \"Anotar\" (A) para marcar QUALQUER parte do SeedUI — menus, ícones, painéis ou canvas. Depois exporte as diretrizes: você só precisa dizer aqui no chat \"veja as novas alterações\".");
@@ -582,69 +1152,82 @@ namespace seedui
             ImGui::Spacing();
         }
 
-        if (PanelBegin("RECURSOS"))
+        if (PanelBegin(IconId::Assets, "RECURSOS"))
         {
             PanelHint("Importe SVGs, imagens e fontes. Gerenciador completo no M08.");
         }
 
-        if (PanelBegin("HISTÓRICO"))
+        if (PanelBegin(IconId::History, "HISTÓRICO"))
         {
             PanelHint("Desfazer/refazer com histórico chega no M05.");
         }
+        ImGui::PopStyleVar();
     }
 
     void App::DrawStatusBar()
     {
         ImGui::Separator();
-        ImGui::BeginChild("##status", ImVec2(0, kStatusBarHeight), false, ImGuiWindowFlags_NoScrollbar);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 4.0f));
+        ImGui::BeginChild("##status", ImVec2(0, kStatusBarHeight), false,
+                          ImGuiWindowFlags_NoScrollbar);
 
-        if (!mStatusMsg.empty() && GetTime() < mStatusMsgUntil)
-        {
-            ImGui::TextColored(Theme::Success, "%.*s", 60, mStatusMsg.c_str());
-        }
-        else
-        {
-            ImGui::TextColored(Theme::TextSecondary, "Pronto");
-        }
-        ImGui::SameLine(0, 16);
         if (mCurrentTool == Tool::Annotate)
         {
+            // No modo de revisão, só ficam visíveis dados relacionados à revisão.
+            // Zoom/resolução/mouse voltam no modo normal, evitando congestionamento.
+            ImGui::AlignTextToFramePadding();
             ImGui::TextColored(Theme::AccentOrange,
-                               "● Modo Debug: Anotações (%d)", (int)mAnnot.items.size());
+                               "● Modo Debug · Anotações: %d", (int)mAnnot.items.size());
+            ImGui::SameLine(0, 14);
+            if (ImGui::Button("Exportar todas (.txt + print)##status_export"))
+            {
+                mAnnot.selected = -1;
+                mAnnot.editedIndex = -1;
+                ExportDirectives();
+            }
+            ImGui::SameLine(0, 14);
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextColored(Theme::TextSecondary, "captura global sem a janela de edição");
         }
         else
         {
+            ImGui::AlignTextToFramePadding();
+            if (!mStatusMsg.empty() && GetTime() < mStatusMsgUntil)
+                ImGui::TextColored(Theme::Success, "%.*s", 52, mStatusMsg.c_str());
+            else
+                ImGui::TextColored(Theme::TextSecondary, "Pronto");
+
+            ImGui::SameLine(0, 16);
             ImGui::TextColored(Theme::TextSecondary, "● Modo Normal");
-        }
-        ImGui::SameLine(0, 20);
-        ImGui::TextColored(Theme::TextSecondary, "Zoom: 100%%");
-        ImGui::SameLine(0, 18);
-        ImGui::TextColored(Theme::TextSecondary, "Tela base: 1280x720");
+            ImGui::SameLine(0, 18);
+            ImGui::TextColored(Theme::TextSecondary, "Zoom: 100%%");
+            ImGui::SameLine(0, 18);
+            ImGui::TextColored(Theme::TextSecondary, "1280×720");
 
-        const ImGuiIO& io = ImGui::GetIO();
-        ImGui::SameLine(0, 18);
-        if (fabsf(io.MousePos.x) > 1.0e30f || fabsf(io.MousePos.y) > 1.0e30f)
-        {
-            ImGui::TextColored(Theme::TextSecondary, "Mouse: (—, —)");
-        }
-        else
-        {
-            ImGui::TextColored(Theme::TextSecondary, "Mouse: (%.0f, %.0f)", io.MousePos.x, io.MousePos.y);
+            const ImGuiIO& io = ImGui::GetIO();
+            ImGui::SameLine(0, 18);
+            if (fabsf(io.MousePos.x) > 1.0e30f || fabsf(io.MousePos.y) > 1.0e30f)
+                ImGui::TextColored(Theme::TextSecondary, "Mouse: (—, —)");
+            else
+                ImGui::TextColored(Theme::TextSecondary, "Mouse: (%.0f, %.0f)",
+                                   io.MousePos.x, io.MousePos.y);
         }
 
-        // "Sem alterações não salvas" só quando houver espaço de verdade
-        // (janelas estreitas / mensagem de status longa -> esconde para não sobrepor)
-        const char* savedLabel = "Sem alterações não salvas";
-        const float needW = ImGui::CalcTextSize(savedLabel).x + 12.0f;
-        if (ImGui::GetCursorPosX() + needW <= ImGui::GetWindowContentRegionMax().x)
+        const char* savedLabel = mProjectDirty ? "● Alterações não salvas"
+                                               : "Sem alterações não salvas";
+        const float needW = ImGui::CalcTextSize(savedLabel).x;
+        const float rightX = ImGui::GetWindowContentRegionMax().x - needW;
+        if (ImGui::GetCursorPosX() + 20.0f < rightX)
         {
-            ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - needW);
-            ImGui::TextColored(Theme::TextSecondary, "%s", savedLabel);
+            ImGui::SameLine(rightX);
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextColored(mProjectDirty ? Theme::Warning : Theme::TextSecondary,
+                               "%s", savedLabel);
         }
 
         ImGui::EndChild();
+        ImGui::PopStyleVar();
     }
-
     void App::DrawStartScreen()
     {
         ImGui::BeginChild("##start", ImVec2(0, 0));
@@ -680,11 +1263,11 @@ namespace seedui
 
         ImGui::SetCursorPosX(rowX - c.x);
         ImGui::SetCursorPosY(rowY - c.y);
+        if (ImGui::Button("Novo projeto", ImVec2(bw, 42))) NovoProjeto();
+        ImGui::SameLine(0, gap);
+        if (ImGui::Button("Abrir projeto", ImVec2(bw, 42))) AbrirProjeto();
+        ImGui::SameLine(0, gap);
         ImGui::BeginDisabled();
-        if (ImGui::Button("Novo projeto", ImVec2(bw, 42))) {}
-        ImGui::SameLine(0, gap);
-        if (ImGui::Button("Abrir projeto", ImVec2(bw, 42))) {}
-        ImGui::SameLine(0, gap);
         if (ImGui::Button("Modelos", ImVec2(bw, 42))) {}
         ImGui::EndDisabled();
 
@@ -699,7 +1282,7 @@ namespace seedui
         dl->AddLine(ImVec2(cx - 60.0f, c.y + 180.0f), ImVec2(cx + 60.0f, c.y + 180.0f), accent, 2.0f);
 
         // Rodapé
-        const char* foot = "Milestone 02 — esqueleto executável · Recursos de arquivo chegam no M03 (projetos) e M09 (modelos)";
+        const char* foot = "Milestone 03 — projetos reais (.ui.json) · telas, modos e salvamento (ctrl+S)";
         const ImVec2 fs = font->CalcTextSizeA(13.0f, FLT_MAX, 0.0f, foot);
         dl->AddText(font, 13.0f, ImVec2(cx - fs.x * 0.5f, c.y + sz.y - 40.0f),
                     ImGui::ColorConvertFloat4ToU32(Theme::TextDisabled), foot);
@@ -722,7 +1305,7 @@ namespace seedui
         }
 
         ImGui::Text("SeedUI — Editor Visual de Interfaces");
-        ImGui::TextColored(Theme::TextSecondary, "Versão 0.1 — Milestone 02 (esqueleto executável)");
+        ImGui::TextColored(Theme::TextSecondary, "Versão 0.2 — Milestone 03 (projetos .ui.json)");
         ImGui::Separator();
         ImGui::TextWrapped(
             "Ferramenta independente para projetar interfaces de jogo/aplicação, "

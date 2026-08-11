@@ -104,8 +104,13 @@ Regras de uso:
 └────────────────────────────────────────────────────────────────┘
 ```
 
-- **Barra superior**: menus + seletor de tela/modo (estilo Blender).
-- **Barra de ferramentas** (esquerda): ferramentas em coluna, uma ativa por vez.
+- **Barra de menus**: menus + seletor de tela/modo (estilo Blender).
+- **Barra de ações globais** (horizontal, sob os menus): Arquivo (novo, abrir,
+  salvar), Histórico (desfazer/refazer), Edição (copiar/colar/apagar), Projeto
+  (modelos/exportação) e Sistema (manual/preferências).
+- **Barra de ferramentas contextuais** (esquerda): somente ações diretas no
+  canvas, agrupadas em Seleção/Transformação, Criação/Aparência,
+  Navegação/Visualização e Revisão; uma ferramenta ativa por vez.
 - **Canvas** (centro): superfície escura com grade, réguas, guias e área segura.
 - **Painéis** (direita): cada um com faixa de título (strip), colapsável.
 - **Barra de status**: zoom, resolução, coordenadas, indicador de não salvo.

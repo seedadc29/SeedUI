@@ -9,6 +9,8 @@
 #include "imgui.h"
 #include "raylib.h"
 
+#include <algorithm>
+#include <cmath>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -32,7 +34,7 @@ namespace seedui
             { IconId::ZoomIn,    "magnifying-glass-plus" },
             { IconId::ZoomOut,   "magnifying-glass-minus" },
             { IconId::Pan,       "hand" },
-            { IconId::Color,     "palette" },
+            { IconId::Color,     "eyedropper" },
             { IconId::Grid,      "grid-four" },
             { IconId::New,       "file-plus" },
             { IconId::Open,      "folder-open" },
@@ -79,6 +81,12 @@ namespace seedui
 
         std::string ResolveIconPath(const char* name)
         {
+            // O diretório de trabalho muda conforme o app é aberto. O build
+            // copia assets ao lado do executável, que é a âncora confiável.
+            const std::string appPath = std::string(GetApplicationDirectory()) +
+                                        "assets/icons/" + name + ".svg";
+            if (FileExists(appPath.c_str())) return appPath;
+
             for (const char* dir : kIconDirs)
             {
                 std::string p = std::string(dir) + name + ".svg";
@@ -113,6 +121,41 @@ namespace seedui
         // aparece no TOPO da imagem desenhada. Portanto NÃO devemos inverter
         // as linhas aqui — fazer isso deixa os ícones de cabeça para baixo.
 
+        void StrengthenAlpha(std::vector<unsigned char>& rgba, int width, int height)
+        {
+            // Os SVGs thin perdem definição quando reduzidos para 18–23 px.
+            // Uma expansão de 1 px no bitmap de 96 px preserva o desenho e
+            // produz um traço final nítido, sem transformar o estilo em bold.
+            std::vector<unsigned char> source = rgba;
+            for (int y = 0; y < height; ++y)
+            {
+                for (int x = 0; x < width; ++x)
+                {
+                    unsigned char alpha = 0;
+                    for (int oy = -1; oy <= 1; ++oy)
+                    {
+                        const int sy = y + oy;
+                        if (sy < 0 || sy >= height) continue;
+                        for (int ox = -1; ox <= 1; ++ox)
+                        {
+                            const int sx = x + ox;
+                            if (sx < 0 || sx >= width) continue;
+                            const size_t si = ((size_t)sy * width + sx) * 4;
+                            alpha = std::max(alpha, source[si + 3]);
+                        }
+                    }
+                    const size_t di = ((size_t)y * width + x) * 4;
+                    if (alpha > rgba[di + 3])
+                    {
+                        rgba[di + 0] = 255;
+                        rgba[di + 1] = 255;
+                        rgba[di + 2] = 255;
+                        rgba[di + 3] = alpha;
+                    }
+                }
+            }
+        }
+
         ImTextureID Tex(IconId id)
         {
             const int idx = (int)id;
@@ -123,6 +166,10 @@ namespace seedui
 
     void Load()
     {
+        // Recarregar não pode duplicar a tabela nem deslocar IconId.
+        Unload();
+        gTextures.reserve((size_t)IconId::Count);
+
         for (const IconDef& def : kIcons)
         {
             Texture2D tex = { 0, 0, 0, 0, 0 };
@@ -132,13 +179,13 @@ namespace seedui
 
             if (!svg.empty())
             {
-                svg = ReplaceAll(std::move(svg), "currentColor", "#ececec");
+                svg = ReplaceAll(std::move(svg), "currentColor", "#ffffff");
                 NSVGimage* img = nsvgParse(svg.data(), "px", 96.0f);
                 if (img)
                 {
                     const float iw = img->width;
                     const float ih = img->height;
-                    const float scale = 48.0f / iw; // viewBox 256 -> 48px
+                    const float scale = 96.0f / std::max(iw, ih); // alta resolução para redução nítida
                     const int rw = (int)(iw * scale + 0.5f);
                     const int rh = (int)(ih * scale + 0.5f);
 
@@ -147,6 +194,7 @@ namespace seedui
                     if (rast)
                     {
                         nsvgRasterize(rast, img, 0.0f, 0.0f, scale, rgba.data(), rw, rh, rw * 4);
+                        StrengthenAlpha(rgba, rw, rh);
                         nsvgDeleteRasterizer(rast);
                     }
                     nsvgDelete(img);
@@ -158,6 +206,7 @@ namespace seedui
                     im.mipmaps = 1;
                     im.format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
                     tex = LoadTextureFromImage(im);
+                    SetTextureFilter(tex, TEXTURE_FILTER_BILINEAR);
 
                     TraceLog(LOG_INFO, "Icone carregado: %s (%dx%d)", def.file, rw, rh);
                 }
@@ -184,18 +233,38 @@ namespace seedui
         gTextures.clear();
     }
 
+    void DrawIcon(IconId id, float size)
+    {
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        DrawIconAt(id, p.x, p.y, size);
+        ImGui::Dummy(ImVec2(size, size));
+    }
+
+    void DrawIconAt(IconId id, float x, float y, float size)
+    {
+        const ImTextureID tex = Tex(id);
+        if (!tex)
+        {
+            ImGui::GetWindowDrawList()->AddText(ImVec2(x, y), IM_COL32(236, 236, 236, 255), "?");
+            return;
+        }
+
+        ImGui::GetWindowDrawList()->AddImage(tex, ImVec2(x, y), ImVec2(x + size, y + size));
+    }
+
     bool IconButton(IconId id, const char* tooltip, float buttonSize)
     {
         const ImTextureID tex = Tex(id);
         bool clicked = false;
 
+        ImGui::PushID((int)id);
         if (tex)
         {
             clicked = ImGui::Button("##icon", ImVec2(buttonSize, buttonSize));
             const ImVec2 p = ImGui::GetItemRectMin();
-            const float icon = buttonSize * 0.55f;
-            const ImVec2 ip(p.x + (buttonSize - icon) * 0.5f,
-                            p.y + (buttonSize - icon) * 0.5f);
+            const float icon = std::round(buttonSize * 0.70f);
+            const ImVec2 ip(std::round(p.x + (buttonSize - icon) * 0.5f),
+                            std::round(p.y + (buttonSize - icon) * 0.5f));
             ImGui::GetWindowDrawList()->AddImage(tex, ip, ImVec2(ip.x + icon, ip.y + icon));
         }
         else
@@ -206,6 +275,7 @@ namespace seedui
         if (tooltip && ImGui::IsItemHovered())
             ImGui::SetTooltip("%s", tooltip);
 
+        ImGui::PopID();
         return clicked;
     }
 }

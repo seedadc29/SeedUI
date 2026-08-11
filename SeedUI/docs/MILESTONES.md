@@ -24,7 +24,7 @@
 |---|---|---|
 | 01 | Fundação: documentação, formato, identidade visual | Em andamento |
 | 02 | Esqueleto executável do editor | Concluído |
-| 03 | Modelo de dados e salvamento (`projeto.ui.json`) | Planejado |
+| 03 | Modelo de dados e salvamento (`projeto.ui.json`) | Concluído |
 | 04 | Hierarquia e biblioteca de componentes | Planejado |
 | 05 | Canvas interativo (seleção, transformação, undo/redo) | Planejado |
 | 06 | Inspetor e diretrizes | Planejado |
@@ -103,6 +103,28 @@ estáveis preservados.
 
 **Testes**: criar projeto, adicionar tela/modo, salvar, fechar, reabrir,
 conferir o JSON.
+
+**Status**: concluído.
+
+**Notas**:
+- Dependência nova: **nlohmann/json** (header único, MIT) em
+  `ThirdParty/json/` — registrado no `THIRD_PARTY.md`.
+- `raylib` e `imgui` foram **vendidos para dentro** de `SeedUI/ThirdParty/`
+  (com cópias dos backends GLFW/OpenGL3), tornando o SeedUI **standalone**:
+  não depende mais de `../Game/ThirdParty`. O `.vcxproj` foi ajustado.
+- `Project.h/cpp` implementa o modelo (telas → modos → árvore de elementos)
+  com serialização v1. Blocos opcionais (transformacao, layout, estilos,
+  estados, propriedades) são preservados sem perda como JSON puro — M06
+  (inspetor) os edita com tipos.
+- Diálogos de arquivo nativos do Windows (`FileDialogs.cpp`, commdlg32):
+  Abrir (`Ctrl+O`), Salvar (`Ctrl+S`), Salvar como (`Ctrl+Shift+S`).
+- Novo projeto cria tela "Tela principal" + modo "Padrão" com a base da
+  resolução escolhida; seletores de Tela/Modo no menu (estilo Blender) e no
+  painel HIERARQUIA funcionam; status bar mostra "● Alterações não salvas".
+- Canvas desenha os elementos da tela/modo ativa (caixas simples com ID).
+
+**Testes realizados**: build nas 3 configurações; `--capture` sem crash;
+criar/abrir/salvar/reabrir `projeto.ui.json` e conferir o JSON.
 
 ## Milestone 04 — Hierarquia e biblioteca de componentes
 
@@ -283,5 +305,7 @@ com plano próprio e sem alterar silenciosamente o comportamento atual da engine
 | 2026-08-11 | Janela do SeedUI abre menor que a tela (90% do monitor) com maximizar/restaurar (botão da janela, F11 e menu Exibir) — corrige a janela que "prendia" o usuário cobrindo a barra de tarefas. |
 | 2026-08-11 | Popup de edição de anotação sempre DENTRO da janela (abaixo do rótulo; acima dele se não couber) — não sai mais do espaço de trabalho. |
 | 2026-08-11 | Correção: ícones da barra de ferramentas estavam de cabeça para baixo (diretriz do usuário "Esta de cabeca pra baixo corrija", área da barra lateral). Causa: FlipVertical desnecessário — o nanosvg rasteriza de cima para baixo e o backend OpenGL do ImGui mostra a 1ª linha da textura no topo; o flip duplicava a inversão. Removido em Icons.cpp. |
+| 2026-08-11 | Robustez dos ícones: carregamento ancorado na pasta do executável (não no diretório de trabalho) e IDs ImGui únicos por botão. Direção visual inspirada no Blender: hierarquia discreta, densidade consistente, áreas delimitadas, contexto local e estado ativo inequívoco. |
+| 2026-08-11 | Base visual pré-M04 implementada: ações globais em barra horizontal sob os menus; lateral esquerda exclusiva para ferramentas contextuais agrupadas por família; conta-gotas com ícone próprio; painéis identificados por ícone + título; rótulos de anotação com altura adaptável; exportação global na barra inferior sem popup na captura. |
 | 2026-08-11 | M07 planejado (docs/PLANEJAMENTO_M07_CHAT_IA.md): chat de IA dentro do SeedUI via OpenRouter (nuvem, open-source, uma chave) com edições em JSON aplicadas em tempo real (undo + Aplicar/Descartar). Ollama (local) fica fora do escopo — PC do usuário não tem potência. Dependências novas: WinHTTP (nativa) + nlohmann/json (MIT). Requer M03–M06 primeiro. |
 | 2026-08-11 | M07 validado pelo usuário: modelo padrão `deepseek/deepseek-v4-flash:free` (gratuito confirmado no OpenRouter; Qwen como alternativa); chat em janela flutuante minimizável e acoplável à lateral (docking completo depois); streaming fora do v1; histórico da conversa salvo por projeto em `projeto.conversas.json` com limpeza automática de mensagens antigas já finalizadas (pendentes nunca apagadas). |

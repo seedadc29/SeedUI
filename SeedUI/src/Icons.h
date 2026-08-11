@@ -52,6 +52,8 @@ namespace seedui
 
     void Load();
     void Unload();
+    void DrawIcon(IconId id, float size = 16.0f);
+    void DrawIconAt(IconId id, float x, float y, float size = 16.0f);
     bool IconButton(IconId id, const char* tooltip, float buttonSize = 34.0f);
 }
 
