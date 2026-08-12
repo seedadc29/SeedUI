@@ -235,14 +235,24 @@ namespace seedui
             }
             if (kind == ShapeKind::Polygon)
             {
-                const float rx = std::min(w, h) * 0.5f;
-                out.reserve(6);
-                for (int i = 0; i < 6; ++i)
+                // Polígono/estrela configurável: transformacao.lados,
+                // transformacao.estrela e transformacao.raio_interno.
+                const int sides = std::max(3, (int)std::lroundf(
+                    e.transformacao.value("lados", 6.0f)));
+                const bool star = e.transformacao.value("estrela", 0.0f) > 0.5f;
+                const float innerRatio = std::max(0.1f, std::min(0.95f,
+                    e.transformacao.value("raio_interno", 0.5f)));
+                const float rx = w * 0.5f, ry = h * 0.5f;
+                const int count = star ? sides * 2 : sides;
+                out.reserve(count);
+                const float twoPi = (float)(2.0 * 3.14159265358979323846);
+                for (int i = 0; i < count; ++i)
                 {
                     const float a = (float)(-0.5 * 3.14159265358979323846) +
-                                    (float)(2.0 * 3.14159265358979323846 * i) / 6.0f;
-                    out.push_back(ImVec2(w * 0.5f + rx * cosf(a),
-                                         h * 0.5f + rx * sinf(a)));
+                                    twoPi * (float)i / (float)count;
+                    const float r = (star && (i % 2 == 1)) ? innerRatio : 1.0f;
+                    out.push_back(ImVec2(w * 0.5f + rx * r * cosf(a),
+                                         h * 0.5f + ry * r * sinf(a)));
                 }
                 ApplyMirror(e, w, h, out);
                 return;

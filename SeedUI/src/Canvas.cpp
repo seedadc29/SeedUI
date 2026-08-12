@@ -136,6 +136,22 @@ namespace seedui
                                       ImU32 color, float width,
                                       float dash, float gap);
 
+        // Estrela (polígono côncavo) precisa de tesselação côncava.
+        inline bool IsStarShape(const Element& e)
+        {
+            return e.tipo == "poligono" &&
+                   e.transformacao.value("estrela", 0.0f) > 0.5f;
+        }
+
+        inline void FillShapePoly(ImDrawList* dl, const std::vector<ImVec2>& pts,
+                                  ImU32 color, bool concave)
+        {
+            if (concave)
+                dl->AddConcavePolyFilled(pts.data(), (int)pts.size(), color);
+            else
+                dl->AddConvexPolyFilled(pts.data(), (int)pts.size(), color);
+        }
+
         // Sombra suave barata (compatível com PC fraco): desenha camadas do
         // contorno tessellado, cada uma levemente expandida e mais transparente
         // que a anterior, todas deslocadas por (deslocamento_x/y). 4 camadas
@@ -189,7 +205,7 @@ namespace seedui
                     const float k = dist > 0.01f ? (dist + expand) / dist : 1.0f;
                     layerPts[i] = ImVec2(cx + ddx * k, cy + ddy * k);
                 }
-                dl->AddConvexPolyFilled(layerPts.data(), (int)layerPts.size(), color);
+                FillShapePoly(dl, layerPts, color, IsStarShape(e));
             }
         }
 
@@ -258,7 +274,7 @@ namespace seedui
                     Geo::OutlineScreen(e, origin.x, origin.y, scale, pts, 64);
                     if (pts.size() >= 3)
                     {
-                        dl->AddConvexPolyFilled(pts.data(), (int)pts.size(), fill);
+                        FillShapePoly(dl, pts, fill, IsStarShape(e));
                         DrawDashedClosedPolyline(dl, pts.data(), (int)pts.size(),
                                                  outline, outlineWidth,
                                                  dashLen, gapLen);
@@ -273,7 +289,7 @@ namespace seedui
                     Geo::OutlineScreen(e, origin.x, origin.y, scale, pts, 64);
                     if (pts.size() >= 3)
                     {
-                        dl->AddConvexPolyFilled(pts.data(), (int)pts.size(), fill);
+                        FillShapePoly(dl, pts, fill, IsStarShape(e));
                         if (outlineWidth > 0.0f)
                             dl->AddPolyline(pts.data(), (int)pts.size(), outline,
                                 ImDrawFlags_Closed, outlineWidth);
@@ -296,16 +312,17 @@ namespace seedui
                 }
                 else if (e.tipo == "poligono")
                 {
-                    const ImVec2 center((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
-                    const float radius = std::min(b.x - a.x, b.y - a.y) * 0.5f;
-                    if (outlineWidth > 0.0f)
+                    // Polígono/estrela configurável: tessela (lados, estrela,
+                    // raio interno) e preenche com tesselação adequada.
+                    std::vector<ImVec2> pts;
+                    Geo::OutlineScreen(e, origin.x, origin.y, scale, pts, 64);
+                    if (pts.size() >= 3)
                     {
-                        dl->AddNgonFilled(center, radius, outline, 6);
-                        const float innerRadius = std::max(0.0f, radius - outlineWidth);
-                        if (innerRadius > 0.0f)
-                            dl->AddNgonFilled(center, innerRadius, fill, 6);
+                        FillShapePoly(dl, pts, fill, IsStarShape(e));
+                        if (outlineWidth > 0.0f)
+                            dl->AddPolyline(pts.data(), (int)pts.size(), outline,
+                                ImDrawFlags_Closed, outlineWidth);
                     }
-                    else dl->AddNgonFilled(center, radius, fill, 6);
                 }
                 else
                 {

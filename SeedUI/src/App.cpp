@@ -4956,7 +4956,38 @@ namespace seedui
                         mProjectDirty = true;
                     }
                 }
-                ImGui::Separator();
+
+                // Forma do polígono: lados, estrela e raio interno.
+                if (selected->tipo == "poligono")
+                {
+                    ImGui::Spacing();
+                    ImGui::TextColored(Theme::TextSecondary, "Forma (polígono)");
+                    int sides = std::max(3, (int)std::lroundf(
+                        selected->transformacao.value("lados", 6.0f)));
+                    if (ImGui::SliderInt("Lados", &sides, 3, 24))
+                    {
+                        selected->transformacao["lados"] = (float)sides;
+                        mProjectDirty = true;
+                    }
+                    bool starOn = selected->transformacao.value("estrela", 0.0f) > 0.5f;
+                    if (ImGui::Checkbox("Estrela", &starOn))
+                    {
+                        selected->transformacao["estrela"] = starOn ? 1.0f : 0.0f;
+                        mProjectDirty = true;
+                    }
+                    if (starOn)
+                    {
+                        float innerRatio = std::max(0.1f, std::min(0.95f,
+                            selected->transformacao.value("raio_interno", 0.5f)));
+                        if (ImGui::SliderFloat("Raio interno", &innerRatio,
+                                               0.1f, 0.95f))
+                        {
+                            selected->transformacao["raio_interno"] = innerRatio;
+                            mProjectDirty = true;
+                        }
+                    }
+                    ImGui::Separator();
+                }
 
                 ImGui::TextUnformatted("Alinhar");
                 const char* alignTips[] = {

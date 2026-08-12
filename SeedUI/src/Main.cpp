@@ -202,6 +202,34 @@ namespace
         check(Project::ElementoNoPonto(lineMode, 200.0f, 400.0f) == nullptr,
               "linha: clique longe do traco nao seleciona");
 
+        // Polígono/estrela configurável: lados e raio interno.
+        Modo polyMode;
+        Element polyEl = makeElement("poly_1", "poligono");
+        polyEl.transformacao = { { "x", 0.0f }, { "y", 0.0f },
+                                 { "largura", 200.0f }, { "altura", 200.0f },
+                                 { "lados", 5.0f }, { "estrela", 1.0f },
+                                 { "raio_interno", 0.5f } };
+        polyMode.raiz.push_back(std::move(polyEl));
+        std::vector<ImVec2> starPts;
+        Element* polyRef = Project::ResolverId(polyMode, "poly_1");
+        Geo::OutlineLocal(*polyRef, starPts, 48);
+        check(starPts.size() == 10,
+              "estrela gera 2x lados de vertices");
+        // Primeiro vértice no topo (raio externo), segundo no raio interno.
+        const float topY = starPts[0].y;
+        const float innerY = starPts[1].y;
+        check(innerY > topY,
+              "estrela alterna raio externo e interno");
+        Element polyEl2 = makeElement("poly_2", "poligono");
+        polyEl2.transformacao = { { "x", 0.0f }, { "y", 0.0f },
+                                  { "largura", 100.0f }, { "altura", 100.0f },
+                                  { "lados", 8.0f }, { "estrela", 0.0f } };
+        polyMode.raiz.push_back(std::move(polyEl2));
+        std::vector<ImVec2> octPts;
+        Geo::OutlineLocal(*Project::ResolverId(polyMode, "poly_2"), octPts, 48);
+        check(octPts.size() == 8,
+              "poligono sem estrela gera 'lados' vertices");
+
         Modo groupMode;
         Element groupA = makeElement("painel_a", "painel");
         groupA.transformacao = { { "x", 10.0f }, { "y", 20.0f },
