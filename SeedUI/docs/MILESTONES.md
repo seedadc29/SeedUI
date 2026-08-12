@@ -286,6 +286,10 @@ Primeira leva da especificação "interface CorelDRAW" (commit 72b9701 antes):
   bar) oculta a grade **sem desligar o snap**; `Geo::kGridStep` (8) é a
   fonte única do desenho da grade E do snap (App usa `snapStep =
   Geo::kGridStep`) — encaixe sempre exato nos pontos visíveis.
+- **Arestas encaixam nas guias no RESIZE** (`SnapResizeToGuides`,
+  SmartGuides.h, testável): a aresta arrastada do resize (elemento único,
+  proporcional, espelhado e caixa conjunta de grupos) gruda na guia fixa
+  mais próxima e acende o destaque laranja. 5 testes novos (89 PASS).
 - Abas de documentos NÃO implementadas: o projeto usa telas/modos com
   seletores próprios (regra "não recriar o que existe"); telas sem UI de
   criação ficam para M10.

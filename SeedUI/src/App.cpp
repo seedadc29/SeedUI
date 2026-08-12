@@ -2316,6 +2316,24 @@ namespace seedui
                     }
                 }
 
+                // Snap das ARESTAS às guias fixas das réguas durante o
+                // RESIZE (a régua é referência de encaixe também ao
+                // redimensionar, não só ao mover): a aresta arrastada
+                // encaixa na guia mais próxima e a guia engatada acende em
+                // laranja (feedback igual ao do mover).
+                if (mSnapEnabled)
+                {
+                    mGuideFixedSnapX = -1.0f;
+                    mGuideFixedSnapY = -1.0f;
+                    SmartGuides::SnapResizeToGuides(
+                        left, right, top, bottom,
+                        resizeLeft, resizeRight, resizeTop, resizeBottom,
+                        mGuidesV, mGuidesH,
+                        12.0f / std::max(0.5f, mCanvasZoom), mirrored,
+                        mCanvasDragPivotX, mCanvasDragPivotY,
+                        mGuideFixedSnapX, mGuideFixedSnapY);
+                }
+
                 if (mCanvasGroupStarts.size() > 1)
                 {
                     // Resize em grupo: preserva o layout relativo dentro da
@@ -2424,6 +2442,22 @@ namespace seedui
                         scaleX = (newRight - newLeft) / groupW;
                         scaleY = (newBottom - newTop) / groupH;
                     }
+                    // Snap das arestas da caixa CONJUNTA às guias fixas.
+                    if (mSnapEnabled)
+                    {
+                        mGuideFixedSnapX = -1.0f;
+                        mGuideFixedSnapY = -1.0f;
+                        SmartGuides::SnapResizeToGuides(
+                            newLeft, newRight, newTop, newBottom,
+                            resizeLeft, resizeRight, resizeTop, resizeBottom,
+                            mGuidesV, mGuidesH,
+                            12.0f / std::max(0.5f, mCanvasZoom), mirrored,
+                            groupLeft + groupW * 0.5f,
+                            groupTop + groupH * 0.5f,
+                            mGuideFixedSnapX, mGuideFixedSnapY);
+                        scaleX = (newRight - newLeft) / groupW;
+                        scaleY = (newBottom - newTop) / groupH;
+                    }
                     for (const CanvasTransformStart& start : mCanvasGroupStarts)
                     {
                         Element* element = Project::ResolverId(mode, start.id);
@@ -2454,6 +2488,19 @@ namespace seedui
                                 top = anchorY; bottom = anchorY + newH; break;
                         default: left = anchorX; right = anchorX + newW;
                                  top = anchorY; bottom = anchorY + newH; break;
+                    }
+                    // Snap das arestas às guias fixas (elemento proporcional).
+                    if (mSnapEnabled)
+                    {
+                        mGuideFixedSnapX = -1.0f;
+                        mGuideFixedSnapY = -1.0f;
+                        SmartGuides::SnapResizeToGuides(
+                            left, right, top, bottom,
+                            resizeLeft, resizeRight, resizeTop, resizeBottom,
+                            mGuidesV, mGuidesH,
+                            12.0f / std::max(0.5f, mCanvasZoom), false,
+                            0.0f, 0.0f,
+                            mGuideFixedSnapX, mGuideFixedSnapY);
                     }
                     selected->transformacao["x"] = left;
                     selected->transformacao["y"] = top;

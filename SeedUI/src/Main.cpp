@@ -341,6 +341,55 @@ namespace
                   "guia gruda na borda esquerda da moldura da tela-base");
         }
 
+        // Snap de ARESTA no resize às guias fixas das réguas (M05): ao
+        // redimensionar, a aresta arrastada encaixa na guia mais próxima.
+        {
+            float gx = -1.0f, gy = -1.0f;
+            // Aresta direita a 7px de uma guia vertical em 500: encaixa.
+            float left = 100.0f, right = 493.0f, top = 50.0f, bottom = 90.0f;
+            std::vector<float> guidesV = { 500.0f };
+            std::vector<float> guidesH = { 300.0f };
+            SmartGuides::SnapResizeToGuides(
+                left, right, top, bottom,
+                false, true, false, false, // só resizeRight
+                guidesV, guidesH, 12.0f, false, 0.0f, 0.0f, gx, gy);
+            check(right == 500.0f && gx == 500.0f && left == 100.0f,
+                  "resize: aresta direita encaixa na guia vertical");
+            check(gy == -1.0f && top == 50.0f && bottom == 90.0f,
+                  "resize: eixo sem alça nao muda");
+
+            // Aresta inferior a 9px de uma guia horizontal em 300: encaixa.
+            left = 100.0f; right = 200.0f; top = 50.0f; bottom = 291.0f;
+            gx = gy = -1.0f;
+            SmartGuides::SnapResizeToGuides(
+                left, right, top, bottom,
+                false, false, false, true, // só resizeBottom
+                guidesV, guidesH, 12.0f, false, 0.0f, 0.0f, gx, gy);
+            check(bottom == 300.0f && gy == 300.0f,
+                  "resize: aresta inferior encaixa na guia horizontal");
+
+            // Fora da tolerância: nenhum encaixe.
+            left = 100.0f; right = 520.0f; top = 50.0f; bottom = 90.0f;
+            gx = gy = -1.0f;
+            SmartGuides::SnapResizeToGuides(
+                left, right, top, bottom,
+                false, true, false, false,
+                guidesV, guidesH, 12.0f, false, 0.0f, 0.0f, gx, gy);
+            check(right == 520.0f && gx == -1.0f,
+                  "resize: aresta fora da tolerancia nao se move");
+
+            // ESPELHADO (Shift): aresta direita encaixa em 500 e a esquerda
+            // espelha a partir do pivô (px=150 -> left = 2*150-500 = -200).
+            left = 100.0f; right = 493.0f; top = 50.0f; bottom = 90.0f;
+            gx = gy = -1.0f;
+            SmartGuides::SnapResizeToGuides(
+                left, right, top, bottom,
+                false, true, false, false,
+                guidesV, guidesH, 12.0f, true, 150.0f, 0.0f, gx, gy);
+            check(right == 500.0f && left == -200.0f && gx == 500.0f,
+                  "resize espelhado: oposta reflete a partir do pivô");
+        }
+
         // Guias de espaçamento (M04): replicam espaços repetidos.
         {
             Modo spacingMode;

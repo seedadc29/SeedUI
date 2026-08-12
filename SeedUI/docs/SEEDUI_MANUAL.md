@@ -265,6 +265,12 @@ finais de cada elemento.
   vence os demais snaps). Quando um encaixe acontece, a guia envolvida
   fica **destacada em laranja** (linha mais grossa) — feedback visual
   imediato do ponto exato de encaixe, nos dois sentidos.
+- **Arestas encaixam nas guias ao REDIMENSIONAR** (estilo CorelDRAW): as
+  guias da régua também são referência durante o **resize** — ao arrastar
+  uma aresta (ou canto), ela **gruda na guia** mais próxima (vertical ou
+  horizontal), inclusive no **resize espelhado** (Shift: a aresta oposta
+  reflete a partir do pivô) e em **grupos** (a aresta da caixa conjunta
+  encaixa). A guia engatada acende em laranja, igual ao mover.
 - **Bloqueio da régua** (proteção contra alterações acidentais): o menu
   **Exibir → Bloquear réguas** (ou o **cadeado** na barra de ferramentas
   principal) bloqueia/desbloqueia a régua. Bloqueada, a régua **continua

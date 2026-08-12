@@ -110,6 +110,78 @@ namespace seedui
             return best;
         }
 
+        // Snap de aresta no RESIZE às guias FIXAS das réguas: ajusta apenas
+        // o lado que está sendo arrastado (resizeLeft/Right/Top/Bottom) para
+        // a guia vertical/horizontal mais próxima dentro da tolerância. Em
+        // modo ESPELHADO (Shift), o lado oposto é re-derivado a partir do
+        // pivô para manter a simetria. Devolve as posições das guias
+        // engatadas (-1 = nenhuma) para o destaque visual.
+        inline void SnapResizeToGuides(float& left, float& right,
+                                       float& top, float& bottom,
+                                       bool resizeLeft, bool resizeRight,
+                                       bool resizeTop, bool resizeBottom,
+                                       const std::vector<float>& guidesV,
+                                       const std::vector<float>& guidesH,
+                                       float tolerance, bool mirrored,
+                                       float pivotX, float pivotY,
+                                       float& outGuideX, float& outGuideY)
+        {
+            outGuideX = -1.0f;
+            outGuideY = -1.0f;
+            if (resizeRight)
+            {
+                for (float gx : guidesV)
+                {
+                    if (fabsf(gx - right) < tolerance)
+                    {
+                        right = gx;
+                        if (mirrored) left = 2.0f * pivotX - right;
+                        outGuideX = gx;
+                        break;
+                    }
+                }
+            }
+            else if (resizeLeft)
+            {
+                for (float gx : guidesV)
+                {
+                    if (fabsf(gx - left) < tolerance)
+                    {
+                        left = gx;
+                        if (mirrored) right = 2.0f * pivotX - left;
+                        outGuideX = gx;
+                        break;
+                    }
+                }
+            }
+            if (resizeBottom)
+            {
+                for (float gy : guidesH)
+                {
+                    if (fabsf(gy - bottom) < tolerance)
+                    {
+                        bottom = gy;
+                        if (mirrored) top = 2.0f * pivotY - bottom;
+                        outGuideY = gy;
+                        break;
+                    }
+                }
+            }
+            else if (resizeTop)
+            {
+                for (float gy : guidesH)
+                {
+                    if (fabsf(gy - top) < tolerance)
+                    {
+                        top = gy;
+                        if (mirrored) bottom = 2.0f * pivotY - top;
+                        outGuideY = gy;
+                        break;
+                    }
+                }
+            }
+        }
+
         // Ajusta dx/dy para encaixar na candidata mais próxima (dentro da
         // tolerância, em unidades do projeto) e devolve a posição da guia.
         // A moldura da tela-base tem PRIORIDADE: tolerância ampliada (snap
