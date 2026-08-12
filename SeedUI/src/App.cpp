@@ -2011,10 +2011,15 @@ namespace seedui
                                               mCanvasPrevDX, mCanvasPrevDY,
                                               mGuideSpacingX1, mGuideSpacingX2,
                                               mGuideSpacingY1, mGuideSpacingY2);
-                    if (mGuideSpacingX1 < 0.0f)
+                    // A grade de 8px NÃO é aplicada quando a MOLDURA (ou uma
+                    // guia inteligente) já engatou no eixo: a quantização da
+                    // grade pode desfazer o snap exato da tela-base (ex.
+                    // objeto com x não múltiplo de 8 desgruda da borda 1280
+                    // e pousa em 1284). O delimitador principal SEMPRE vence.
+                    if (mGuideSpacingX1 < 0.0f && mGuideSnapX < 0.0f)
                         dx = roundf((mCanvasDragX + dx) / snapStep) * snapStep -
                              mCanvasDragX;
-                    if (mGuideSpacingY1 < 0.0f)
+                    if (mGuideSpacingY1 < 0.0f && mGuideSnapY < 0.0f)
                         dy = roundf((mCanvasDragY + dy) / snapStep) * snapStep -
                              mCanvasDragY;
                     SmartGuides::Apply(mode, guideRects, mSelectedElementIds,

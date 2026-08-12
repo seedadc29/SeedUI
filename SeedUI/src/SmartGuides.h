@@ -213,8 +213,10 @@ namespace seedui
 
             // ---- Eixo X: moldura primeiro (tolerância FORTE, reforçada a
             // pedido do usuário: a tela base 1280x720 é a área de segurança
-            // e deve "segurar" mais que qualquer outro snap).
-            const float frameTol = tolerance * 5.0f;
+            // e deve "segurar" mais que qualquer outro snap). A grade de
+            // 8px NÃO desfaz esse encaixe (ver App.cpp — eixo com moldura
+            // engatada pula a quantização).
+            const float frameTol = tolerance * 8.0f;
             const float frameX[3] = { 0.0f, canvasW * 0.5f, canvasW };
             float bestDx = 0.0f, bestX = -1.0f, bestDist = frameTol;
             for (int i = 0; i < 3; ++i)

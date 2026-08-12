@@ -253,8 +253,8 @@ namespace
             check(gx == -1.0f && gy == -1.0f,
                   "guias ignoram elementos da propria selecao");
 
-            // Moldura da tela-base: snap FORTE (tolerância 3x). Elemento a
-            // 14px da borda esquerda (dentro de 15px) encaixa na moldura,
+            // Moldura da tela-base: snap FORTE (tolerância 8x). Elemento a
+            // 14px da borda esquerda (dentro de 40px) encaixa na moldura,
             // mesmo estando fora da tolerância normal de 5px.
             Modo frameMode;
             Element fm = makeElement("move", "painel");
@@ -267,7 +267,26 @@ namespace
             SmartGuides::Apply(frameMode, starts, selection, dx, dy,
                                1280.0f, 720.0f, 5.0f, gx, gy);
             check(dx == -10.0f && gx == 0.0f && dy == 0.0f && gy == -1.0f,
-                  "moldura tem snap forte (3x tolerancia) e vence os demais");
+                  "moldura tem snap forte (8x tolerancia) e vence os demais");
+
+            // Força AMPLIADA: o menor desvio do elemento à borda é 35px —
+            // dentro da tolerância ampliada (8x=40px) mas FORA da antiga
+            // (5x=25px): a moldura magnetiza de mais longe agora.
+            Modo frameMode2;
+            Element fm2 = makeElement("move", "painel");
+            fm2.transformacao = { { "x", 40.0f }, { "y", 100.0f },
+                                  { "largura", 100.0f }, { "altura", 40.0f } };
+            frameMode2.raiz.push_back(std::move(fm2));
+            selection = { "move" };
+            dx = -5.0f; dy = 0.0f; gx = gy = -1.0f;
+            starts = { { 40.0f, 100.0f, 100.0f, 40.0f } };
+            SmartGuides::Apply(frameMode2, starts, selection, dx, dy,
+                               1280.0f, 720.0f, 5.0f, gx, gy);
+            // selLeft = 35 (35 < 40); centro 85, direita 135.
+            // O ponto mais próximo da borda 0 é a esquerda (35px) — engata:
+            // dLeft = 0-35 = -35; dx += -35 -> dx = -40, esquerda em 0.
+            check(dx == -40.0f && gx == 0.0f && gy == -1.0f,
+                  "moldura: tolerancia ampliada (8x) magnetiza de mais longe");
         }
 
         // Snap de GUIA arrastada da régua (M05): a guia gruda nas laterais/

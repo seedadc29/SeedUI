@@ -124,8 +124,11 @@ O canvas ganhou ferramentas de precisão estilo CorelDRAW/Illustrator:
   **Snap ativo** (botão de grade na barra de ações ou menu Exibir).
 - **Snap forte da moldura**: a tela-base (o retângulo com o rótulo "tela
   base") é o delimitador principal — suas bordas e o centro têm um encaixe
-  **três vezes mais forte** que os demais, então o elemento "gruda" nela
-  com mais facilidade.
+  **oito vezes mais forte** que os demais snaps (magnetização ampliada),
+  então o elemento "gruda" nela mesmo vindo de mais longe. Além disso, a
+  **grade de 8px nunca desfaz esse encaixe**: quando a moldura (ou uma
+  guia inteligente) engata no eixo, a quantização da grade é pulada — o
+  objeto pousa EXATAMENTE na borda/centro (nunca em 1284 em vez de 1280).
 - **Guias de espaçamento**: ao mover perto de uma sequência de elementos
   com espaçamento regular (ex.: três painéis com 20px entre si), o programa
   prevê o padrão e puxa o elemento para **replicar o mesmo espaço**,

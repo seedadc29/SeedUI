@@ -290,6 +290,11 @@ Primeira leva da especificação "interface CorelDRAW" (commit 72b9701 antes):
   SmartGuides.h, testável): a aresta arrastada do resize (elemento único,
   proporcional, espelhado e caixa conjunta de grupos) gruda na guia fixa
   mais próxima e acende o destaque laranja. 5 testes novos (89 PASS).
+- **Moldura magnetizada e imune à grade**: tolerância da tela-base
+  ampliada de 5x para **8x** (`frameTol`); e o bug em que a grade de 8px
+  DESFAZIA o snap da moldura foi corrigido (App.cpp: eixo com moldura
+  engatada pula a quantização `roundf(.../8)*8` — um objeto em x não
+  múltiplo de 8 pousava em 1284 em vez de 1280). 1 teste novo (90 PASS).
 - Abas de documentos NÃO implementadas: o projeto usa telas/modos com
   seletores próprios (regra "não recriar o que existe"); telas sem UI de
   criação ficam para M10.
