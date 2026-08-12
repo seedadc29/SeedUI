@@ -230,6 +230,50 @@ namespace
         check(octPts.size() == 8,
               "poligono sem estrela gera 'lados' vertices");
 
+        // Caminho (caneta Bezier): tesselação de segmentos retos e curvos.
+        Modo pathMode;
+        Element pathEl = makeElement("path_1", "caminho");
+        pathEl.transformacao = {
+            { "x", 100.0f }, { "y", 100.0f },
+            { "largura", 300.0f }, { "altura", 200.0f },
+            { "fechado", 1.0f },
+            { "pontos", nlohmann::json::array({
+                  nlohmann::json{ { "x", 0.0f }, { "y", 0.0f },
+                                  { "cx2", 0.0f }, { "cy2", 0.0f }, { "curva", 0.0f } },
+                  nlohmann::json{ { "x", 200.0f }, { "y", 0.0f },
+                                  { "cx2", 40.0f }, { "cy2", -30.0f }, { "curva", 1.0f } },
+                  nlohmann::json{ { "x", 100.0f }, { "y", 150.0f },
+                                  { "cx2", 0.0f }, { "cy2", 0.0f }, { "curva", 0.0f } } }) }
+        };
+        pathMode.raiz.push_back(std::move(pathEl));
+        std::vector<ImVec2> pathPts;
+        Element* pathRef = Project::ResolverId(pathMode, "path_1");
+        Geo::OutlineLocal(*pathRef, pathPts, 48);
+        check(pathPts.size() > 14,
+              "caminho com curva tessela mais pontos que segmentos retos");
+        check(pathPts.front().x == pathPts.back().x &&
+              pathPts.front().y == pathPts.back().y,
+              "caminho fechado fecha o contorno no primeiro ponto");
+        check(Project::ElementoNoPonto(pathMode, 150.0f, 175.0f) &&
+              Project::ElementoNoPonto(pathMode, 150.0f, 175.0f)->id == "path_1",
+              "caminho: clique no contorno seleciona");
+        Element pathOpen = makeElement("path_2", "caminho");
+        pathOpen.transformacao = {
+            { "x", 0.0f }, { "y", 0.0f },
+            { "largura", 100.0f }, { "altura", 100.0f },
+            { "fechado", 0.0f },
+            { "pontos", nlohmann::json::array({
+                  nlohmann::json{ { "x", 0.0f }, { "y", 0.0f },
+                                  { "cx2", 0.0f }, { "cy2", 0.0f }, { "curva", 0.0f } },
+                  nlohmann::json{ { "x", 100.0f }, { "y", 100.0f },
+                                  { "cx2", 0.0f }, { "cy2", 0.0f }, { "curva", 0.0f } } }) }
+        };
+        pathMode.raiz.push_back(std::move(pathOpen));
+        std::vector<ImVec2> openPts;
+        Geo::OutlineLocal(*Project::ResolverId(pathMode, "path_2"), openPts, 48);
+        check(openPts.size() == 2,
+              "caminho aberto com segmento reto gera 2 pontos");
+
         Modo groupMode;
         Element groupA = makeElement("painel_a", "painel");
         groupA.transformacao = { { "x", 10.0f }, { "y", 20.0f },

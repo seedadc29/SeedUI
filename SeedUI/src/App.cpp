@@ -176,6 +176,7 @@ namespace seedui
             case IconId::Ellipse: return Tool::Ellipse;
             case IconId::Polygon: return Tool::Polygon;
             case IconId::Slash:  return Tool::Line;
+            case IconId::PenTool: return Tool::Pen;
             case IconId::Color:  return Tool::Color;
             case IconId::Grid:   return Tool::Grid;
             case IconId::Ruler:  return Tool::Measure;
@@ -1031,6 +1032,154 @@ namespace seedui
                     IM_COL32(255, 255, 255, 255), text);
     }
 
+    void App::AddPenPoint(Element& path, float projectX, float projectY,
+                          float handleDX, float handleDY, bool curved)
+    {
+        const float bx = path.transformacao.value("x", 0.0f);
+        const float by = path.transformacao.value("y", 0.0f);
+        const float lx = projectX - bx;
+        const float ly = projectY - by;
+        const float w = path.transformacao.value("largura", 1.0f);
+        const float h = path.transformacao.value("altura", 1.0f);
+        path.transformacao["pontos"].push_back(nlohmann::json{
+            { "x", lx }, { "y", ly },
+            { "cx2", handleDX }, { "cy2", handleDY },
+            { "curva", curved ? 1.0f : 0.0f }
+        });
+        path.transformacao["largura"] = std::max(w, lx + 2.0f);
+        path.transformacao["altura"] = std::max(h, ly + 2.0f);
+    }
+
+    void App::HandlePenTool(bool canvasHovered)
+    {
+        const ImVec2 mouse = ImGui::GetMousePos();
+        float px = 0.0f, py = 0.0f;
+        const bool inside = CanvasScreenToProject(&mProject, mouse.x, mouse.y,
+            px, py, false, mCanvasZoom, mCanvasPanX, mCanvasPanY);
+
+        if (!mPenDrawing)
+        {
+            // Primeiro clique: cria o caminho com o primeiro ponto.
+            if (canvasHovered && inside &&
+                ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            {
+                std::string id;
+                for (int i = 1; i < 10000; ++i)
+                {
+                    id = "caminho_" + std::to_string(i);
+                    if (!Project::ResolverId(mProject, id)) break;
+                }
+                Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+                Element e;
+                e.id = id;
+                e.tipo = "caminho";
+                e.nome = "Caminho";
+                e.transformacao = {
+                    { "x", px }, { "y", py },
+                    { "largura", 1.0f }, { "altura", 1.0f },
+                    { "fechado", 0.0f },
+                    { "pontos", nlohmann::json::array({ nlohmann::json{
+                          { "x", 0.0f }, { "y", 0.0f },
+                          { "cx2", 0.0f }, { "cy2", 0.0f }, { "curva", 0.0f } } }) }
+                };
+                mode.raiz.push_back(std::move(e));
+                mSelectedElementId = id;
+                mSelectedElementIds = { id };
+                mPenDrawing = true;
+                mProjectDirty = true;
+                mStatusMsg = "Caneta: clique adiciona ponto · arraste cria curva";
+                mStatusMsgUntil = GetTime() + 6.0;
+            }
+            ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+            return;
+        }
+
+        Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+        Element* path = Project::ResolverId(mode, mSelectedElementId);
+        if (!path || path->tipo != "caminho")
+        {
+            mPenDrawing = false;
+            return;
+        }
+
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+        {
+            // Cancela: remove o caminho em construção.
+            auto it = std::find_if(mode.raiz.begin(), mode.raiz.end(),
+                [&](const Element& el) { return el.id == path->id; });
+            if (it != mode.raiz.end()) mode.raiz.erase(it);
+            mPenDrawing = false;
+            mSelectedElementId.clear();
+            mSelectedElementIds.clear();
+            mProjectDirty = true;
+            mStatusMsg = "Caminho cancelado";
+            mStatusMsgUntil = GetTime() + 4.0;
+            return;
+        }
+        if (ImGui::IsKeyPressed(ImGuiKey_Enter) ||
+            ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+        {
+            mPenDrawing = false;
+            mProjectDirty = true;
+            mStatusMsg = "Caminho finalizado (aberto)";
+            mStatusMsgUntil = GetTime() + 4.0;
+            return;
+        }
+
+        auto& pts = path->transformacao["pontos"];
+        const float bx = path->transformacao.value("x", 0.0f);
+        const float by = path->transformacao.value("y", 0.0f);
+
+        // Fechar: clique perto do primeiro ponto (com 3+ pontos).
+        if (canvasHovered && inside &&
+            ImGui::IsMouseClicked(ImGuiMouseButton_Left) && pts.size() >= 3)
+        {
+            const float fpx = bx + pts[0].value("x", 0.0f);
+            const float fpy = by + pts[0].value("y", 0.0f);
+            const float ddx = px - fpx, ddy = py - fpy;
+            if (ddx * ddx + ddy * ddy <= 144.0f)
+            {
+                path->transformacao["fechado"] = 1.0f;
+                mPenDrawing = false;
+                mProjectDirty = true;
+                mStatusMsg = "Caminho fechado";
+                mStatusMsgUntil = GetTime() + 4.0;
+                return;
+            }
+        }
+
+        // Clique / arrasto adiciona ponto.
+        if (canvasHovered && inside &&
+            ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        {
+            mPenDragging = true;
+            mPenDragStartX = mPenDragX = px;
+            mPenDragStartY = mPenDragY = py;
+        }
+        if (mPenDragging && ImGui::IsMouseDown(ImGuiMouseButton_Left))
+        {
+            mPenDragX = px;
+            mPenDragY = py;
+        }
+        if (mPenDragging && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+        {
+            const float ddx = mPenDragX - mPenDragStartX;
+            const float ddy = mPenDragY - mPenDragStartY;
+            if (ddx * ddx + ddy * ddy > 16.0f)
+            {
+                AddPenPoint(*path, mPenDragX, mPenDragY,
+                            ddx * 0.4f, ddy * 0.4f, true);
+            }
+            else
+            {
+                AddPenPoint(*path, mPenDragX, mPenDragY, 0.0f, 0.0f, false);
+            }
+            mPenDragging = false;
+            mProjectDirty = true;
+        }
+        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+    }
+
     void App::ApagarElementosSelecionados()
     {
         if (!PossuiModoAtivo()) return;
@@ -1516,6 +1665,14 @@ namespace seedui
             return;
         }
 
+        // Caneta: desenha caminhos Bézier ponto a ponto.
+        if (mCurrentTool == Tool::Pen && mHasProject &&
+            !ImGui::GetIO().KeyCtrl)
+        {
+            HandlePenTool(canvasHovered);
+            return;
+        }
+
         // Ctrl pressionado = ferramenta de SELEÇÃO temporária: mesmo estando
         // em outra ferramenta (criar retângulo, zoom etc.), Ctrl + arrastar
         // seleciona/marquee — sem trocar a ferramenta ativa.
@@ -1653,6 +1810,39 @@ namespace seedui
                 if (rdx * rdx + rdy * rdy <= rotTol * rotTol) return 14;
             }
 
+            if (element.tipo == "caminho" &&
+                element.transformacao.contains("pontos") &&
+                element.transformacao["pontos"].is_array())
+            {
+                // Nós e alças de curva editáveis (modo 16 = nó, 17 = alça).
+                // Sem alças de tamanho: o caminho se edita pelos nós.
+                const auto& pts = element.transformacao["pontos"];
+                const float nodeTol = 7.0f / std::max(0.25f, viewScale);
+                const float nodeTolSq = nodeTol * nodeTol;
+                for (int i = 0; i < (int)pts.size(); ++i)
+                {
+                    const float nx = ex + pts[i].value("x", 0.0f);
+                    const float ny = ey + pts[i].value("y", 0.0f);
+                    const float hx = nx + pts[i].value("cx2", 0.0f);
+                    const float hy = ny + pts[i].value("cy2", 0.0f);
+                    const float hdx = x - hx, hdy = y - hy;
+                    if (hdx * hdx + hdy * hdy <= nodeTolSq)
+                    {
+                        mPathEditIndex = i;
+                        return 17;
+                    }
+                    const float ndx = x - nx, ndy = y - ny;
+                    if (ndx * ndx + ndy * ndy <= nodeTolSq)
+                    {
+                        mPathEditIndex = i;
+                        return 16;
+                    }
+                }
+                if (x >= ex && x <= ex + ew && y >= ey && y <= ey + eh)
+                    return 1;
+                return 0;
+            }
+
             if (x < ex - tolerance || x > ex + ew + tolerance ||
                 y < ey - tolerance || y > ey + eh + tolerance)
                 return 0;
@@ -1767,6 +1957,8 @@ namespace seedui
             else if (dragMode == 11 || dragMode == 13) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNESW);
             else if (dragMode == 14) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
             else if (dragMode == 15) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
+            else if (dragMode == 16 || dragMode == 17)
+                ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
             else if (dragMode == 1) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
         };
 
@@ -2366,6 +2558,40 @@ namespace seedui
                         element->transformacao["centro_rotacao"] =
                             { { "x", px }, { "y", py } };
                     mProjectDirty = true;
+                }
+                ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
+            }
+            else if (mCanvasDragMode == 16 || mCanvasDragMode == 17)
+            {
+                // Edição de NÓS do caminho (caneta): 16 move o ponto, 17
+                // arrasta a alça de saída (cria curva). Coordenadas em
+                // unidades do projeto, convertidas para o espaço local.
+                Element* element = Project::ResolverId(mode, mSelectedElementId);
+                if (element && !element->bloqueado &&
+                    element->transformacao.contains("pontos") &&
+                    element->transformacao["pontos"].is_array())
+                {
+                    auto& pts = element->transformacao["pontos"];
+                    const int index = mPathEditIndex;
+                    if (index >= 0 && index < (int)pts.size())
+                    {
+                        const float bx = element->transformacao.value("x", 0.0f);
+                        const float by = element->transformacao.value("y", 0.0f);
+                        if (mCanvasDragMode == 16)
+                        {
+                            pts[index]["x"] = mouseX - bx;
+                            pts[index]["y"] = mouseY - by;
+                        }
+                        else
+                        {
+                            const float nx = bx + pts[index].value("x", 0.0f);
+                            const float ny = by + pts[index].value("y", 0.0f);
+                            pts[index]["cx2"] = mouseX - nx;
+                            pts[index]["cy2"] = mouseY - ny;
+                            pts[index]["curva"] = 1.0f;
+                        }
+                        mProjectDirty = true;
+                    }
                 }
                 ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
             }
@@ -4504,6 +4730,9 @@ namespace seedui
         ToolButton(IconId::Ellipse, "Criar elipse · arraste no canvas", kFamilyCreate);
         ToolButton(IconId::Polygon, "Criar polígono · arraste no canvas", kFamilyCreate);
         ToolButton(IconId::Slash, "Criar linha · arraste para definir o traço", kFamilyCreate);
+        ToolButton(IconId::PenTool,
+                   "Caneta · clique adiciona ponto · arraste cria curva · duplo clique/Enter fecha",
+                   kFamilyCreate);
         DrawToolFamilySeparator(kFamilyCreate);
 
         ToolButton(IconId::Color, "Aparência · Conta-gotas (I)", kFamilyAppearance);

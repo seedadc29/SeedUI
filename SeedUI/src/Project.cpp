@@ -104,7 +104,34 @@ namespace seedui
             const float width = element.transformacao.value("largura", 160.0f);
             const float height = element.transformacao.value("altura", 32.0f);
             bool inside = false;
-            if (element.tipo == "linha")
+            if (element.tipo == "caminho")
+            {
+                // Caminho: clique próximo ao contorno tessellado.
+                std::vector<ImVec2> pts;
+                Geo::OutlineProject(element, pts, 64);
+                const int n = (int)pts.size();
+                if (n >= 2)
+                {
+                    const bool closed = element.transformacao.value("fechado", 0.0f) > 0.5f;
+                    const int segments = closed ? n : n - 1;
+                    float best = FLT_MAX;
+                    for (int i = 0; i < segments; ++i)
+                    {
+                        const ImVec2& a = pts[i];
+                        const ImVec2& b = pts[(i + 1) % n];
+                        const float dx = b.x - a.x, dy = b.y - a.y;
+                        const float len2 = dx * dx + dy * dy;
+                        float t = len2 > 0.0f
+                            ? ((x - a.x) * dx + (y - a.y) * dy) / len2 : 0.0f;
+                        t = std::max(0.0f, std::min(1.0f, t));
+                        const float px = a.x + t * dx, py = a.y + t * dy;
+                        const float ddx = x - px, ddy = y - py;
+                        best = std::min(best, ddx * ddx + ddy * ddy);
+                    }
+                    inside = best <= 64.0f; // raio 8px
+                }
+            }
+            else if (element.tipo == "linha")
             {
                 // Linha: clique próximo ao traço (distância ao segmento).
                 float x1 = 0.0f, y1 = 0.0f, x2 = 0.0f, y2 = 0.0f;

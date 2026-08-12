@@ -253,7 +253,20 @@ namespace seedui
 
             if (e.tipo != "grupo")
             {
-                if (e.tipo == "linha")
+                if (e.tipo == "caminho")
+                {
+                    // Caminho (caneta): tessela as curvas e desenha o contorno;
+                    // fecha com preenchimento côncavo quando fechado.
+                    std::vector<ImVec2> pts;
+                    Geo::OutlineScreen(e, origin.x, origin.y, scale, pts, 64);
+                    const bool closed = e.transformacao.value("fechado", 0.0f) > 0.5f;
+                    if (pts.size() >= 3 && closed)
+                        dl->AddConcavePolyFilled(pts.data(), (int)pts.size(), fill);
+                    if (pts.size() >= 2 && outlineWidth > 0.0f)
+                        dl->AddPolyline(pts.data(), (int)pts.size(), outline,
+                                        closed ? ImDrawFlags_Closed : 0, outlineWidth);
+                }
+                else if (e.tipo == "linha")
                 {
                     // Linha: traço diagonal da caixa, com espessura e cor do
                     // contorno. Pontas arredondadas (traço grosso).
@@ -846,7 +859,9 @@ namespace seedui
                     dl->PathStroke(selection, ImDrawFlags_Closed, primary ? 1.5f : 1.0f);
                 }
                 if (!primary || selected->bloqueado) continue;
-                if (selected->tipo == "grupo") continue;
+                // Caminho (caneta): sem alças de tamanho — edita-se pelos nós.
+                if (selected->tipo == "grupo" || selected->tipo == "caminho")
+                    continue;
 
                 const ImU32 handleFill = IM_COL32(245, 245, 245, 255);
                 const float hs = 4.0f;
@@ -947,6 +962,43 @@ namespace seedui
                                         IM_COL32(20, 20, 20, 255), 16);
                     dl->AddCircle(ImVec2(pivotScreenX, pivotScreenY), pr,
                                   pivotCol, 16, 1.5f);
+                }
+
+                // Caminho (caneta): nós editáveis + alças de curva.
+                if (selected->tipo == "caminho" &&
+                    selected->transformacao.contains("pontos") &&
+                    selected->transformacao["pontos"].is_array())
+                {
+                    const auto& pts = selected->transformacao["pontos"];
+                    const float bx = selected->transformacao.value("x", 0.0f);
+                    const float by = selected->transformacao.value("y", 0.0f);
+                    const ImU32 nodeCol = ImGui::ColorConvertFloat4ToU32(
+                        Theme::Hex(0x4f8cff, 1.0f));
+                    const ImU32 handleCol = ImGui::ColorConvertFloat4ToU32(
+                        Theme::Hex(0xffb347, 1.0f));
+                    for (int i = 0; i < (int)pts.size(); ++i)
+                    {
+                        const float nx = bx + pts[i].value("x", 0.0f);
+                        const float ny = by + pts[i].value("y", 0.0f);
+                        const float sx = origin.x + nx * viewScale;
+                        const float sy = origin.y + ny * viewScale;
+                        const float hx = nx + pts[i].value("cx2", 0.0f);
+                        const float hy = ny + pts[i].value("cy2", 0.0f);
+                        const float shx = origin.x + hx * viewScale;
+                        const float shy = origin.y + hy * viewScale;
+                        const bool curved = pts[i].value("curva", 0.0f) > 0.5f ||
+                            pts[(i + 1) % (int)pts.size()].value("curva", 0.0f) > 0.5f;
+                        if (curved && (fabsf(hx - nx) > 0.01f || fabsf(hy - ny) > 0.01f))
+                        {
+                            dl->AddLine(ImVec2(sx, sy), ImVec2(shx, shy),
+                                        handleCol, 1.0f);
+                            dl->AddCircleFilled(ImVec2(shx, shy), 3.5f,
+                                                handleCol, 16);
+                        }
+                        dl->AddCircleFilled(ImVec2(sx, sy), 4.0f,
+                                            IM_COL32(20, 20, 20, 255), 16);
+                        dl->AddCircle(ImVec2(sx, sy), 4.0f, nodeCol, 16, 1.5f);
+                    }
                 }
             }
             }

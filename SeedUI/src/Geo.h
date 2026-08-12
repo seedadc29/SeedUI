@@ -233,6 +233,80 @@ namespace seedui
                 ApplyMirror(e, w, h, out);
                 return;
             }
+            if (e.tipo == "caminho")
+            {
+                // Caminho (caneta Bezier): pontos locais com alça de saída.
+                // Cada ponto: {x, y, cx2, cy2, curva}. A alça de entrada de B
+                // é o espelho da alça de saída de B (modelo Illustrator).
+                if (e.transformacao.contains("pontos") &&
+                    e.transformacao["pontos"].is_array())
+                {
+                    const auto& arr = e.transformacao["pontos"];
+                    const int n = (int)arr.size();
+                    if (n >= 2)
+                    {
+                        const bool closed = e.transformacao.value("fechado", 0.0f) > 0.5f;
+                        const int segments = closed ? n : n - 1;
+                        const int steps = 12;
+                        for (int i = 0; i < segments; ++i)
+                        {
+                            const int j = (i + 1) % n;
+                            const auto& pa = arr[i];
+                            const auto& pb = arr[j];
+                            const float ax = pa.value("x", 0.0f);
+                            const float ay = pa.value("y", 0.0f);
+                            const float bx = pb.value("x", 0.0f);
+                            const float by = pb.value("y", 0.0f);
+                            const bool curved = pa.value("curva", 0.0f) > 0.5f ||
+                                                pb.value("curva", 0.0f) > 0.5f;
+                            if (curved)
+                            {
+                                const float c2x = ax + pa.value("cx2", 0.0f);
+                                const float c2y = ay + pa.value("cy2", 0.0f);
+                                const float c1x = bx - pb.value("cx2", 0.0f);
+                                const float c1y = by - pb.value("cy2", 0.0f);
+                                for (int s = 0; s < steps; ++s)
+                                {
+                                    const float t = (float)s / (float)steps;
+                                    const float u = 1.0f - t;
+                                    const float w0 = u * u * u;
+                                    const float w1 = 3.0f * u * u * t;
+                                    const float w2 = 3.0f * u * t * t;
+                                    const float w3 = t * t * t;
+                                    out.push_back(ImVec2(
+                                        w0 * ax + w1 * c2x + w2 * c1x + w3 * bx,
+                                        w0 * ay + w1 * c2y + w2 * c1y + w3 * by));
+                                }
+                            }
+                            else
+                            {
+                                out.push_back(ImVec2(ax, ay));
+                            }
+                        }
+                        if (closed)
+                        {
+                            const auto& first = arr[0];
+                            out.push_back(ImVec2(first.value("x", 0.0f),
+                                                 first.value("y", 0.0f)));
+                        }
+                        else
+                        {
+                            // Aberto: o último ponto é o fim do último segmento.
+                            const auto& last = arr[n - 1];
+                            out.push_back(ImVec2(last.value("x", 0.0f),
+                                                 last.value("y", 0.0f)));
+                        }
+                        ApplyMirror(e, w, h, out);
+                        return;
+                    }
+                }
+                // Sem pontos: diagonal da caixa como fallback visível.
+                out.push_back(ImVec2(0.0f, 0.0f));
+                out.push_back(ImVec2(w, h));
+                ApplyMirror(e, w, h, out);
+                return;
+            }
+
             if (kind == ShapeKind::Polygon)
             {
                 // Polígono/estrela configurável: transformacao.lados,

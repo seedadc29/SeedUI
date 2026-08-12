@@ -76,6 +76,7 @@ namespace seedui
             { IconId::Ellipse,   "ellipse" },
             { IconId::Polygon,   "polygon" },
             { IconId::Slash,     "slash" },
+            { IconId::PenTool,   "pen-tool" },
             { IconId::Contour,   "contour" },
             { IconId::FlipH,     "flip-h" },
             { IconId::FlipV,     "flip-v" },

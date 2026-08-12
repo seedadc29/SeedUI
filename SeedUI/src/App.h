@@ -21,6 +21,7 @@ namespace seedui
         Ellipse,
         Polygon,
         Line,
+        Pen,
         Measure,
         Annotate,
     };
@@ -72,6 +73,9 @@ namespace seedui
         void EspelharSelecao(bool horizontal);
         void HandleMeasureTool(bool canvasHovered);
         void DesenharMedicao();
+        void HandlePenTool(bool canvasHovered);
+        void AddPenPoint(Element& path, float projectX, float projectY,
+                         float handleDX, float handleDY, bool curved);
         void ApagarElementosSelecionados();
         void AlternarModoAnotacao();
         void AlinharElementosSelecionados(int operacao);
@@ -194,6 +198,12 @@ namespace seedui
         bool mMeasureDragging = false;
         float mMeasureX1 = 0.0f, mMeasureY1 = 0.0f;
         float mMeasureX2 = 0.0f, mMeasureY2 = 0.0f;
+        // Caneta (caminho Bezier): desenho e edição de nós.
+        bool mPenDrawing = false;
+        bool mPenDragging = false;
+        float mPenDragStartX = 0.0f, mPenDragStartY = 0.0f;
+        float mPenDragX = 0.0f, mPenDragY = 0.0f;
+        int mPathEditIndex = -1;  // nó em edição (dragMode 16 = nó, 17 = alça)
         int mAlignTarget = 0; // 0 selecao, 1 elemento principal, 2 tela
         float mHorizontalSpacing = 16.0f;
         float mVerticalSpacing = 16.0f;
