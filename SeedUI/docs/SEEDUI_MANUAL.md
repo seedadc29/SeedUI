@@ -274,6 +274,12 @@ finais de cada elemento.
   horizontal), inclusive no **resize espelhado** (Shift: a aresta oposta
   reflete a partir do pivô) e em **grupos** (a aresta da caixa conjunta
   encaixa). A guia engatada acende em laranja, igual ao mover.
+- **A moldura magnetiza as arestas no REDIMENSIONAR**: antes, o snap da
+  tela-base só existia ao **mover** o objeto inteiro — ao arrastar uma
+  aresta (resize) ela passava pela lateral sem travar. Agora a **borda e o
+  centro da tela-base** encaixam a aresta arrastada com a mesma força 8×
+  do mover (linha magenta ao engatar), inclusive no espelhado (Shift) e
+  em grupos — redimensionar até a borda "trava" claramente.
 - **Bloqueio da régua** (proteção contra alterações acidentais): o menu
   **Exibir → Bloquear réguas** (ou o **cadeado** na barra de ferramentas
   principal) bloqueia/desbloqueia a régua. Bloqueada, a régua **continua

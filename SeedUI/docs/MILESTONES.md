@@ -295,6 +295,11 @@ Primeira leva da especificação "interface CorelDRAW" (commit 72b9701 antes):
   DESFAZIA o snap da moldura foi corrigido (App.cpp: eixo com moldura
   engatada pula a quantização `roundf(.../8)*8` — um objeto em x não
   múltiplo de 8 pousava em 1284 em vez de 1280). 1 teste novo (90 PASS).
+- **Moldura magnetiza arestas no RESIZE** (`SnapResizeToFrame`,
+  SmartGuides.h, testável): a aresta arrastada do resize encaixa nas
+  bordas/centro da tela-base com força 8x (mesma do mover), vencendo as
+  guias fixas em empate; vale para espelhado (Shift) e caixa conjunta de
+  grupos, com linha magenta de feedback. 5 testes novos (95 PASS).
 - Abas de documentos NÃO implementadas: o projeto usa telas/modos com
   seletores próprios (regra "não recriar o que existe"); telas sem UI de
   criação ficam para M10.

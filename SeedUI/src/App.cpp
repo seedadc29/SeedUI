@@ -2326,10 +2326,16 @@ namespace seedui
                 // redimensionar, não só ao mover): a aresta arrastada
                 // encaixa na guia mais próxima e a guia engatada acende em
                 // laranja (feedback igual ao do mover).
+                // Depois, a MOLDURA da tela-base (delimitador principal)
+                // magnetiza com força 8x e VENCE as guias em empate — é o
+                // que faz a aresta "travar" claramente nas laterais do
+                // canvas ao redimensionar.
                 if (mSnapEnabled)
                 {
                     mGuideFixedSnapX = -1.0f;
                     mGuideFixedSnapY = -1.0f;
+                    mGuideSnapX = -1.0f;
+                    mGuideSnapY = -1.0f;
                     SmartGuides::SnapResizeToGuides(
                         left, right, top, bottom,
                         resizeLeft, resizeRight, resizeTop, resizeBottom,
@@ -2337,6 +2343,16 @@ namespace seedui
                         12.0f / std::max(0.5f, mCanvasZoom), mirrored,
                         mCanvasDragPivotX, mCanvasDragPivotY,
                         mGuideFixedSnapX, mGuideFixedSnapY);
+                    // Moldura primeiro de tudo no ajuste (roda por último
+                    // aqui para ter a palavra final no eixo).
+                    SmartGuides::SnapResizeToFrame(
+                        left, right, top, bottom,
+                        resizeLeft, resizeRight, resizeTop, resizeBottom,
+                        (float)mProject.telaBaseLargura,
+                        (float)mProject.telaBaseAltura,
+                        8.0f * 12.0f / std::max(0.5f, mCanvasZoom), mirrored,
+                        mCanvasDragPivotX, mCanvasDragPivotY,
+                        mGuideSnapX, mGuideSnapY);
                 }
 
                 if (mCanvasGroupStarts.size() > 1)
@@ -2447,11 +2463,14 @@ namespace seedui
                         scaleX = (newRight - newLeft) / groupW;
                         scaleY = (newBottom - newTop) / groupH;
                     }
-                    // Snap das arestas da caixa CONJUNTA às guias fixas.
+                    // Snap das arestas da caixa CONJUNTA às guias fixas e à
+                    // MOLDURA (delimitador principal, força 8x — vence).
                     if (mSnapEnabled)
                     {
                         mGuideFixedSnapX = -1.0f;
                         mGuideFixedSnapY = -1.0f;
+                        mGuideSnapX = -1.0f;
+                        mGuideSnapY = -1.0f;
                         SmartGuides::SnapResizeToGuides(
                             newLeft, newRight, newTop, newBottom,
                             resizeLeft, resizeRight, resizeTop, resizeBottom,
@@ -2460,6 +2479,16 @@ namespace seedui
                             groupLeft + groupW * 0.5f,
                             groupTop + groupH * 0.5f,
                             mGuideFixedSnapX, mGuideFixedSnapY);
+                        SmartGuides::SnapResizeToFrame(
+                            newLeft, newRight, newTop, newBottom,
+                            resizeLeft, resizeRight, resizeTop, resizeBottom,
+                            (float)mProject.telaBaseLargura,
+                            (float)mProject.telaBaseAltura,
+                            8.0f * 12.0f / std::max(0.5f, mCanvasZoom),
+                            mirrored,
+                            groupLeft + groupW * 0.5f,
+                            groupTop + groupH * 0.5f,
+                            mGuideSnapX, mGuideSnapY);
                         scaleX = (newRight - newLeft) / groupW;
                         scaleY = (newBottom - newTop) / groupH;
                     }

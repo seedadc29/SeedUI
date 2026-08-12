@@ -409,6 +409,55 @@ namespace
                   "resize espelhado: oposta reflete a partir do pivô");
         }
 
+        // Snap de ARESTA no resize à MOLDURA da tela-base (M05): o
+        // delimitador principal magnetiza as arestas também ao
+        // redimensionar — tolerância forte (8x), igual ao mover.
+        {
+            float gx = -1.0f, gy = -1.0f;
+            // Aresta direita a 7px da borda direita (1280): encaixa.
+            float left = 100.0f, right = 1273.0f, top = 50.0f, bottom = 90.0f;
+            SmartGuides::SnapResizeToFrame(
+                left, right, top, bottom,
+                false, true, false, false, // só resizeRight
+                1280.0f, 720.0f, 12.0f, false, 0.0f, 0.0f, gx, gy);
+            check(right == 1280.0f && gx == 1280.0f && left == 100.0f,
+                  "resize: aresta direita trava na borda 1280 da moldura");
+            check(gy == -1.0f && top == 50.0f && bottom == 90.0f,
+                  "resize: moldura nao mexe no eixo sem alça");
+
+            // Aresta inferior a 9px do CENTRO vertical (360): encaixa no
+            // centro (candidato da moldura).
+            left = 100.0f; right = 200.0f; top = 50.0f; bottom = 351.0f;
+            gx = gy = -1.0f;
+            SmartGuides::SnapResizeToFrame(
+                left, right, top, bottom,
+                false, false, false, true, // só resizeBottom
+                1280.0f, 720.0f, 12.0f, false, 0.0f, 0.0f, gx, gy);
+            check(bottom == 360.0f && gy == 360.0f,
+                  "resize: aresta inferior trava no centro da moldura");
+
+            // Fora da tolerância forte: nenhum encaixe.
+            left = 100.0f; right = 1250.0f; top = 50.0f; bottom = 90.0f;
+            gx = gy = -1.0f;
+            SmartGuides::SnapResizeToFrame(
+                left, right, top, bottom,
+                false, true, false, false,
+                1280.0f, 720.0f, 12.0f, false, 0.0f, 0.0f, gx, gy);
+            check(right == 1250.0f && gx == -1.0f,
+                  "resize: aresta longe da moldura nao se move");
+
+            // ESPELHADO (Shift): aresta direita trava em 1280 e a esquerda
+            // reflete a partir do pivô (px=640 -> left = 2*640-1280 = 0).
+            left = 100.0f; right = 1273.0f; top = 50.0f; bottom = 90.0f;
+            gx = gy = -1.0f;
+            SmartGuides::SnapResizeToFrame(
+                left, right, top, bottom,
+                false, true, false, false,
+                1280.0f, 720.0f, 12.0f, true, 640.0f, 0.0f, gx, gy);
+            check(right == 1280.0f && left == 0.0f && gx == 1280.0f,
+                  "resize espelhado: moldura trava e oposta reflete pelo pivô");
+        }
+
         // Guias de espaçamento (M04): replicam espaços repetidos.
         {
             Modo spacingMode;

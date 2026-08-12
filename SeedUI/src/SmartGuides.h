@@ -182,6 +182,79 @@ namespace seedui
             }
         }
 
+        // Snap de aresta no RESIZE à MOLDURA da tela-base (delimitador
+        // principal): a aresta arrastada encaixa nas bordas (0/fim) e no
+        // centro da tela-base com tolerância FORTE (8x, igual ao mover) — o
+        // usuário SENTE que ali é o ponto delimitador, mesmo redimensionando.
+        // A moldura vence as guias fixas em empate (é o delimitador
+        // principal). Devolve as posições engatadas (-1 = nenhuma).
+        inline void SnapResizeToFrame(float& left, float& right,
+                                      float& top, float& bottom,
+                                      bool resizeLeft, bool resizeRight,
+                                      bool resizeTop, bool resizeBottom,
+                                      float frameW, float frameH,
+                                      float tolerance, bool mirrored,
+                                      float pivotX, float pivotY,
+                                      float& outGuideX, float& outGuideY)
+        {
+            outGuideX = -1.0f;
+            outGuideY = -1.0f;
+            const float frameX[3] = { 0.0f, frameW * 0.5f, frameW };
+            if (resizeRight)
+            {
+                for (float cand : frameX)
+                {
+                    if (fabsf(cand - right) < tolerance)
+                    {
+                        right = cand;
+                        if (mirrored) left = 2.0f * pivotX - right;
+                        outGuideX = cand;
+                        break;
+                    }
+                }
+            }
+            else if (resizeLeft)
+            {
+                for (float cand : frameX)
+                {
+                    if (fabsf(cand - left) < tolerance)
+                    {
+                        left = cand;
+                        if (mirrored) right = 2.0f * pivotX - left;
+                        outGuideX = cand;
+                        break;
+                    }
+                }
+            }
+            const float frameY[3] = { 0.0f, frameH * 0.5f, frameH };
+            if (resizeBottom)
+            {
+                for (float cand : frameY)
+                {
+                    if (fabsf(cand - bottom) < tolerance)
+                    {
+                        bottom = cand;
+                        if (mirrored) top = 2.0f * pivotY - bottom;
+                        outGuideY = cand;
+                        break;
+                    }
+                }
+            }
+            else if (resizeTop)
+            {
+                for (float cand : frameY)
+                {
+                    if (fabsf(cand - top) < tolerance)
+                    {
+                        top = cand;
+                        if (mirrored) bottom = 2.0f * pivotY - top;
+                        outGuideY = cand;
+                        break;
+                    }
+                }
+            }
+        }
+
         // Ajusta dx/dy para encaixar na candidata mais próxima (dentro da
         // tolerância, em unidades do projeto) e devolve a posição da guia.
         // A moldura da tela-base tem PRIORIDADE: tolerância ampliada (snap
