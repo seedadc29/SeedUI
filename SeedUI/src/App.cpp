@@ -2218,6 +2218,30 @@ namespace seedui
         ToolButton(IconId::Polygon, "Criar polígono · arraste no canvas");
         ToolButton(IconId::Color, "Aparência · Conta-gotas (I)");
         ImGui::SetCursorPosX((kToolbarWidth - kToolButtonSize) * 0.5f);
+        if (IconButton(IconId::Contour, "Espessura do contorno selecionado",
+                       kToolButtonSize))
+            ImGui::OpenPopup("##contour_tool");
+        if (ImGui::BeginPopup("##contour_tool"))
+        {
+            Element* selected = nullptr;
+            if (PossuiModoAtivo() && !mSelectedElementId.empty())
+                selected = Project::ResolverId(
+                    mProject.telas[mTelaAtiva].modos[mModoAtivo], mSelectedElementId);
+            if (!selected)
+                ImGui::TextDisabled("Selecione um elemento");
+            else
+            {
+                float width = selected->estilos.value("espessura_borda", 1.0f);
+                ImGui::SetNextItemWidth(180.0f);
+                if (ImGui::SliderFloat("Contorno", &width, 0.0f, 16.0f, "%.1f px"))
+                {
+                    selected->estilos["espessura_borda"] = width;
+                    mProjectDirty = true;
+                }
+            }
+            ImGui::EndPopup();
+        }
+        ImGui::SetCursorPosX((kToolbarWidth - kToolButtonSize) * 0.5f);
         if (IconButton(IconId::Transparency, "Transparência do elemento selecionado",
                        kToolButtonSize))
             ImGui::OpenPopup("##transparency_tool");
@@ -2527,6 +2551,13 @@ namespace seedui
                     mProjectDirty = true;
                 float transparency = 100.0f * (1.0f -
                     selected->estilos.value("opacidade", 1.0f));
+                float outlineWidth = selected->estilos.value("espessura_borda", 1.0f);
+                if (ImGui::SliderFloat("Contorno", &outlineWidth,
+                                       0.0f, 16.0f, "%.1f px"))
+                {
+                    selected->estilos["espessura_borda"] = outlineWidth;
+                    mProjectDirty = true;
+                }
                 if (ImGui::SliderFloat("Transparencia", &transparency,
                                        0.0f, 100.0f, "%.0f%%"))
                 {

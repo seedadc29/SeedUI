@@ -72,6 +72,7 @@ namespace seedui
             { IconId::Rectangle, "rectangle" },
             { IconId::Ellipse,   "ellipse" },
             { IconId::Polygon,   "polygon" },
+            { IconId::Contour,   "contour" },
             { IconId::Transparency, "transparency" },
         };
 

@@ -50,6 +50,7 @@ namespace seedui
         Rectangle,
         Ellipse,
         Polygon,
+        Contour,
         Transparency,
         Count,
     };

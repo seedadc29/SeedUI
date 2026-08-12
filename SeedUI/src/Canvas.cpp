@@ -82,12 +82,14 @@ namespace seedui
         }
 
         void DrawRoundedRect(ImDrawList* dl, const ImVec2& a, const ImVec2& b,
-                             const CornerRadii& radii, ImU32 fill, ImU32 outline)
+                             const CornerRadii& radii, ImU32 fill, ImU32 outline,
+                             float outlineWidth = 1.0f)
         {
             RoundedRectPath(dl, a, b, radii);
             dl->PathFillConvex(fill);
             RoundedRectPath(dl, a, b, radii);
-            dl->PathStroke(outline, ImDrawFlags_Closed, 1.0f);
+            if (outlineWidth > 0.0f)
+                dl->PathStroke(outline, ImDrawFlags_Closed, outlineWidth);
         }
 
         // Desenha um elemento e seus filhos recursivamente (versão simples do M03).
@@ -113,6 +115,8 @@ namespace seedui
             // Elementos não selecionados usam uma borda neutra e discreta.
             // Azul/laranja ficam reservados exclusivamente para a seleção.
             const ImU32 outline = ImGui::ColorConvertFloat4ToU32(Theme::Hex(0x5a5a5a, 0.82f));
+            const float outlineWidth = std::max(0.0f,
+                e.estilos.value("espessura_borda", 1.0f)) * scale;
             const ImU32 label = ImGui::ColorConvertFloat4ToU32(Theme::TextPrimary);
 
             if (e.tipo != "grupo")
@@ -122,14 +126,16 @@ namespace seedui
                     const ImVec2 center((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
                     const ImVec2 radius((b.x - a.x) * 0.5f, (b.y - a.y) * 0.5f);
                     dl->AddEllipseFilled(center, radius, fill, 0.0f, 48);
-                    dl->AddEllipse(center, radius, outline, 0.0f, 48, 1.0f);
+                    if (outlineWidth > 0.0f)
+                        dl->AddEllipse(center, radius, outline, 0.0f, 48, outlineWidth);
                 }
                 else if (e.tipo == "poligono")
                 {
                     const ImVec2 center((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
                     const float radius = std::min(b.x - a.x, b.y - a.y) * 0.5f;
                     dl->AddNgonFilled(center, radius, fill, 6);
-                    dl->AddNgon(center, radius, outline, 6, 1.0f);
+                    if (outlineWidth > 0.0f)
+                        dl->AddNgon(center, radius, outline, 6, outlineWidth);
                 }
                 else
                 {
@@ -138,7 +144,7 @@ namespace seedui
                     radii.topRight *= scale;
                     radii.bottomRight *= scale;
                     radii.bottomLeft *= scale;
-                    DrawRoundedRect(dl, a, b, radii, fill, outline);
+                    DrawRoundedRect(dl, a, b, radii, fill, outline, outlineWidth);
                 }
 
                 if (e.tipo != "retangulo" && e.tipo != "elipse" && e.tipo != "poligono")
