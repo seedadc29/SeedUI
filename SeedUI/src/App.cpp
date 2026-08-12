@@ -108,6 +108,63 @@ namespace seedui
             ImGui::Spacing();
         }
 
+        bool AlignmentIconButton(int operation, const char* tooltip)
+        {
+            ImGui::PushID(operation);
+            const ImVec2 size(30.0f, 28.0f);
+            const bool clicked = ImGui::InvisibleButton("##align", size);
+            const bool hovered = ImGui::IsItemHovered();
+            const ImVec2 a = ImGui::GetItemRectMin();
+            const ImVec2 b = ImGui::GetItemRectMax();
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            const ImU32 bg = ImGui::ColorConvertFloat4ToU32(
+                hovered ? Theme::BorderLight : Theme::BackgroundChild);
+            const ImU32 border = ImGui::ColorConvertFloat4ToU32(Theme::Border);
+            const ImU32 guide = ImGui::ColorConvertFloat4ToU32(Theme::AccentBlue);
+            const ImU32 shape = ImGui::ColorConvertFloat4ToU32(Theme::TextSecondary);
+            dl->AddRectFilled(a, b, bg, 3.0f);
+            dl->AddRect(a, b, border, 3.0f);
+
+            const float cx = (a.x + b.x) * 0.5f;
+            const float cy = (a.y + b.y) * 0.5f;
+            if (operation <= 2)
+            {
+                const float gx = operation == 0 ? a.x + 7.0f
+                               : operation == 1 ? cx : b.x - 7.0f;
+                dl->AddLine(ImVec2(gx, a.y + 5.0f), ImVec2(gx, b.y - 5.0f), guide, 1.5f);
+                const float x1 = operation == 0 ? gx + 2.0f
+                               : operation == 1 ? gx - 8.0f : gx - 10.0f;
+                const float x2 = operation == 0 ? gx + 10.0f
+                               : operation == 1 ? gx + 8.0f : gx - 2.0f;
+                dl->AddRect(ImVec2(x1, cy - 8.0f), ImVec2(x2, cy - 2.0f), shape);
+                const float sx1 = operation == 0 ? gx + 2.0f
+                                : operation == 1 ? gx - 5.0f : gx - 7.0f;
+                const float sx2 = operation == 0 ? gx + 7.0f
+                                : operation == 1 ? gx + 5.0f : gx - 2.0f;
+                dl->AddRect(ImVec2(sx1, cy + 2.0f), ImVec2(sx2, cy + 8.0f), shape);
+            }
+            else
+            {
+                const int vertical = operation - 3;
+                const float gy = vertical == 0 ? a.y + 6.0f
+                               : vertical == 1 ? cy : b.y - 6.0f;
+                dl->AddLine(ImVec2(a.x + 6.0f, gy), ImVec2(b.x - 6.0f, gy), guide, 1.5f);
+                const float y1 = vertical == 0 ? gy + 2.0f
+                               : vertical == 1 ? gy - 8.0f : gy - 10.0f;
+                const float y2 = vertical == 0 ? gy + 10.0f
+                               : vertical == 1 ? gy + 8.0f : gy - 2.0f;
+                dl->AddRect(ImVec2(cx - 8.0f, y1), ImVec2(cx - 2.0f, y2), shape);
+                const float sy1 = vertical == 0 ? gy + 2.0f
+                                : vertical == 1 ? gy - 5.0f : gy - 7.0f;
+                const float sy2 = vertical == 0 ? gy + 7.0f
+                                : vertical == 1 ? gy + 5.0f : gy - 2.0f;
+                dl->AddRect(ImVec2(cx + 2.0f, sy1), ImVec2(cx + 8.0f, sy2), shape);
+            }
+            if (hovered) ImGui::SetTooltip("%s", tooltip);
+            ImGui::PopID();
+            return clicked;
+        }
+
         Tool ToolFromIcon(IconId id)
         {
             switch (id)
@@ -674,6 +731,123 @@ namespace seedui
         mProjectDirty = true;
         mStatusMsg = std::to_string(pastedRootIds.size()) +
                      " elemento(s) colado(s)";
+        mStatusMsgUntil = GetTime() + 4.0;
+    }
+
+    void App::AlinharElementosSelecionados(int operation)
+    {
+        if (!PossuiModoAtivo() || operation < 0 || operation > 5) return;
+        Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+        std::vector<Element*> selected;
+        for (const std::string& id : mSelectedElementIds)
+            if (Element* element = Project::ResolverId(mode, id))
+                if (element->visivel) selected.push_back(element);
+        if (selected.empty() && !mSelectedElementId.empty())
+            if (Element* element = Project::ResolverId(mode, mSelectedElementId))
+                if (element->visivel) selected.push_back(element);
+
+        if (selected.empty() || (mAlignTarget != 2 && selected.size() < 2))
+        {
+            mStatusMsg = mAlignTarget == 2
+                ? "Selecione um elemento para alinhar a tela"
+                : "Selecione pelo menos dois elementos para alinhar";
+            mStatusMsgUntil = GetTime() + 4.0;
+            return;
+        }
+
+        float left = FLT_MAX, top = FLT_MAX, right = -FLT_MAX, bottom = -FLT_MAX;
+        for (const Element* element : selected)
+        {
+            const float x = element->transformacao.value("x", 0.0f);
+            const float y = element->transformacao.value("y", 0.0f);
+            const float w = element->transformacao.value("largura", 160.0f);
+            const float h = element->transformacao.value("altura", 32.0f);
+            left = std::min(left, x);
+            top = std::min(top, y);
+            right = std::max(right, x + w);
+            bottom = std::max(bottom, y + h);
+        }
+
+        Element* primary = Project::ResolverId(mode, mSelectedElementId);
+        if (mAlignTarget == 1 && (!primary || !primary->visivel))
+        {
+            mStatusMsg = "O elemento principal da selecao nao esta disponivel";
+            mStatusMsgUntil = GetTime() + 4.0;
+            return;
+        }
+
+        float target = 0.0f;
+        if (mAlignTarget == 2)
+        {
+            if (operation == 0 || operation == 3) target = 0.0f;
+            else if (operation == 1) target = mProject.telaBaseLargura * 0.5f;
+            else if (operation == 2) target = (float)mProject.telaBaseLargura;
+            else if (operation == 4) target = mProject.telaBaseAltura * 0.5f;
+            else target = (float)mProject.telaBaseAltura;
+        }
+        else if (mAlignTarget == 1)
+        {
+            const float x = primary->transformacao.value("x", 0.0f);
+            const float y = primary->transformacao.value("y", 0.0f);
+            const float w = primary->transformacao.value("largura", 160.0f);
+            const float h = primary->transformacao.value("altura", 32.0f);
+            if (operation == 0) target = x;
+            else if (operation == 1) target = x + w * 0.5f;
+            else if (operation == 2) target = x + w;
+            else if (operation == 3) target = y;
+            else if (operation == 4) target = y + h * 0.5f;
+            else target = y + h;
+        }
+        else
+        {
+            if (operation == 0) target = left;
+            else if (operation == 1) target = (left + right) * 0.5f;
+            else if (operation == 2) target = right;
+            else if (operation == 3) target = top;
+            else if (operation == 4) target = (top + bottom) * 0.5f;
+            else target = bottom;
+        }
+
+        bool changed = false;
+        for (Element* element : selected)
+        {
+            if (element->bloqueado || (mAlignTarget == 1 && element == primary)) continue;
+            const float w = element->transformacao.value("largura", 160.0f);
+            const float h = element->transformacao.value("altura", 32.0f);
+            if (operation <= 2)
+            {
+                float x = operation == 0 ? target
+                        : operation == 1 ? target - w * 0.5f : target - w;
+                x = std::max(0.0f, std::min((float)mProject.telaBaseLargura - w, x));
+                if (element->transformacao.value("x", 0.0f) != x)
+                {
+                    element->transformacao["x"] = x;
+                    changed = true;
+                }
+            }
+            else
+            {
+                float y = operation == 3 ? target
+                        : operation == 4 ? target - h * 0.5f : target - h;
+                y = std::max(0.0f, std::min((float)mProject.telaBaseAltura - h, y));
+                if (element->transformacao.value("y", 0.0f) != y)
+                {
+                    element->transformacao["y"] = y;
+                    changed = true;
+                }
+            }
+        }
+
+        if (changed)
+        {
+            mProjectDirty = true;
+            mStatusMsg = "Alinhamento aplicado a " + std::to_string(selected.size()) +
+                         " elemento(s)";
+        }
+        else
+        {
+            mStatusMsg = "Os elementos ja estao alinhados";
+        }
         mStatusMsgUntil = GetTime() + 4.0;
     }
 
@@ -1523,7 +1697,17 @@ namespace seedui
 
         if (ImGui::BeginMenu("Objeto"))
         {
-            MenuItemSoon("Alinhar", "M05");
+            if (ImGui::BeginMenu("Alinhar"))
+            {
+                if (ImGui::MenuItem("Esquerda")) AlinharElementosSelecionados(0);
+                if (ImGui::MenuItem("Centro horizontal")) AlinharElementosSelecionados(1);
+                if (ImGui::MenuItem("Direita")) AlinharElementosSelecionados(2);
+                ImGui::Separator();
+                if (ImGui::MenuItem("Topo")) AlinharElementosSelecionados(3);
+                if (ImGui::MenuItem("Centro vertical")) AlinharElementosSelecionados(4);
+                if (ImGui::MenuItem("Base")) AlinharElementosSelecionados(5);
+                ImGui::EndMenu();
+            }
             MenuItemSoon("Distribuir", "M05");
             MenuItemSoon("Agrupar", "M04");
             MenuItemSoon("Bloquear", "M04");
@@ -1953,9 +2137,41 @@ namespace seedui
                 if (beforeVisible != selected->visivel || beforeLocked != selected->bloqueado)
                     mProjectDirty = true;
                 ImGui::Separator();
+
+                ImGui::TextUnformatted("Alinhar");
+                const char* alignTips[] = {
+                    "Alinhar bordas esquerdas", "Alinhar centros horizontais",
+                    "Alinhar bordas direitas", "Alinhar bordas superiores",
+                    "Alinhar centros verticais", "Alinhar bordas inferiores"
+                };
+                const bool alignEnabled = mAlignTarget == 2
+                    ? !mSelectedElementId.empty()
+                    : mSelectedElementIds.size() >= 2;
+                if (!alignEnabled) ImGui::BeginDisabled();
+                for (int operation = 0; operation < 6; ++operation)
+                {
+                    if (operation > 0) ImGui::SameLine(0.0f, 5.0f);
+                    if (AlignmentIconButton(operation, alignTips[operation]))
+                        AlinharElementosSelecionados(operation);
+                }
+                if (!alignEnabled) ImGui::EndDisabled();
+
+                ImGui::Spacing();
+                ImGui::TextColored(Theme::TextSecondary, "Alinhar a:");
+                if (ImGui::RadioButton("Selecao", mAlignTarget == 0)) mAlignTarget = 0;
+                ImGui::SameLine();
+                if (ImGui::RadioButton("Principal", mAlignTarget == 1)) mAlignTarget = 1;
+                ImGui::SameLine();
+                if (ImGui::RadioButton("Tela", mAlignTarget == 2)) mAlignTarget = 2;
+                ImGui::TextColored(Theme::TextDisabled,
+                    mAlignTarget == 0 ? "Usa os limites da selecao"
+                  : mAlignTarget == 1 ? "Mantem o elemento principal parado"
+                                      : "Usa os limites da tela base");
+                ImGui::Separator();
             }
 
-            PanelHint("Selecione um elemento na Hierarquia. Edição visual de posição, tamanho, cores e estados chega no M06.");
+            if (!selected)
+                PanelHint("Selecione um elemento na Hierarquia ou no canvas.");
         }
 
         if (PanelBegin(IconId::Plus, "BIBLIOTECA"))
