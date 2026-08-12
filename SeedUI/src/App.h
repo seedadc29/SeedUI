@@ -58,6 +58,7 @@ namespace seedui
                                  float projectX = -1.0f, float projectY = -1.0f);
         void CopiarElementosSelecionados();
         void ColarElementosCopiados();
+        void ApagarElementosSelecionados();
         void AlternarModoAnotacao();
         void AlinharElementosSelecionados(int operacao);
         void DistribuirElementosSelecionados(bool horizontal);

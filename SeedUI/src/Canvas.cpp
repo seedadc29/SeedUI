@@ -85,6 +85,20 @@ namespace seedui
                              const CornerRadii& radii, ImU32 fill, ImU32 outline,
                              float outlineWidth = 1.0f)
         {
+            const bool square = radii.topLeft <= 0.01f && radii.topRight <= 0.01f &&
+                                radii.bottomRight <= 0.01f && radii.bottomLeft <= 0.01f;
+            if (square)
+            {
+                if (outlineWidth > 0.0f) dl->AddRectFilled(a, b, outline);
+                const float inset = std::min(std::max(0.0f, outlineWidth),
+                    std::max(0.0f, std::min(b.x - a.x, b.y - a.y) * 0.5f));
+                const ImVec2 innerA(a.x + inset, a.y + inset);
+                const ImVec2 innerB(b.x - inset, b.y - inset);
+                if (innerB.x > innerA.x && innerB.y > innerA.y)
+                    dl->AddRectFilled(innerA, innerB, fill);
+                return;
+            }
+
             // Um PathStroke grosso produz juncoes em mitra (os "bicos" vistos
             // nas quinas). Como num editor vetorial, construimos o contorno
             // como duas formas preenchidas: silhueta externa e miolo interno.

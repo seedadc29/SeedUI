@@ -763,6 +763,25 @@ namespace seedui
         mStatusMsgUntil = GetTime() + 4.0;
     }
 
+    void App::ApagarElementosSelecionados()
+    {
+        if (!PossuiModoAtivo()) return;
+        Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+        std::vector<std::string> ids = mSelectedElementIds;
+        if (ids.empty() && !mSelectedElementId.empty()) ids.push_back(mSelectedElementId);
+        int removed = 0;
+        for (const std::string& id : ids)
+            if (Project::ExcluirElemento(mode, id)) ++removed;
+        if (removed == 0) return;
+        mSelectedElementId.clear();
+        mSelectedElementIds.clear();
+        mSelectedCornerMask = 0;
+        mProjectDirty = true;
+        CapturarHistorico();
+        mStatusMsg = std::to_string(removed) + " elemento(s) apagado(s)";
+        mStatusMsgUntil = GetTime() + 4.0;
+    }
+
     void App::AlinharElementosSelecionados(int operation)
     {
         if (!PossuiModoAtivo() || operation < 0 || operation > 5) return;
@@ -1645,6 +1664,7 @@ namespace seedui
             if (ImGui::IsKeyPressed(ImGuiKey_D, false)) AlinharElementosSelecionados(4);
             if (ImGui::IsKeyPressed(ImGuiKey_S, false)) AlinharElementosSelecionados(5);
             if (ImGui::IsKeyPressed(ImGuiKey_Z, false)) mCurrentTool = Tool::Zoom;
+            if (ImGui::IsKeyPressed(ImGuiKey_X, false)) ApagarElementosSelecionados();
         }
         if (!ImGui::GetIO().WantTextInput && !ImGui::GetIO().KeyCtrl &&
             !ImGui::GetIO().KeyAlt && ImGui::IsKeyPressed(ImGuiKey_A, false))
@@ -1727,7 +1747,8 @@ namespace seedui
                 const ImVec2 canvasDropMax = ImGui::GetItemRectMax();
                 const bool canvasHovered = ImGui::IsItemHovered(
                     ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
-                if (canvasHovered && mCurrentTool == Tool::Zoom)
+                if (canvasHovered &&
+                    (mCurrentTool == Tool::Zoom || ImGui::GetIO().KeyCtrl))
                 {
                     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
                         mCanvasZoom = std::min(4.0f, mCanvasZoom * 1.25f);
@@ -2127,7 +2148,11 @@ namespace seedui
             ColarElementosCopiados();
         if (!canPaste) ImGui::EndDisabled();
         ImGui::SameLine();
-        IconButton(IconId::Trash, "Edição · Apagar (M05)", button);
+        const bool canDelete = !mSelectedElementId.empty() || !mSelectedElementIds.empty();
+        if (!canDelete) ImGui::BeginDisabled();
+        if (IconButton(IconId::Trash, "Edição · Apagar (X)", button))
+            ApagarElementosSelecionados();
+        if (!canDelete) ImGui::EndDisabled();
 
         separator();
         bool isolatedGroup = false;
