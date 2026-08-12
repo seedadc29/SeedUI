@@ -212,6 +212,7 @@ namespace seedui
         bool mRulersVisible = true;
         bool mRulersLocked = false; // bloqueio da régua (proteção contra edição)
         bool mGridVisible = true;   // ocultar a grade NÃO desliga o snap
+        bool mWireframeMode = false; // modo wireframe (só contornos)
         bool mZoomToMouse = true; // zoom encaminha para o cursor (qualquer controle)
         bool mMarqueeContainOnly = true; // seleção exige cobertura TOTAL do elemento
         bool mColorPickerOpen = false; // janela do seletor de cor (3 modelos)

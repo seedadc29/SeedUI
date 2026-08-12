@@ -14,6 +14,7 @@ namespace seedui
                     bool exibirReguas = true,
                     bool reguasBloqueadas = false,
                     bool exibirGrade = true,
+                    bool wireframe = false,
                     float zoom = 1.0f,
                     float panX = 0.0f, float panY = 0.0f,
                     float unidadeEmPixels = 1.0f);

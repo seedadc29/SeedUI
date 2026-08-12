@@ -43,6 +43,7 @@ namespace seedui
         Warning,
         CaretDown,
         CaretRight,
+        Frame,
         Download,
         Hierarchy,
         Inspector,

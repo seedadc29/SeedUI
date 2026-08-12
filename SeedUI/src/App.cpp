@@ -3448,7 +3448,7 @@ namespace seedui
                 CanvasDraw(mHasProject ? &mProject : nullptr, mTelaAtiva, mModoAtivo,
                            &mSelectedElementIds, mSelectedElementId.c_str(),
                            mSelectedCornerMask, mRulersVisible, mRulersLocked,
-                           mGridVisible,
+                           mGridVisible, mWireframeMode,
                            mCanvasZoom, mCanvasPanX, mCanvasPanY, UnitToPixels());
                 DesenharGuias();
                 DesenharMedicao();
@@ -3780,6 +3780,8 @@ namespace seedui
                 mRulersLocked = !mRulersLocked;
             if (ImGui::MenuItem("Grade", nullptr, mGridVisible))
                 mGridVisible = !mGridVisible;
+            if (ImGui::MenuItem("Wireframe (só contornos)", nullptr, mWireframeMode))
+                mWireframeMode = !mWireframeMode;
             if (ImGui::MenuItem("Snap de 8 unidades", nullptr, mSnapEnabled))
                 mSnapEnabled = !mSnapEnabled;
             if (ImGui::BeginMenu("Força do snap"))
@@ -4200,6 +4202,16 @@ namespace seedui
                        button))
             mGridVisible = !mGridVisible;
         if (gridWasOn) ImGui::PopStyleColor();
+        ImGui::SameLine();
+        // Modo wireframe: só contornos (sem preenchimento e sem sombra).
+        const bool wireWasOn = mWireframeMode;
+        if (wireWasOn) ImGui::PushStyleColor(ImGuiCol_Button, Theme::Hex(0x4f8cff, 0.30f));
+        if (IconButton(IconId::Frame, mWireframeMode
+                                          ? "Wireframe ativo · só contornos · clique para sair"
+                                          : "Wireframe · mostrar só contornos",
+                       button))
+            mWireframeMode = !mWireframeMode;
+        if (wireWasOn) ImGui::PopStyleColor();
 
         separator();
         IconButton(IconId::Model, "Projeto · Galeria de modelos (M09)", button);

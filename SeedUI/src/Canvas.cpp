@@ -210,7 +210,8 @@ namespace seedui
         }
 
         // Desenha um elemento e seus filhos recursivamente (versão simples do M03).
-        void DrawElement(const Element& e, const ImVec2& origin, float scale, ImDrawList* dl)
+        void DrawElement(const Element& e, const ImVec2& origin, float scale,
+                         bool wireframe, ImDrawList* dl)
         {
             if (!e.visivel) return;
 
@@ -236,8 +237,11 @@ namespace seedui
                 ColorUtils::ParseHex(e.estilos["cor_fundo"].get<std::string>(), fillRgb);
             if (e.estilos.is_object() && e.estilos.contains("cor_borda"))
                 ColorUtils::ParseHex(e.estilos["cor_borda"].get<std::string>(), borderRgb);
-            const ImU32 fill = ImGui::ColorConvertFloat4ToU32(
-                ImVec4(fillRgb[0], fillRgb[1], fillRgb[2], opacity));
+            // Wireframe: só o contorno (sem preenchimento e sem sombra).
+            const ImU32 fill = wireframe
+                ? IM_COL32(0, 0, 0, 0)
+                : ImGui::ColorConvertFloat4ToU32(
+                    ImVec4(fillRgb[0], fillRgb[1], fillRgb[2], opacity));
             // Elementos não selecionados usam uma borda neutra e discreta.
             // Azul/laranja ficam reservados exclusivamente para a seleção.
             const ImU32 outline = ImGui::ColorConvertFloat4ToU32(
@@ -278,7 +282,7 @@ namespace seedui
                 }
                 else
                 {
-                DrawShadow(e, origin, scale, opacity, dl);
+                if (!wireframe) DrawShadow(e, origin, scale, opacity, dl);
                 if (dashed)
                 {
                     // Contorno tracejado: usa o mesmo contorno tessellado
@@ -356,7 +360,7 @@ namespace seedui
             }
 
             for (const Element& f : e.filhos)
-                DrawElement(f, origin, scale, dl);
+                DrawElement(f, origin, scale, wireframe, dl);
         }
 
         // Estilo de traço do contorno: estilos.tracejado {largura_traco,
@@ -517,7 +521,7 @@ namespace seedui
                     const char* elementoPrincipalId,
                     unsigned int quinasSelecionadas,
                     bool exibirReguas, bool reguasBloqueadas,
-                    bool exibirGrade,
+                    bool exibirGrade, bool wireframe,
                     float zoom, float panX, float panY,
                     float unidadeEmPixels)
     {
@@ -726,7 +730,7 @@ namespace seedui
         if (modoAtivo < 0 || modoAtivo >= (int)tela.modos.size()) return;
         const Modo& modo = tela.modos[modoAtivo];
         for (const Element& e : modo.raiz)
-            DrawElement(e, origin, viewScale, dl);
+            DrawElement(e, origin, viewScale, wireframe, dl);
 
         // Área de segurança: se algum elemento selecionado estiver FORA da
         // tela base, um contorno vermelho fino (como linha-guia) contorna a

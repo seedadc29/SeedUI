@@ -60,6 +60,7 @@ namespace seedui
             { IconId::Warning,   "warning" },
             { IconId::CaretDown, "caret-down" },
             { IconId::CaretRight,"caret-right" },
+            { IconId::Frame,     "frame" },
             { IconId::Download,  "download-simple" },
             { IconId::Hierarchy, "squares-four" },
             { IconId::Inspector, "sliders" },
