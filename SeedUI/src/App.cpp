@@ -4873,6 +4873,46 @@ namespace seedui
                     selected->estilos["opacidade"] = 1.0f - transparency / 100.0f;
                     mProjectDirty = true;
                 }
+
+                // Sombra (estilo CorelDRAW): cor, deslocamento e desfoque.
+                ImGui::Spacing();
+                ImGui::TextColored(Theme::TextSecondary, "Sombra");
+                bool shadowOn = selected->estilos.contains("sombra");
+                if (ImGui::Checkbox("Ativar sombra", &shadowOn))
+                {
+                    if (shadowOn)
+                        selected->estilos["sombra"] = nlohmann::json{
+                            { "cor", "#000000" },
+                            { "deslocamento_x", 4.0 },
+                            { "deslocamento_y", 4.0 },
+                            { "desfoque", 6.0 }
+                        };
+                    else
+                        selected->estilos.erase("sombra");
+                    mProjectDirty = true;
+                }
+                if (shadowOn)
+                {
+                    auto& sombra = selected->estilos["sombra"];
+                    float sx = sombra.value("deslocamento_x", 4.0f);
+                    float sy = sombra.value("deslocamento_y", 4.0f);
+                    float blur = sombra.value("desfoque", 6.0f);
+                    if (ImGui::SliderFloat("Desloc. X", &sx, -40.0f, 40.0f))
+                    {
+                        sombra["deslocamento_x"] = sx;
+                        mProjectDirty = true;
+                    }
+                    if (ImGui::SliderFloat("Desloc. Y", &sy, -40.0f, 40.0f))
+                    {
+                        sombra["deslocamento_y"] = sy;
+                        mProjectDirty = true;
+                    }
+                    if (ImGui::SliderFloat("Desfoque", &blur, 0.0f, 24.0f))
+                    {
+                        sombra["desfoque"] = blur;
+                        mProjectDirty = true;
+                    }
+                }
                 ImGui::Separator();
 
                 ImGui::TextUnformatted("Alinhar");

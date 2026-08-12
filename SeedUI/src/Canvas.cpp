@@ -131,6 +131,63 @@ namespace seedui
             dl->PathFillConvex(fill);
         }
 
+        // Sombra suave barata (compatível com PC fraco): desenha camadas do
+        // contorno tessellado, cada uma levemente expandida e mais transparente
+        // que a anterior, todas deslocadas por (deslocamento_x/y). 4 camadas
+        // máximas, sem blur de GPU.
+        void DrawShadow(const Element& e, const ImVec2& origin, float scale,
+                        float opacity, ImDrawList* dl)
+        {
+            if (!e.estilos.is_object() || !e.estilos.contains("sombra") ||
+                !e.estilos["sombra"].is_object())
+                return;
+            const auto& s = e.estilos["sombra"];
+            const float dx = s.value("deslocamento_x", 4.0f);
+            const float dy = s.value("deslocamento_y", 4.0f);
+            const float blur = std::max(0.0f, s.value("desfoque", 6.0f));
+            if (fabsf(dx) < 0.01f && fabsf(dy) < 0.01f && blur < 0.01f) return;
+
+            float rgb[3] = { 0.0f, 0.0f, 0.0f };
+            if (s.contains("cor") && s["cor"].is_string())
+                ColorUtils::ParseHex(s["cor"].get<std::string>(), rgb);
+
+            std::vector<ImVec2> pts;
+            Geo::OutlineScreen(e, origin.x, origin.y, scale, pts, 48);
+            if (pts.size() < 3) return;
+
+            const int layers = blur > 0.5f ? 4 : 1;
+            // Camadas: a interna é a mais escura e compacta; as externas
+            // expandem levemente e somem (simula o desfoque).
+            const float blurPx = blur * scale;
+            const float cx = origin.x +
+                (e.transformacao.value("x", 0.0f) +
+                 e.transformacao.value("largura", 160.0f) * 0.5f) * scale;
+            const float cy = origin.y +
+                (e.transformacao.value("y", 0.0f) +
+                 e.transformacao.value("altura", 32.0f) * 0.5f) * scale;
+            const float shiftX = dx * scale, shiftY = dy * scale;
+            for (int layer = 0; layer < layers; ++layer)
+            {
+                const float t = (float)(layer + 1) / (float)layers;
+                const float expand = blurPx * t * t * 0.55f;
+                const float alpha = 0.38f / (float)layers * t * opacity;
+                if (alpha <= 0.004f) continue;
+                const ImU32 color = ImGui::ColorConvertFloat4ToU32(
+                    ImVec4(rgb[0], rgb[1], rgb[2], alpha));
+                std::vector<ImVec2> layerPts(pts.size());
+                for (size_t i = 0; i < pts.size(); ++i)
+                {
+                    const float px = pts[i].x + shiftX;
+                    const float py = pts[i].y + shiftY;
+                    const float ddx = px - cx, ddy = py - cy;
+                    const float dist = sqrtf(ddx * ddx + ddy * ddy);
+                    const float k = dist > 0.01f ? (dist + expand) / dist : 1.0f;
+                    layerPts[i] = ImVec2(cx + ddx * k, cy + ddy * k);
+                }
+                dl->AddConvexPolyFilled(layerPts.data(), (int)layerPts.size(), color);
+            }
+        }
+
         // Desenha um elemento e seus filhos recursivamente (versão simples do M03).
         void DrawElement(const Element& e, const ImVec2& origin, float scale, ImDrawList* dl)
         {
@@ -171,6 +228,7 @@ namespace seedui
 
             if (e.tipo != "grupo")
             {
+                DrawShadow(e, origin, scale, opacity, dl);
                 if (fabsf(rotation) > 0.01f)
                 {
                     // Elemento rotacionado: tessela o contorno no espaço local,

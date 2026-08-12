@@ -966,6 +966,23 @@ namespace
             check(loadedB && loadedB->estilos["raio_quinas"].value(
                       "inferior_esquerda", 0.0f) == 16.0f,
                   "quatro raios de quina persistem");
+            // Sombra: objeto estilos.sombra (cor, deslocamento, desfoque)
+            // persiste na serialização e no espelhamento não é alterado.
+            Element shadowPanel = makeElement("sh", "retangulo");
+            shadowPanel.estilos["sombra"] = nlohmann::json{
+                { "cor", "#101010" }, { "deslocamento_x", 6.0 },
+                { "deslocamento_y", -3.0 }, { "desfoque", 12.0 } };
+            loadedMode.raiz.push_back(std::move(shadowPanel));
+            const std::string json2 = Project::Serializar(loaded);
+            Project loaded2;
+            check(Project::Desserializar(loaded2, json2).empty(),
+                  "sombra serializa sem erro");
+            Element* shadowBack = Project::ResolverId(
+                loaded2.telas[0].modos[0], "sh");
+            check(shadowBack && shadowBack->estilos.contains("sombra") &&
+                  shadowBack->estilos["sombra"].value("desfoque", 0.0f) == 12.0f &&
+                  shadowBack->estilos["sombra"].value("deslocamento_y", 0.0f) == -3.0f,
+                  "sombra persiste com cor, deslocamento e desfoque");
         }
 
         report << (failures == 0 ? "RESULT PASS" : "RESULT FAIL")
