@@ -221,7 +221,8 @@ namespace seedui
 
     bool CanvasScreenToProject(const Project* projeto, float screenX, float screenY,
                                float& projectX, float& projectY,
-                               bool limitarNaMoldura, float zoom)
+                               bool limitarNaMoldura, float zoom,
+                               float panX, float panY)
     {
         if (!projeto) return false;
         const ImVec2 min = ImGui::GetWindowPos();
@@ -241,8 +242,8 @@ namespace seedui
         scale = std::max(0.25f, std::min(1.0f, scale));
         scale *= std::max(0.25f, std::min(4.0f, zoom));
         const ImVec2 frame(baseW * scale, baseH * scale);
-        const ImVec2 origin(contentMin.x + (availW - frame.x) * 0.5f,
-                            contentMin.y + (availH - frame.y) * 0.5f);
+        const ImVec2 origin(contentMin.x + (availW - frame.x) * 0.5f + panX,
+                            contentMin.y + (availH - frame.y) * 0.5f + panY);
         const bool inside = screenX >= origin.x && screenX <= origin.x + frame.x &&
                             screenY >= origin.y && screenY <= origin.y + frame.y;
         if (!inside && !limitarNaMoldura) return false;
@@ -253,7 +254,8 @@ namespace seedui
     }
 
     bool CanvasProjectToScreen(const Project* projeto, float projectX, float projectY,
-                               float& screenX, float& screenY, float& scale, float zoom)
+                               float& screenX, float& screenY, float& scale, float zoom,
+                               float panX, float panY)
     {
         if (!projeto || projeto->telaBaseLargura <= 0 || projeto->telaBaseAltura <= 0)
             return false;
@@ -271,8 +273,8 @@ namespace seedui
         scale = std::max(0.25f, std::min(1.0f, std::min(availW / baseW, availH / baseH)));
         scale *= std::max(0.25f, std::min(4.0f, zoom));
         const ImVec2 frame(baseW * scale, baseH * scale);
-        const ImVec2 origin(contentMin.x + (availW - frame.x) * 0.5f,
-                            contentMin.y + (availH - frame.y) * 0.5f);
+        const ImVec2 origin(contentMin.x + (availW - frame.x) * 0.5f + panX,
+                            contentMin.y + (availH - frame.y) * 0.5f + panY);
         screenX = origin.x + projectX * scale;
         screenY = origin.y + projectY * scale;
         return true;
@@ -282,7 +284,7 @@ namespace seedui
                     const std::vector<std::string>* elementosSelecionados,
                     const char* elementoPrincipalId,
                     unsigned int quinasSelecionadas,
-                    bool exibirReguas, float zoom)
+                    bool exibirReguas, float zoom, float panX, float panY)
     {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         const ImVec2 min = ImGui::GetWindowPos();
@@ -364,8 +366,8 @@ namespace seedui
         }
 
         const ImVec2 frame(baseW * viewScale, baseH * viewScale);
-        const ImVec2 origin(contentMin.x + (availW - frame.x) * 0.5f,
-                            contentMin.y + (availH - frame.y) * 0.5f);
+        const ImVec2 origin(contentMin.x + (availW - frame.x) * 0.5f + panX,
+                            contentMin.y + (availH - frame.y) * 0.5f + panY);
         if (!projeto || projeto->telas.empty())
         {
             const char* hint = "Crie um projeto para começar (Arquivo -> Novo)";

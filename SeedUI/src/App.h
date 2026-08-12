@@ -111,6 +111,8 @@ namespace seedui
         bool mSnapEnabled = true;
         bool mRulersVisible = true;
         float mCanvasZoom = 1.0f;
+        float mCanvasPanX = 0.0f;
+        float mCanvasPanY = 0.0f;
         bool mShapeCreating = false;
         float mShapeStartX = 0.0f;
         float mShapeStartY = 0.0f;

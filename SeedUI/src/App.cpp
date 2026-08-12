@@ -1042,7 +1042,7 @@ namespace seedui
             const ImVec2 mouse = ImGui::GetMousePos();
             float projectX = 0.0f, projectY = 0.0f;
             const bool inside = CanvasScreenToProject(&mProject, mouse.x, mouse.y,
-                projectX, projectY, false, mCanvasZoom);
+                projectX, projectY, false, mCanvasZoom, mCanvasPanX, mCanvasPanY);
             if (canvasHovered && inside && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             {
                 mShapeCreating = true;
@@ -1052,7 +1052,7 @@ namespace seedui
             if (mShapeCreating && ImGui::IsMouseDown(ImGuiMouseButton_Left))
             {
                 CanvasScreenToProject(&mProject, mouse.x, mouse.y,
-                    mShapeEndX, mShapeEndY, true, mCanvasZoom);
+                    mShapeEndX, mShapeEndY, true, mCanvasZoom, mCanvasPanX, mCanvasPanY);
                 ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
             }
             if (mShapeCreating && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
@@ -1118,10 +1118,11 @@ namespace seedui
         const ImVec2 mouse = ImGui::GetMousePos();
         float mouseX = 0.0f, mouseY = 0.0f;
         const bool mouseOnFrame = CanvasScreenToProject(&mProject, mouse.x, mouse.y,
-                                                         mouseX, mouseY, false, mCanvasZoom);
+                                                         mouseX, mouseY, false, mCanvasZoom,
+                                                         mCanvasPanX, mCanvasPanY);
         float unusedX = 0.0f, unusedY = 0.0f, viewScale = 1.0f;
         CanvasProjectToScreen(&mProject, 0.0f, 0.0f, unusedX, unusedY, viewScale,
-                              mCanvasZoom);
+                              mCanvasZoom, mCanvasPanX, mCanvasPanY);
         const float tolerance = 8.0f / std::max(0.25f, viewScale);
 
         auto dragModeAt = [&](const Element& element, float x, float y)
@@ -1310,7 +1311,7 @@ namespace seedui
         if (mCanvasMarquee && ImGui::IsMouseDown(ImGuiMouseButton_Left))
         {
             CanvasScreenToProject(&mProject, mouse.x, mouse.y, mouseX, mouseY, true,
-                                  mCanvasZoom);
+                                  mCanvasZoom, mCanvasPanX, mCanvasPanY);
             mCanvasMarqueeEndX = mouseX;
             mCanvasMarqueeEndY = mouseY;
         }
@@ -1341,7 +1342,7 @@ namespace seedui
         if (mCanvasDragMode != 0 && ImGui::IsMouseDown(ImGuiMouseButton_Left))
         {
             CanvasScreenToProject(&mProject, mouse.x, mouse.y, mouseX, mouseY, true,
-                                  mCanvasZoom);
+                                  mCanvasZoom, mCanvasPanX, mCanvasPanY);
             Element* selected = Project::ResolverId(mode, mSelectedElementId);
             if (!selected || selected->bloqueado)
             {
@@ -1753,6 +1754,13 @@ namespace seedui
                     ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
                 if (canvasHovered)
                 {
+                    if (ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.0f))
+                    {
+                        const ImVec2 delta = ImGui::GetIO().MouseDelta;
+                        mCanvasPanX += delta.x;
+                        mCanvasPanY += delta.y;
+                        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
+                    }
                     const float wheel = ImGui::GetIO().MouseWheel;
                     if (wheel > 0.0f) mCanvasZoom = std::min(4.0f, mCanvasZoom * 1.1f);
                     if (wheel < 0.0f) mCanvasZoom = std::max(0.25f, mCanvasZoom / 1.1f);
@@ -1768,14 +1776,17 @@ namespace seedui
                 HandleCanvasInteraction(canvasHovered);
                 CanvasDraw(mHasProject ? &mProject : nullptr, mTelaAtiva, mModoAtivo,
                            &mSelectedElementIds, mSelectedElementId.c_str(),
-                           mSelectedCornerMask, mRulersVisible, mCanvasZoom);
+                           mSelectedCornerMask, mRulersVisible, mCanvasZoom,
+                           mCanvasPanX, mCanvasPanY);
                 if (mShapeCreating)
                 {
                     float sx0 = 0.0f, sy0 = 0.0f, sx1 = 0.0f, sy1 = 0.0f, scale = 1.0f;
                     CanvasProjectToScreen(&mProject, mShapeStartX, mShapeStartY,
-                                          sx0, sy0, scale, mCanvasZoom);
+                                          sx0, sy0, scale, mCanvasZoom,
+                                          mCanvasPanX, mCanvasPanY);
                     CanvasProjectToScreen(&mProject, mShapeEndX, mShapeEndY,
-                                          sx1, sy1, scale, mCanvasZoom);
+                                          sx1, sy1, scale, mCanvasZoom,
+                                          mCanvasPanX, mCanvasPanY);
                     ImGui::GetWindowDrawList()->AddRect(
                         ImVec2(std::min(sx0, sx1), std::min(sy0, sy1)),
                         ImVec2(std::max(sx0, sx1), std::max(sy0, sy1)),
@@ -1785,9 +1796,11 @@ namespace seedui
                 {
                     float sx0 = 0.0f, sy0 = 0.0f, sx1 = 0.0f, sy1 = 0.0f, scale = 1.0f;
                     CanvasProjectToScreen(&mProject, mCanvasMarqueeStartX, mCanvasMarqueeStartY,
-                                          sx0, sy0, scale, mCanvasZoom);
+                                          sx0, sy0, scale, mCanvasZoom,
+                                          mCanvasPanX, mCanvasPanY);
                     CanvasProjectToScreen(&mProject, mCanvasMarqueeEndX, mCanvasMarqueeEndY,
-                                          sx1, sy1, scale, mCanvasZoom);
+                                          sx1, sy1, scale, mCanvasZoom,
+                                          mCanvasPanX, mCanvasPanY);
                     const ImVec2 a(sx0, sy0), b(sx1, sy1);
                     const ImU32 marqueeColor = ImGui::ColorConvertFloat4ToU32(Theme::AccentOrange);
                     const ImU32 marqueeFill = ImGui::ColorConvertFloat4ToU32(
@@ -1818,7 +1831,7 @@ namespace seedui
                                 const ImVec2 mouse = ImGui::GetMousePos();
                                 const bool mapped = CanvasScreenToProject(
                                     &mProject, mouse.x, mouse.y, projectX, projectY, true,
-                                    mCanvasZoom);
+                                    mCanvasZoom, mCanvasPanX, mCanvasPanY);
                                 TraceLog(LOG_INFO,
                                          "M04 DROP Painel: delivery=%d mapped=%d mouse=%.1f,%.1f project=%.1f,%.1f",
                                          payload->IsDelivery() ? 1 : 0, mapped ? 1 : 0,
