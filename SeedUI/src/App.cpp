@@ -177,6 +177,7 @@ namespace seedui
             case IconId::Polygon: return Tool::Polygon;
             case IconId::Color:  return Tool::Color;
             case IconId::Grid:   return Tool::Grid;
+            case IconId::Ruler:  return Tool::Measure;
             case IconId::Annotate: return Tool::Annotate;
             default:             return Tool::Select;
             }
@@ -942,6 +943,86 @@ namespace seedui
         mStatusMsgUntil = GetTime() + 4.0;
     }
 
+    void App::HandleMeasureTool(bool canvasHovered)
+    {
+        const ImVec2 mouse = ImGui::GetMousePos();
+        float projectX = 0.0f, projectY = 0.0f;
+        const bool inside = CanvasScreenToProject(&mProject, mouse.x, mouse.y,
+            projectX, projectY, false, mCanvasZoom, mCanvasPanX, mCanvasPanY);
+        if (canvasHovered && inside && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        {
+            mMeasureX1 = mMeasureX2 = projectX;
+            mMeasureY1 = mMeasureY2 = projectY;
+            mMeasureDragging = true;
+        }
+        if (mMeasureDragging)
+        {
+            mMeasureX2 = projectX;
+            mMeasureY2 = projectY;
+            if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+                mMeasureDragging = false;
+        }
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+        {
+            mMeasureDragging = false;
+            mMeasureX1 = mMeasureY1 = mMeasureX2 = mMeasureY2 = 0.0f;
+        }
+        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+    }
+
+    void App::DesenharMedicao()
+    {
+        if (mCurrentTool != Tool::Measure || !mHasProject) return;
+        if (mMeasureX1 == 0.0f && mMeasureY1 == 0.0f &&
+            mMeasureX2 == 0.0f && mMeasureY2 == 0.0f)
+            return;
+        if (mMeasureX1 == mMeasureX2 && mMeasureY1 == mMeasureY2) return;
+
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const ImU32 color = ImGui::ColorConvertFloat4ToU32(Theme::AccentOrange);
+        float sx1 = 0.0f, sy1 = 0.0f, sx2 = 0.0f, sy2 = 0.0f, scale = 1.0f;
+        CanvasProjectToScreen(&mProject, mMeasureX1, mMeasureY1, sx1, sy1, scale,
+                              mCanvasZoom, mCanvasPanX, mCanvasPanY);
+        CanvasProjectToScreen(&mProject, mMeasureX2, mMeasureY2, sx2, sy2, scale,
+                              mCanvasZoom, mCanvasPanX, mCanvasPanY);
+
+        const float dx = mMeasureX2 - mMeasureX1;
+        const float dy = mMeasureY2 - mMeasureY1;
+        const float lengthPx = sqrtf(dx * dx + dy * dy);
+        const float unit = UnitToPixels();
+        const float length = lengthPx / unit;
+        const float angleDeg = atan2f(dy, dx) * (180.0f / 3.14159265f);
+
+        dl->AddLine(ImVec2(sx1, sy1), ImVec2(sx2, sy2), color, 1.5f);
+        // Travinhas perpendiculares nas pontas.
+        const float nx = -dy, ny = dx; // normal
+        const float len = sqrtf(nx * nx + ny * ny);
+        if (len > 0.01f)
+        {
+            const float ux = nx / len * 7.0f, uy = ny / len * 7.0f;
+            dl->AddLine(ImVec2(sx1 - ux, sy1 - uy), ImVec2(sx1 + ux, sy1 + uy),
+                        color, 1.5f);
+            dl->AddLine(ImVec2(sx2 - ux, sy2 - uy), ImVec2(sx2 + ux, sy2 + uy),
+                        color, 1.5f);
+        }
+
+        // Rótulo: distância (na unidade atual) + ângulo.
+        const char* unitName = mUnit == 1 ? "mm" : mUnit == 2 ? "cm"
+            : mUnit == 3 ? "in" : mUnit == 4 ? "pt" : "px";
+        char text[64];
+        snprintf(text, sizeof(text), "%.2f %s · %.1f°", length, unitName, angleDeg);
+        const ImVec2 textSize = ImGui::CalcTextSize(text);
+        const ImVec2 mid((sx1 + sx2) * 0.5f, (sy1 + sy2) * 0.5f);
+        const ImVec2 boxMin(mid.x - textSize.x * 0.5f - 5.0f,
+                            mid.y - textSize.y * 0.5f - 3.0f);
+        const ImVec2 boxMax(mid.x + textSize.x * 0.5f + 5.0f,
+                            mid.y + textSize.y * 0.5f + 3.0f);
+        dl->AddRectFilled(boxMin, boxMax, IM_COL32(32, 32, 38, 235));
+        dl->AddRect(boxMin, boxMax, color, 3.0f);
+        dl->AddText(ImVec2(mid.x - textSize.x * 0.5f, mid.y - textSize.y * 0.5f),
+                    IM_COL32(255, 255, 255, 255), text);
+    }
+
     void App::ApagarElementosSelecionados()
     {
         if (!PossuiModoAtivo()) return;
@@ -1419,6 +1500,13 @@ namespace seedui
         // Guia sendo arrastada/posicionada: a interação normal do canvas
         // (selecionar, mover, marquee) fica suspensa até soltar.
         if (mGuideDragKind != 0) return;
+
+        // Ferramenta Medir: medição transitória de distância/ângulo.
+        if (mCurrentTool == Tool::Measure && mHasProject)
+        {
+            HandleMeasureTool(canvasHovered);
+            return;
+        }
 
         // Ctrl pressionado = ferramenta de SELEÇÃO temporária: mesmo estando
         // em outra ferramenta (criar retângulo, zoom etc.), Ctrl + arrastar
@@ -3126,6 +3214,7 @@ namespace seedui
                            mGridVisible,
                            mCanvasZoom, mCanvasPanX, mCanvasPanY, UnitToPixels());
                 DesenharGuias();
+                DesenharMedicao();
                 // Guias inteligentes: linha magenta na posição encaixada
                 // (a janela child recorta o desenho à área do canvas).
                 // Guias FIXAS engatadas (forma->guia): laranja, mesma lógica
@@ -4480,6 +4569,7 @@ namespace seedui
         }
         ToolButton(IconId::Pan, "Navegação · Mão (H)", kFamilyNav);
         ToolButton(IconId::Grid, "Visualização · Grade (G)", kFamilyNav);
+        ToolButton(IconId::Ruler, "Navegação · Medir distância e ângulo", kFamilyNav);
         DrawToolFamilySeparator(kFamilyNav);
 
         ToolButton(IconId::Annotate,

@@ -16,6 +16,7 @@ namespace seedui
         Text,
         ZoomIn,
         ZoomOut,
+        Ruler,
         Pan,
         Color,
         Grid,

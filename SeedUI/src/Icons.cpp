@@ -33,6 +33,7 @@ namespace seedui
             { IconId::Text,      "text-t" },
             { IconId::ZoomIn,    "magnifying-glass-plus" },
             { IconId::ZoomOut,   "magnifying-glass-minus" },
+            { IconId::Ruler,     "ruler" },
             { IconId::Pan,       "hand" },
             { IconId::Color,     "eyedropper" },
             { IconId::Grid,      "grid-four" },

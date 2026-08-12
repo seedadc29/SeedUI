@@ -20,6 +20,7 @@ namespace seedui
         Rectangle,
         Ellipse,
         Polygon,
+        Measure,
         Annotate,
     };
 
@@ -68,6 +69,8 @@ namespace seedui
         void ColarElementosCopiados();
         void DuplicarSelecao();
         void EspelharSelecao(bool horizontal);
+        void HandleMeasureTool(bool canvasHovered);
+        void DesenharMedicao();
         void ApagarElementosSelecionados();
         void AlternarModoAnotacao();
         void AlinharElementosSelecionados(int operacao);
@@ -186,6 +189,10 @@ namespace seedui
         int mElementPasteGeneration = 0;
         float mDuplicateDX = 16.0f; // deslocamento do Ctrl+D (repete o último)
         float mDuplicateDY = 16.0f;
+        // Ferramenta Medir: medição transitória (não entra no JSON).
+        bool mMeasureDragging = false;
+        float mMeasureX1 = 0.0f, mMeasureY1 = 0.0f;
+        float mMeasureX2 = 0.0f, mMeasureY2 = 0.0f;
         int mAlignTarget = 0; // 0 selecao, 1 elemento principal, 2 tela
         float mHorizontalSpacing = 16.0f;
         float mVerticalSpacing = 16.0f;
