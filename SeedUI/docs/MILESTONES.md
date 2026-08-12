@@ -301,10 +301,12 @@ Primeira leva da especificação "interface CorelDRAW" (commit 72b9701 antes):
   guias fixas em empate; vale para espelhado (Shift) e caixa conjunta de
   grupos, com linha magenta de feedback. 5 testes novos (95 PASS).
 - **Força do snap ajustável** (`mSnapStrength` + `App::SnapTol`): controle
-  de 0.25x a 3x (botão lupa na action bar / Exibir → Força do snap) que
-  multiplica TODAS as tolerâncias de encaixe — guias inteligentes,
+  de 0.00x a 3.00x (botão **ímã** na action bar / Exibir → Força do snap)
+  que multiplica TODAS as tolerâncias de encaixe — guias inteligentes,
   moldura, guias das réguas, arestas no resize e espaçamento — sem mudar
-  o valor final exato do encaixe.
+  o valor final exato do encaixe. **0.00x desliga o snap** (tolerâncias
+  zeram); ícone próprio `magnet.svg` (a lupa anterior colidia de ID com
+  outro botão e não representava o ímã).
 - Abas de documentos NÃO implementadas: o projeto usa telas/modos com
   seletores próprios (regra "não recriar o que existe"); telas sem UI de
   criação ficam para M10.
@@ -491,6 +493,7 @@ com plano próprio e sem alterar silenciosamente o comportamento atual da engine
 | 2026-08-12 | **Snap reforçado** (estilo CorelDRAW): guias inteligentes encaixam PRIMEIRO no movimento bruto, depois a grade de 8px e uma re-puxada — o encaixe de bordas/centros vence a grade e o elemento não "escapa"; tolerância subiu de 5px para 10px de tela. **Grade do canvas agora em espaço de projeto** (minor 8 / major 40 unidades, alinhada exatamente com o snap) e contida na moldura da tela base — antes era desenhada em espaço de tela fixo (24px), sem relação com o snap. |
 | 2026-08-12 | **Zoom**: limites ampliados de 0.25×–4× para 0.1×–16×; nova opção **"Zoom no cursor"** (menu Exibir, padrão ligada) — a roda mantém o ponto do projeto sob o mouse fixo na tela. |
 | 2026-08-12 | **Clone com o botão direito** (estilo CorelDRAW): pressionar sobre um elemento e arrastar cria uma cópia (IDs novos, mesma posição/z) e move a cópia; clique simples não faz nada. `Project::ClonarElemento` (insere logo após o original, bloqueado recusa) + 4 verificações no autoteste (total 45). |
+| 2026-08-12 | **Força do snap 0.00–3.00 com ícone de ímã**: o controle de força do snap agora usa o ícone `magnet` (SVG novo, estilo Phosphor/Lucide, `IconId::Magnet`) no lugar da lupa — a lupa colidia de ID no ImGui e não representava o ímã. O slider vai de **0.00× a 3.00×**: **0.00 desliga o snap** (todas as tolerâncias zeram via `SnapTol`) e rótulos Dinâmico via `SnapStrengthLabel()` (Desligado/Fino/Médio/Forte). |
 | 2026-08-12 | **Cores (etapa 1 parcial)**: canvas passa a renderizar `estilos.cor_fundo`/`cor_borda` (`#rrggbb`, fallback neutro); **paleta fixa na parte inferior** (30 swatches, clique esq. = preenchimento, dir. = contorno) e **seletor de cor com 3 modelos estilo Photoshop** (Triângulo HSV, Quadrado SV, Barras RGB) em `src/ColorPicker.{h,cpp}` (novo arquivo registrado no .vcxproj). |
 | 2026-08-12 | **Barra de ações centralizada**: itens de alturas diferentes (campos, botões de distribuir, alinhamentos) agora são centralizados pelo eixo vertical da barra (42px), não alinhados pelo topo. |
 | 2026-08-12 | **Paleta reposicionada**: sai da borda inferior (ficava "sufocada") para **acima da barra de status** (rodapé), sem sobrepor nem esconder informações; nada vaza da janela principal. |

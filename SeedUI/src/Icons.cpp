@@ -67,6 +67,7 @@ namespace seedui
             { IconId::History,   "clock-counter-clockwise" },
             { IconId::Model,     "squares-four" },
             { IconId::Magnifier, "magnifying-glass" },
+            { IconId::Magnet,    "magnet" },
             { IconId::List,      "list" },
             { IconId::Annotate,  "chat-circle-dots" },
             { IconId::Rectangle, "rectangle" },

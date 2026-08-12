@@ -122,10 +122,11 @@ O canvas ganhou ferramentas de precisão estilo CorelDRAW/Illustrator:
   **borda e o centro da tela** e com **bordas e centros de outros elementos
   visíveis**, mostrando a linha-guia na hora do encaixe. Funcionam com o
   **Snap ativo** (botão de grade na barra de ações ou menu Exibir).
-- **Força do snap (ímã) ajustável**: o **botão de lupa** na barra de ações
-  (ou **Exibir → Força do snap**) abre um controle de **0.25× a 3×** —
+- **Força do snap (ímã) ajustável**: o **botão de ímã** na barra de ações
+  (ou **Exibir → Força do snap**) abre um controle de **0.00× a 3.00×** —
   quanto maior, mais longe os objetos "grudam" (tolerâncias ampliadas);
-  quanto menor, mais precisão manual é exigida. O multiplicador vale para
+  quanto menor, mais precisão manual é exigida; **0.00× desliga o snap
+  completamente** (todas as tolerâncias zeram). O multiplicador vale para
   **todas** as referências: guias inteligentes, moldura, guias das réguas,
   arestas no resize e espaçamento (o encaixe continua **exato** no ponto —
   a força só muda a distância de captura, nunca o valor final).

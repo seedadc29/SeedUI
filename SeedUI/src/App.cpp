@@ -3372,13 +3372,9 @@ namespace seedui
             {
                 ImGui::TextUnformatted("Ímã de encaixe");
                 float value = mSnapStrength;
-                if (ImGui::SliderFloat("##snap_str_menu", &value, 0.25f, 3.0f, "%.2fx"))
+                if (ImGui::SliderFloat("##snap_str_menu", &value, 0.0f, 3.0f, "%.2fx"))
                     mSnapStrength = value;
-                ImGui::TextUnformatted(mSnapStrength < 0.75f
-                    ? "Fino · só gruda bem pertinho"
-                    : (mSnapStrength > 1.5f
-                        ? "Forte · gruda de longe"
-                        : "Médio · equilíbrio padrão"));
+                ImGui::TextUnformatted(SnapStrengthLabel());
                 if (ImGui::MenuItem("Restaurar padrão (1x)"))
                     mSnapStrength = 1.0f;
                 ImGui::EndMenu();
@@ -3724,13 +3720,12 @@ namespace seedui
             mSnapEnabled = !mSnapEnabled;
         if (snapWasOn) ImGui::PopStyleColor();
         ImGui::SameLine();
-        // Força do snap (ímã): abre o popup de controle. Ícone Magnifier
-        // (lupa) sem colisão de ID (PushID por ícone).
-        if (IconButton(IconId::Magnifier,
-                       mSnapStrength < 0.75f ? "Força do snap: FINO · clique para ajustar"
-                       : (mSnapStrength > 1.5f ? "Força do snap: FORTE · clique para ajustar"
-                                               : "Força do snap: MÉDIO · clique para ajustar"),
-                       button))
+        // Força do snap (ímã): abre o popup de controle.
+        const std::string snapTip = mSnapStrength <= 0.01f
+            ? std::string("Snap: DESLIGADO · clique para ajustar")
+            : std::string("Força do snap: ") + SnapStrengthLabel() +
+              " · clique para ajustar";
+        if (IconButton(IconId::Magnet, snapTip.c_str(), button))
             ImGui::OpenPopup("##snap_strength");
         DrawSnapStrengthPopup();
         ImGui::SameLine();
@@ -4188,8 +4183,20 @@ namespace seedui
         // zoom 1) × a FORÇA configurada (mSnapStrength), normalizada pelo
         // zoom — o encaixe ocupa sempre a mesma área de tela, qualquer que
         // seja o zoom. Força 1.0 = comportamento padrão; <1 = mais difícil
-        // de engatar (preciso); >1 = ímã mais forte (gruda de longe).
+        // de engatar (preciso); >1 = ímã mais forte (gruda de longe);
+        // 0.0 = snap completamente desligado (todas as tolerâncias zeram).
         return basePx * mSnapStrength / std::max(0.5f, mCanvasZoom);
+    }
+
+    const char* App::SnapStrengthLabel() const
+    {
+        if (mSnapStrength <= 0.01f)
+            return "Desligado · sem encaixe";
+        if (mSnapStrength < 0.75f)
+            return "Fino · só gruda bem pertinho";
+        if (mSnapStrength > 1.5f)
+            return "Forte · gruda de longe";
+        return "Médio · equilíbrio padrão";
     }
 
     void App::DrawSnapStrengthPopup()
@@ -4201,13 +4208,9 @@ namespace seedui
             ImGui::TextUnformatted("Força do snap (ímã)");
             ImGui::SetNextItemWidth(220.0f);
             float value = mSnapStrength;
-            if (ImGui::SliderFloat("##snap_str", &value, 0.25f, 3.0f, "%.2fx"))
+            if (ImGui::SliderFloat("##snap_str", &value, 0.0f, 3.0f, "%.2fx"))
                 mSnapStrength = value;
-            ImGui::TextUnformatted(mSnapStrength < 0.75f
-                ? "Fino · só gruda bem pertinho"
-                : (mSnapStrength > 1.5f
-                    ? "Forte · gruda de longe"
-                    : "Médio · equilíbrio padrão"));
+            ImGui::TextUnformatted(SnapStrengthLabel());
             ImGui::Separator();
             if (ImGui::MenuItem("Restaurar padrão (1x)"))
                 mSnapStrength = 1.0f;

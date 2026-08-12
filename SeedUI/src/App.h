@@ -84,10 +84,12 @@ namespace seedui
                        const std::vector<SmartGuides::Rect>& starts);
         float UnitToPixels() const;     // fator da unidade atual -> px
         float PixelsToUnit(float px) const;
-        // Força do snap: multiplicador das tolerâncias de encaixe (0.25x
-        // "fraco" até 3x "forte"; 1.0 = padrão). Aplica a guias inteligentes,
-        // espaçamento, moldura, guias das réguas e grade.
+        // Força do snap: multiplicador das tolerâncias de encaixe (0.0 =
+        // snap DESLIGADO; 0.25x "fraco" até 3x "forte"; 1.0 = padrão).
+        // Aplica a guias inteligentes, espaçamento, moldura, guias das
+        // réguas e grade. Com 0.0 todas as tolerâncias zeram (sem snap).
         float SnapTol(float basePx) const;
+        const char* SnapStrengthLabel() const;
         void DrawSnapStrengthPopup();
 
         Project mProject;      // projeto em memória (vazio = tela inicial)
@@ -184,7 +186,7 @@ namespace seedui
         float mHorizontalSpacing = 16.0f;
         float mVerticalSpacing = 16.0f;
         bool mSnapEnabled = true;
-        float mSnapStrength = 1.0f; // força do snap (0.25x a 3x)
+        float mSnapStrength = 1.0f; // força do snap (0.0x a 3x; 0 = desligado)
         bool mRulersVisible = true;
         bool mRulersLocked = false; // bloqueio da régua (proteção contra edição)
         bool mGridVisible = true;   // ocultar a grade NÃO desliga o snap

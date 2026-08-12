@@ -50,6 +50,7 @@ namespace seedui
         History,
         Model,
         Magnifier,
+        Magnet,
         List,
         Annotate,
         Rectangle,
