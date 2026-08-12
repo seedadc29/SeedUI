@@ -1,2 +1,3 @@
-<img width="1365" height="767" alt="WhatsApp Image 2026-08-10 at 00 34 33" src="https://github.com/user-attachments/assets/3c4b2aad-2f96-447a-a9c8-afb4f1ec9887" />
-<img width="1366" height="768" alt="Screenshot_3" src="https://github.com/user-attachments/assets/3d66532a-86cd-419d-b1e0-df4614da8e1e" />
+<img width="1365" height="767" alt="Seedui interface 3" src="https://github.com/user-attachments/assets/967c9287-6610-46eb-80ba-568d46f09d2f" />
+<img width="1365" height="767" alt="Seedui interface" src="https://github.com/user-attachments/assets/229aaeaa-1cd6-4a72-9829-2468cd10fd18" />
+<img width="1365" height="767" alt="Seedui interface 2" src="https://github.com/user-attachments/assets/04029953-56e9-492d-8a27-86b17767db16" />
