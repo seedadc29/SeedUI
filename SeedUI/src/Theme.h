@@ -46,6 +46,7 @@ namespace seedui
         inline const ImVec4 CanvasBackground  = Hex(0x1a1a1a);
         inline const ImVec4 GridMinor         = Hex(0x262626);
         inline const ImVec4 GridMajor         = Hex(0x2e2e2e);
+        inline const ImVec4 SmartGuide        = Hex(0xd946ef); // guias inteligentes (magenta, estilo CorelDRAW)
 
         // Cor do ClearBackground (raylib)
         inline const Color RaylibWindowBg = { 30, 30, 30, 255 };

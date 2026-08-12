@@ -109,6 +109,160 @@ SeedUI terá uma galeria de **modelos de interface**, no estilo do Canva:
 A galeria aparece na tela inicial do SeedUI e também em "Arquivo → Novo a
 partir de modelo".
 
+### 3.3 Manipulação de precisão no canvas (M04)
+
+O canvas ganhou ferramentas de precisão estilo CorelDRAW/Illustrator:
+
+- **Rotação**: selecione um elemento e arraste a **alça circular acima do
+  topo** dele — o elemento gira em torno do próprio centro. Segure **Shift**
+  durante o arraste para travar em incrementos de 15°. O contorno da seleção
+  acompanha a rotação e o clique continua acertando o elemento rotacionado.
+- **Guias inteligentes** (magenta, como no CorelDRAW): ao **mover** um
+  elemento, o programa encaixa automaticamente bordas e centros dele com a
+  **borda e o centro da tela** e com **bordas e centros de outros elementos
+  visíveis**, mostrando a linha-guia na hora do encaixe. Funcionam com o
+  **Snap ativo** (botão de grade na barra de ações ou menu Exibir).
+- **Snap forte da moldura**: a tela-base (o retângulo com o rótulo "tela
+  base") é o delimitador principal — suas bordas e o centro têm um encaixe
+  **três vezes mais forte** que os demais, então o elemento "gruda" nela
+  com mais facilidade.
+- **Guias de espaçamento**: ao mover perto de uma sequência de elementos
+  com espaçamento regular (ex.: três painéis com 20px entre si), o programa
+  prevê o padrão e puxa o elemento para **replicar o mesmo espaço**,
+  mostrando duas linhas tracejadas delimitando o intervalo.
+- **Preview de espaçamento com Shift** (estilo CorelDRAW): durante o
+  **mover** (vale também para o clone no arrasto), segure **Shift** — surgem
+  **pequenos traços nos cantos das laterais** de cada objeto da fileira
+  alinhada (traços horizontais nas laterais esquerda/direita; verticais nos
+  cantos de topo/base em colunas), delimitando cada peça com clareza, e o
+  **valor da distância** de cada espaço entre elas. Visual limpo, sem linhas
+  longas atravessando a tela.
+- **Organização do painel direito**: o painel usa **abas** (Hierarquia /
+  Inspetor / Biblioteca / Diretrizes / Recursos / Histórico) — uma seção por
+  vez, sem pilhas de cabeçalhos confusas.
+- **Debug no topo**: em modo de revisão, o bloco de **debug/exportar** fica
+  no **menu bar** (indicador de anotações + botão Exportar), nada sufoca o
+  rodapé; a paleta de cores fica **centralizada verticalmente** na faixa.
+- **Previsão de espaçamento assertiva e EXATA**: QUALQUER espaço existente
+  entre dois objetos é um alvo de previsão — ex.: dois objetos com 32px de
+  espaço entre si fazem a próxima peça **prever 32** e **travar exatamente
+  em 32** (o alvo é o valor exato da referência, sem arredondamentos, e a
+  previsão **vence a grade de 8px** — nunca pousa em 31 ou 33). Rótulos com
+  **1 decimal** (ex.: "32.0") para você ver o valor real. Ao engatar, os
+  traços aparecem e o **rótulo do espaço previsto fica destacado**: ali é o
+  ponto onde você possivelmente quer estar — a trava indica, não prende.
+  A previsão funciona nas **4 direções** (esquerda, direita, acima e abaixo)
+  com a mesma precisão — o encaixe vertical também pousa exato em 32.
+- **Previsão confiável em qualquer velocidade e contexto**: a previsão agora
+  só usa **referências da própria fileira/coluna** em que a peça está sendo
+  encaixada (espaçamentos de outras linhas não "poluem" o alvo) e
+  **grupos/containers contam como um bloco único** (filhos aninhados não
+  geram alvos falsos). Além disso, o ímã **detecta o cruzamento**: se o
+  cursor **pular por cima** do alvo entre dois frames (arrasto rápido, zoom
+  alto), a peça ainda **engata exato no alvo** — a previsão não "passa
+  batido" nem pousa fora do valor.
+- **Janela nunca esconde o rodapé**: a janela tem **limite máximo de tamanho**
+  (a área de trabalho completa do monitor — ex. 1366×768) — **maximizar
+  preenche a tela toda** e redimensionar nunca cria uma janela maior que o
+  monitor (o que antes empurrava a barra de status e a paleta de cores para
+  **fora da tela**); o conteúdo inferior fica sempre visível.
+- **Barra de ferramentas com rolagem fina**: se as ferramentas não couberem
+  na altura da janela, uma **barra de rolagem fina** aparece na borda da
+  coluna (estilo Blender) — **nenhum ícone fica cortado ou invisível**; a
+  roda do mouse continua sendo zoom do canvas.
+- **Clique não move (limiar de arrasto)**: ao **clicar** num objeto ele fica
+  **fixo no lugar** (seleciona, mas não se mexe). O objeto só passa a se
+  mover depois que o mouse **arrasta além de ~4px** — sem deslocamentos
+  acidentais no clique.
+- **Alinhar ao Conjunto (distâncias uniformes)**: no inspetor, o alvo de
+  alinhamento agora tem a opção **"Conjunto"** — a referência passa a ser
+  o **bounding box dos vizinhos** (elementos visíveis fora da seleção), não
+  a tela nem a própria seleção. Com uma forma selecionada, **Centralizar
+  horizontal + vertical** a coloca **exatamente no centro do conjunto**, com
+  distâncias idênticas em cima, embaixo, esquerda e direita (ex.: a forma
+  vermelha no centro dos quadros cinza).
+- **Redimensionar grupo**: com vários elementos selecionados, arraste uma
+  alça da caixa conjunta — todos escalam proporcionalmente, preservando o
+  layout relativo entre eles.
+- **Multi-seleção em conjunto**: a caixa de seleção cobre **todo o corpo do
+  conjunto** (não cada elemento isolado). Com vários selecionados,
+  **mover, redimensionar, girar e colorir** valem para todos ao mesmo tempo
+  — a rotação gira o conjunto em torno do centro da caixa conjunta e a
+  paleta/seletor pintam todos de uma vez. Clicar em espaço vazio dentro da
+  caixa e arrastar move o conjunto inteiro.
+
+Estas ferramentas são **auxílio de edição**: não entram no arquivo do
+projeto (`.ui.json`). O que fica salvo é só a posição, o tamanho e a rotação
+finais de cada elemento.
+
+### 3.4 Cores, clone e zoom (M04)
+
+- **Paleta de cores**: barra fixa **acima da barra de status** (rodapé,
+  estilo CorelDRAW). Com um elemento selecionado, **clique esquerdo** num
+  swatch pinta o preenchimento (`cor_fundo`) e **clique direito** pinta o
+  contorno (`cor_borda`).
+- **Seletor de cor**: botão "Seletor de cor..." na paleta abre uma janela com
+  **3 modelos estilo Photoshop** — **Triângulo** (HSV), **Quadrado** (SV com
+  barra de matiz) e **Barras** (matiz + canais R/G/B). Aplica no
+  preenchimento do elemento selecionado.
+- **Clone durante o arrasto (fork)**: segure o **botão esquerdo** sobre o
+  objeto e arraste (o movimento é só com o esquerdo, sem apertar o direito
+  para mover). No meio do arrasto, **aperte o botão direito** uma vez: o
+  **original volta ao ponto de partida** e a **cópia** (com IDs novos)
+  assume o arrasto — continue movendo e **solte** para posicionar o clone
+  no destino. (O modo antigo também existe: botão direito sobre o elemento
+  e arrastar cria a cópia e move a cópia.)
+- **Zoom**: a roda amplia de 10% até 1600%; com **"Zoom no cursor"** (menu
+  Exibir) a ampliação segue o ponto sob o mouse em **todos** os controles
+  (roda, botões +/−, atalho Z) — até o limite máximo.
+- **Seleção por caixa**: padrão **cobertura total** — um elemento só é
+  selecionado quando a caixa cobre o corpo inteiro (estilo Photoshop); no
+  menu há a opção **"Selecionar ao encostar"** para voltar ao
+  comportamento antigo (qualquer contato seleciona).
+- **Snap forte**: bordas e centros encaixam com força (tolerância de 10px) e
+  a **grade do canvas acompanha o snap** (pontos a cada 8 unidades, maiores
+  a cada 40) — o elemento não "escapa" do encaixe.
+- **Espaço de trabalho livre e área de segurança**: os objetos **não ficam
+  presos** à moldura — você pode mover/redimensionar/criar em qualquer ponto
+  do canvas e a **grade pontilhada percorre o canvas inteiro** (sempre
+  alinhada ao snap). Ao sair da tela-base com elementos selecionados, um
+  **contorno vermelho fino tracejado** contorna a moldura avisando que você
+  saiu da área principal; basta arrastar de volta. Navegue com o **botão do
+  meio** (arrastar = pan) e a **roda** (zoom que segue o mouse até o fim).
+
+### 3.5 Seleção em conjunto, camadas e atalhos (M04)
+
+- **Rotação em conjunto (corpo rígido)**: com vários elementos selecionados
+  ou um **grupo**, girar a alça de rotação faz **todo o conjunto orbitar o
+  centro da caixa de seleção** — os elementos giram juntos, como um objeto
+  único (estilo CorelDRAW). A rotação **individual** continua disponível
+  com a ferramenta/inspeção do elemento isolado (função secundária).
+- **Grupos aceitam alterações em conjunto**: um **grupo** selecionado pode
+  ser **redimensionado** pelas alças, **rotacionado** e **recolorido** —
+  a alteração é aplicada a **todos os filhos** de uma vez (a caixa do grupo
+  é recalculada após a transformação).
+- **Seleção temporária com Ctrl**: em **qualquer** ferramenta (criar
+  retângulo, elipse, texto etc.), segure **Ctrl** e arraste no canvas para
+  abrir a **caixa de seleção** sem trocar de ferramenta — solte Ctrl para
+  voltar à ferramenta atual.
+- **Snap reforçado da moldura**: a **área de segurança** (tela base
+  1280×720) tem snap **mais forte que todos os demais** — segura por mais
+  tempo (tolerância maior), indicando que é o delimitador principal onde o
+  trabalho deve acontecer. O usuário pode sair, mas o encaixe de volta é
+  firme.
+- **Criar retângulo com duplo clique**: dê **dois cliques rápidos** na
+  ferramenta de criar retângulo e ela **cria automaticamente** um retângulo
+  no tamanho da tela base definida (ex.: 1280×720) na posição central do
+  canvas — independente da proporção configurada.
+- **Camadas (CorelDRAW)**: no menu **Objeto → Camadas** (ou atalhos
+  **Ctrl+↑ / Ctrl+↓**) o elemento selecionado **sobe uma camada** ou
+  **desce uma camada** na ordem de renderização; o submenu traz também
+  **"Trazer para frente"** e **"Enviar para trás"** (primeira/última
+  posição).
+- **Mover com as setas**: as **setas do teclado** movem o(s) elemento(s)
+  selecionado(s) 1 unidade por pressionada (10 com Shift). Como exigido,
+  **sem modificador** para não conflitar com Ctrl+setas das camadas.
+
 ## 4. O formato do projeto
 
 - Um projeto é uma **pasta** com o arquivo principal `projeto.ui.json` e as
@@ -246,7 +400,10 @@ Se você é uma IA (ou desenvolvedor) trabalhando em um projeto SeedUI:
 ## 10. Estado atual e próximas etapas
 
 - **Agora**: o SeedUI é um editor **standalone** (não conectado à engine).
-  Ele cria, edita e exporta projetos de interface.
+  Ele cria, edita e exporta projetos de interface. No canvas já funcionam
+  seleção, mover, redimensionar, **rotação**, **redimensionar em grupo**,
+  **desagrupar**, **guias inteligentes**, **cores** (paleta + seletor),
+  **clone com o botão direito** e **zoom até 16×** (ver §3.3 e §3.4).
 - **Futuro (opcional)**: integração com a engine — carregar os projetos
   exportados dentro do jogo e conectar funções reais aos IDs. O F1 e o F2
   continuam sendo da engine; o SeedUI apenas projeta as interfaces deles.

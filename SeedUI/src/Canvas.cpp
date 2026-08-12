@@ -1,5 +1,7 @@
 #include "Canvas.h"
 
+#include "ColorUtils.h"
+#include "Geo.h"
 #include "Theme.h"
 #include "imgui.h"
 
@@ -148,17 +150,43 @@ namespace seedui
 
             const float opacity = std::max(0.0f, std::min(1.0f,
                 e.estilos.value("opacidade", 1.0f)));
-            const ImU32 fill = ImGui::ColorConvertFloat4ToU32(Theme::Hex(0x2b2b2b, opacity));
+            // Cor do preenchimento/contorno vinda de estilos.cor_fundo e
+            // estilos.cor_borda ("#rrggbb"); fallback para o neutro atual.
+            float fillRgb[3] = { 0x2b / 255.0f, 0x2b / 255.0f, 0x2b / 255.0f };
+            float borderRgb[3] = { 0x5a / 255.0f, 0x5a / 255.0f, 0x5a / 255.0f };
+            if (e.estilos.is_object() && e.estilos.contains("cor_fundo"))
+                ColorUtils::ParseHex(e.estilos["cor_fundo"].get<std::string>(), fillRgb);
+            if (e.estilos.is_object() && e.estilos.contains("cor_borda"))
+                ColorUtils::ParseHex(e.estilos["cor_borda"].get<std::string>(), borderRgb);
+            const ImU32 fill = ImGui::ColorConvertFloat4ToU32(
+                ImVec4(fillRgb[0], fillRgb[1], fillRgb[2], opacity));
             // Elementos não selecionados usam uma borda neutra e discreta.
             // Azul/laranja ficam reservados exclusivamente para a seleção.
-            const ImU32 outline = ImGui::ColorConvertFloat4ToU32(Theme::Hex(0x5a5a5a, 0.82f));
+            const ImU32 outline = ImGui::ColorConvertFloat4ToU32(
+                ImVec4(borderRgb[0], borderRgb[1], borderRgb[2], 0.82f));
             const float outlineWidth = std::max(0.0f,
                 e.estilos.value("espessura_borda", 1.0f)) * scale;
             const ImU32 label = ImGui::ColorConvertFloat4ToU32(Theme::TextPrimary);
+            const float rotation = Geo::ElementRotation(e);
 
             if (e.tipo != "grupo")
             {
-                if (e.tipo == "elipse")
+                if (fabsf(rotation) > 0.01f)
+                {
+                    // Elemento rotacionado: tessela o contorno no espaço local,
+                    // aplica a rotação e desenha como polígono preenchido +
+                    // contorno com junções arredondadas (sem bicos).
+                    std::vector<ImVec2> pts;
+                    Geo::OutlineScreen(e, origin.x, origin.y, scale, pts, 64);
+                    if (pts.size() >= 3)
+                    {
+                        dl->AddConvexPolyFilled(pts.data(), (int)pts.size(), fill);
+                        if (outlineWidth > 0.0f)
+                            dl->AddPolyline(pts.data(), (int)pts.size(), outline,
+                                ImDrawFlags_Closed, outlineWidth);
+                    }
+                }
+                else if (e.tipo == "elipse")
                 {
                     const ImVec2 center((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
                     const ImVec2 radius((b.x - a.x) * 0.5f, (b.y - a.y) * 0.5f);
@@ -207,6 +235,32 @@ namespace seedui
                 DrawElement(f, origin, scale, dl);
         }
 
+        void DrawDashedLine(ImDrawList* dl, const ImVec2& a, const ImVec2& b, ImU32 color)
+        {
+            const float dx = b.x - a.x;
+            const float dy = b.y - a.y;
+            const float length = sqrtf(dx * dx + dy * dy);
+            if (length <= 0.0f) return;
+            const float ux = dx / length;
+            const float uy = dy / length;
+            for (float p = 0.0f; p < length; p += 10.0f)
+            {
+                const float end = std::min(length, p + 6.0f);
+                dl->AddLine(ImVec2(a.x + ux * p, a.y + uy * p),
+                            ImVec2(a.x + ux * end, a.y + uy * end), color, 1.5f);
+            }
+        }
+
+        void DrawDashedRect(ImDrawList* dl, const ImVec2& a, const ImVec2& b, ImU32 color)
+        {
+            const ImVec2 mn(std::min(a.x, b.x), std::min(a.y, b.y));
+            const ImVec2 mx(std::max(a.x, b.x), std::max(a.y, b.y));
+            DrawDashedLine(dl, mn, ImVec2(mx.x, mn.y), color);
+            DrawDashedLine(dl, ImVec2(mx.x, mn.y), mx, color);
+            DrawDashedLine(dl, mx, ImVec2(mn.x, mx.y), color);
+            DrawDashedLine(dl, ImVec2(mn.x, mx.y), mn, color);
+        }
+
         const Element* FindElement(const std::vector<Element>& elements,
                                    const std::string& id)
         {
@@ -240,16 +294,20 @@ namespace seedui
         const float availH = contentMax.y - contentMin.y;
         float scale = std::min(availW / baseW, availH / baseH);
         scale = std::max(0.25f, std::min(1.0f, scale));
-        scale *= std::max(0.25f, std::min(4.0f, zoom));
+        scale *= std::max(0.1f, std::min(32.0f, zoom));
         const ImVec2 frame(baseW * scale, baseH * scale);
         const ImVec2 origin(contentMin.x + (availW - frame.x) * 0.5f + panX,
                             contentMin.y + (availH - frame.y) * 0.5f + panY);
-        const bool inside = screenX >= origin.x && screenX <= origin.x + frame.x &&
-                            screenY >= origin.y && screenY <= origin.y + frame.y;
-        if (!inside && !limitarNaMoldura) return false;
-
-        projectX = std::max(0.0f, std::min(baseW, (screenX - origin.x) / scale));
-        projectY = std::max(0.0f, std::min(baseH, (screenY - origin.y) / scale));
+        // O canvas é um espaço de trabalho livre: a conversão nunca falha
+        // dentro da janela e devolve coordenadas de projeto além da moldura.
+        // limitarNaMoldura apenas clampeia o resultado (marquee antigo, etc.).
+        projectX = (screenX - origin.x) / scale;
+        projectY = (screenY - origin.y) / scale;
+        if (limitarNaMoldura)
+        {
+            projectX = std::max(0.0f, std::min(baseW, projectX));
+            projectY = std::max(0.0f, std::min(baseH, projectY));
+        }
         return true;
     }
 
@@ -271,7 +329,7 @@ namespace seedui
         const float availW = contentMax.x - contentMin.x;
         const float availH = contentMax.y - contentMin.y;
         scale = std::max(0.25f, std::min(1.0f, std::min(availW / baseW, availH / baseH)));
-        scale *= std::max(0.25f, std::min(4.0f, zoom));
+        scale *= std::max(0.1f, std::min(32.0f, zoom));
         const ImVec2 frame(baseW * scale, baseH * scale);
         const ImVec2 origin(contentMin.x + (availW - frame.x) * 0.5f + panX,
                             contentMin.y + (availH - frame.y) * 0.5f + panY);
@@ -300,23 +358,67 @@ namespace seedui
         // Fundo
         dl->AddRectFilled(min, max, bg);
 
-        // Grade em pontos: escura, discreta e legível em telas pequenas.
-        const float step = 24.0f;
-        const int majorEvery = 5;
-        for (float x = min.x + 24.0f; x <= max.x; x += step)
+        // Moldura da tela base — computada ANTES da grade para que o grid
+        // compartilhe o MESMO espaço de projeto dos elementos (acompanha
+        // pan/zoom e alinha exatamente com o snap de 8 unidades).
+        const float baseW = projeto ? (float)projeto->telaBaseLargura : 1280.0f;
+        const float baseH = projeto ? (float)projeto->telaBaseAltura : 720.0f;
+        const float viewportPadding = 44.0f;
+        const float ruler = 24.0f;
+        const ImVec2 contentMin(min.x + ruler + viewportPadding, min.y + ruler + viewportPadding);
+        const ImVec2 contentMax(max.x - viewportPadding, max.y - viewportPadding);
+        const float availW = contentMax.x - contentMin.x;
+        const float availH = contentMax.y - contentMin.y;
+        float viewScale = 1.0f;
+        if (baseW > 0.0f && baseH > 0.0f)
         {
-            const bool major = ((int)((x - min.x) / step + 0.5f) % majorEvery) == 0;
-            for (float y = min.y + 24.0f; y <= max.y; y += step)
+            const float scaleX = availW / baseW;
+            const float scaleY = availH / baseH;
+            viewScale = scaleX < scaleY ? scaleX : scaleY;
+            if (viewScale > 1.0f) viewScale = 1.0f;
+            if (viewScale < 0.25f) viewScale = 0.25f;
+            viewScale *= std::max(0.1f, std::min(32.0f, zoom));
+        }
+
+        const ImVec2 frame(baseW * viewScale, baseH * viewScale);
+        const ImVec2 origin(contentMin.x + (availW - frame.x) * 0.5f + panX,
+                            contentMin.y + (availH - frame.y) * 0.5f + panY);
+
+        // Grade em ESPAÇO DE PROJETO: minor a cada 8 unidades (o passo do
+        // snap), major a cada 40 (5×). Recortada à moldura da tela base e à
+        // janela visível — fica "dentro do compasso" do snap.
+        {
+            const float gridMinor = 8.0f;
+            const float gridMajor = 40.0f;
+            const bool drawMinor = gridMinor * viewScale >= 7.0f;
+            // A grade percorre o CANVAS INTEIRO (não só a moldura): o espaço de
+            // trabalho é livre e os pontos continuam alinhados às unidades do
+            // projeto (8/40), então o snap encaixa exatamente neles em qualquer
+            // ponto do canvas.
+            const float stepPx = drawMinor ? gridMinor : gridMajor;
+            const float stepScreen = stepPx * viewScale;
+            const int ix0 = (int)floorf((min.x - origin.x) / stepScreen);
+            const int iy0 = (int)floorf((min.y - origin.y) / stepScreen);
+            const int ix1 = (int)ceilf((max.x - origin.x) / stepScreen);
+            const int iy1 = (int)ceilf((max.y - origin.y) / stepScreen);
+            for (int ix = ix0; ix <= ix1; ++ix)
             {
-                const bool majorY = ((int)((y - min.y) / step + 0.5f) % majorEvery) == 0;
-                const bool majorDot = major && majorY;
-                dl->AddCircleFilled(ImVec2(x, y), majorDot ? 1.45f : 1.05f,
-                                    majorDot ? gridMaj : gridMin, 8);
+                const float px = ix * stepPx;
+                const bool xMajor = drawMinor ? (ix % 5 == 0) : true;
+                for (int iy = iy0; iy <= iy1; ++iy)
+                {
+                    if (!drawMinor && !xMajor) continue;
+                    const bool major = xMajor && (drawMinor ? (iy % 5 == 0) : true);
+                    dl->AddCircleFilled(
+                        ImVec2(origin.x + px * viewScale, origin.y + iy * stepPx * viewScale),
+                        major ? 1.45f : 1.05f, major ? gridMaj : gridMin, 8);
+                }
             }
         }
 
-        // Réguas
-        const float ruler = 24.0f;
+        // Réguas (margens da janela)
+        const float step = 24.0f;
+        const int majorEvery = 5;
         if (exibirReguas)
         {
             const ImU32 rulerBg = ImGui::ColorConvertFloat4ToU32(
@@ -345,29 +447,6 @@ namespace seedui
                             major ? textSec : border, 1.0f);
             }
         }
-
-        // Moldura da tela base
-        const float baseW = projeto ? (float)projeto->telaBaseLargura : 1280.0f;
-        const float baseH = projeto ? (float)projeto->telaBaseAltura : 720.0f;
-        const float viewportPadding = 44.0f;
-        const ImVec2 contentMin(min.x + ruler + viewportPadding, min.y + ruler + viewportPadding);
-        const ImVec2 contentMax(max.x - viewportPadding, max.y - viewportPadding);
-        const float availW = contentMax.x - contentMin.x;
-        const float availH = contentMax.y - contentMin.y;
-        float viewScale = 1.0f;
-        if (baseW > 0.0f && baseH > 0.0f)
-        {
-            const float scaleX = availW / baseW;
-            const float scaleY = availH / baseH;
-            viewScale = scaleX < scaleY ? scaleX : scaleY;
-            if (viewScale > 1.0f) viewScale = 1.0f;
-            if (viewScale < 0.25f) viewScale = 0.25f;
-            viewScale *= std::max(0.25f, std::min(4.0f, zoom));
-        }
-
-        const ImVec2 frame(baseW * viewScale, baseH * viewScale);
-        const ImVec2 origin(contentMin.x + (availW - frame.x) * 0.5f + panX,
-                            contentMin.y + (availH - frame.y) * 0.5f + panY);
         if (!projeto || projeto->telas.empty())
         {
             const char* hint = "Crie um projeto para começar (Arquivo -> Novo)";
@@ -401,8 +480,99 @@ namespace seedui
         for (const Element& e : modo.raiz)
             DrawElement(e, origin, viewScale, dl);
 
-        if (elementosSelecionados)
+        // Área de segurança: se algum elemento selecionado estiver FORA da
+        // tela base, um contorno vermelho fino (como linha-guia) contorna a
+        // moldura — o usuário pode sair, mas é avisado do limite principal.
         {
+            bool foraDaMoldura = false;
+            if (elementosSelecionados)
+            {
+                for (const std::string& selectedId : *elementosSelecionados)
+                {
+                    const Element* sel = FindElement(modo.raiz, selectedId);
+                    if (!sel || !sel->visivel) continue;
+                    float bx0 = 0.0f, by0 = 0.0f, bx1 = 0.0f, by1 = 0.0f;
+                    Geo::RotatedAABB(*sel, bx0, by0, bx1, by1);
+                    if (bx0 < 0.0f || by0 < 0.0f ||
+                        bx1 > baseW || by1 > baseH)
+                    {
+                        foraDaMoldura = true;
+                        break;
+                    }
+                }
+            }
+            if (foraDaMoldura)
+            {
+                const ImU32 safeRed = ImGui::ColorConvertFloat4ToU32(
+                    Theme::Hex(0xe74c3c, 0.85f));
+                DrawDashedRect(dl, origin,
+                               ImVec2(origin.x + frame.x, origin.y + frame.y),
+                               safeRed);
+            }
+        }
+
+        if (elementosSelecionados && !elementosSelecionados->empty())
+        {
+            const bool multiSelecao = elementosSelecionados->size() > 1;
+            if (multiSelecao)
+            {
+                // Caixa de seleção conjunta (M04): quando mais de um elemento
+                // está selecionado, a caixa que move/redimensiona/rotaciona
+                // cobre TODO o corpo do conjunto — não cada elemento isolado.
+                float uMinX = FLT_MAX, uMinY = FLT_MAX, uMaxX = -FLT_MAX, uMaxY = -FLT_MAX;
+                bool any = false;
+                for (const std::string& selectedId : *elementosSelecionados)
+                {
+                    const Element* selected = FindElement(modo.raiz, selectedId);
+                    if (!selected || !selected->visivel) continue;
+                    float bx0 = 0.0f, by0 = 0.0f, bx1 = 0.0f, by1 = 0.0f;
+                    Geo::RotatedAABB(*selected, bx0, by0, bx1, by1);
+                    uMinX = std::min(uMinX, bx0);
+                    uMinY = std::min(uMinY, by0);
+                    uMaxX = std::max(uMaxX, bx1);
+                    uMaxY = std::max(uMaxY, by1);
+                    const ImVec2 ia(origin.x + bx0 * viewScale, origin.y + by0 * viewScale);
+                    const ImVec2 ib(origin.x + bx1 * viewScale, origin.y + by1 * viewScale);
+                    dl->AddRect(ia, ib, IM_COL32(255, 255, 255, 45), 0.0f, 0, 1.0f);
+                    any = true;
+                }
+                if (any && uMaxX > uMinX && uMaxY > uMinY)
+                {
+                    const ImU32 selection = ImGui::ColorConvertFloat4ToU32(Theme::AccentBlue);
+                    const ImVec2 a(origin.x + uMinX * viewScale, origin.y + uMinY * viewScale);
+                    const ImVec2 b(origin.x + uMaxX * viewScale, origin.y + uMaxY * viewScale);
+                    dl->AddRect(a, b, selection, 0.0f, 0, 1.5f);
+                    const float hs = 4.0f;
+                    const ImVec2 points[] = {
+                        a, ImVec2((a.x + b.x) * 0.5f, a.y), ImVec2(b.x, a.y),
+                        ImVec2(a.x, (a.y + b.y) * 0.5f), ImVec2(b.x, (a.y + b.y) * 0.5f),
+                        ImVec2(a.x, b.y), ImVec2((a.x + b.x) * 0.5f, b.y), b
+                    };
+                    for (const ImVec2& point : points)
+                    {
+                        dl->AddRectFilled(ImVec2(point.x - hs, point.y - hs),
+                                          ImVec2(point.x + hs, point.y + hs),
+                                          IM_COL32(245, 245, 245, 255));
+                        dl->AddRect(ImVec2(point.x - hs, point.y - hs),
+                                    ImVec2(point.x + hs, point.y + hs), selection);
+                    }
+                    // Alça de rotação acima do topo da caixa conjunta.
+                    const float cx = (uMinX + uMaxX) * 0.5f;
+                    const float topY = uMinY;
+                    const float sticker = 18.0f / std::max(0.25f, viewScale);
+                    const float handleScreenX = origin.x + cx * viewScale;
+                    const float handleScreenY = origin.y + (topY - sticker) * viewScale;
+                    const float topScreenY = origin.y + topY * viewScale;
+                    dl->AddLine(ImVec2(handleScreenX, topScreenY),
+                                ImVec2(handleScreenX, handleScreenY), selection, 1.5f);
+                    const float hr = 5.0f;
+                    dl->AddCircleFilled(ImVec2(handleScreenX, handleScreenY), hr, selection, 16);
+                    dl->AddCircle(ImVec2(handleScreenX, handleScreenY), hr,
+                                  IM_COL32(255, 255, 255, 210), 16, 1.5f);
+                }
+            }
+            else
+            {
             for (const std::string& selectedId : *elementosSelecionados)
             {
                 const Element* selected = FindElement(modo.raiz, selectedId);
@@ -411,19 +581,35 @@ namespace seedui
                 const float y = selected->transformacao.value("y", 0.0f);
                 const float w = selected->transformacao.value("largura", 160.0f);
                 const float h = selected->transformacao.value("altura", 32.0f);
-                const ImVec2 a(origin.x + x * viewScale, origin.y + y * viewScale);
-                const ImVec2 b(origin.x + (x + w) * viewScale,
-                               origin.y + (y + h) * viewScale);
                 const bool primary = elementoPrincipalId && selectedId == elementoPrincipalId;
                 const ImU32 selection = ImGui::ColorConvertFloat4ToU32(
                     primary ? Theme::AccentOrange : Theme::AccentBlue);
-                CornerRadii selectionRadii = GetCornerRadii(*selected, w, h);
-                selectionRadii.topLeft *= viewScale;
-                selectionRadii.topRight *= viewScale;
-                selectionRadii.bottomRight *= viewScale;
-                selectionRadii.bottomLeft *= viewScale;
-                RoundedRectPath(dl, a, b, selectionRadii);
-                dl->PathStroke(selection, ImDrawFlags_Closed, primary ? 1.5f : 1.0f);
+                const bool rotated = Geo::ElementRotation(*selected) != 0.0f;
+
+                float boxMinX = 0.0f, boxMinY = 0.0f, boxMaxX = 0.0f, boxMaxY = 0.0f;
+                Geo::RotatedAABB(*selected, boxMinX, boxMinY, boxMaxX, boxMaxY);
+                const ImVec2 a(origin.x + boxMinX * viewScale, origin.y + boxMinY * viewScale);
+                const ImVec2 b(origin.x + boxMaxX * viewScale, origin.y + boxMaxY * viewScale);
+                if (rotated)
+                {
+                    // Contorno segue o elemento rotacionado (resolve a caixa
+                    // AABB que ficaria "gorda" nas quinas).
+                    std::vector<ImVec2> outline;
+                    Geo::OutlineScreen(*selected, origin.x, origin.y, viewScale, outline, 64);
+                    if (outline.size() >= 3)
+                        dl->AddPolyline(outline.data(), (int)outline.size(), selection,
+                            ImDrawFlags_Closed, primary ? 1.5f : 1.0f);
+                }
+                else
+                {
+                    CornerRadii selectionRadii = GetCornerRadii(*selected, w, h);
+                    selectionRadii.topLeft *= viewScale;
+                    selectionRadii.topRight *= viewScale;
+                    selectionRadii.bottomRight *= viewScale;
+                    selectionRadii.bottomLeft *= viewScale;
+                    RoundedRectPath(dl, a, b, selectionRadii);
+                    dl->PathStroke(selection, ImDrawFlags_Closed, primary ? 1.5f : 1.0f);
+                }
                 if (!primary || selected->bloqueado) continue;
                 if (selected->tipo == "grupo") continue;
 
@@ -442,7 +628,7 @@ namespace seedui
                                 ImVec2(point.x + hs, point.y + hs), selection);
                 }
 
-                if (selected->tipo == "elipse" || selected->tipo == "poligono")
+                if (selected->tipo == "elipse" || selected->tipo == "poligono" || rotated)
                     continue;
 
                 // Cada circulo controla somente a quina onde aparece.
@@ -476,6 +662,34 @@ namespace seedui
                                   cornerSelected ? IM_COL32(255, 255, 255, 255) : selection,
                                   16, cornerSelected ? 2.0f : 1.5f);
                 }
+
+                // Alça de rotação: fica acima da borda superior do elemento,
+                // na direção da normal transformada pela rotação.
+                {
+                    float px = 0.0f, py = 0.0f;
+                    Geo::ElementPivot(*selected, px, py);
+                    const float eh2 = h * 0.5f;
+                    const float rotRad = Geo::DegToRad(Geo::ElementRotation(*selected));
+                    const float cosR = cosf(rotRad);
+                    const float sinR = sinf(rotRad);
+                    // Ponto do topo central no espaço local (0,-eh2) -> projeto.
+                    const float topX = px + eh2 * sinR;
+                    const float topY = py - eh2 * cosR;
+                    const float dirX = sinR;
+                    const float dirY = -cosR;
+                    const float sticker = 18.0f / std::max(0.25f, viewScale);
+                    const float handleScreenX = origin.x + (topX + dirX * sticker) * viewScale;
+                    const float handleScreenY = origin.y + (topY + dirY * sticker) * viewScale;
+                    const float topScreenX = origin.x + topX * viewScale;
+                    const float topScreenY = origin.y + topY * viewScale;
+                    dl->AddLine(ImVec2(topScreenX, topScreenY),
+                                ImVec2(handleScreenX, handleScreenY), selection, 1.5f);
+                    const float hr = 5.0f;
+                    dl->AddCircleFilled(ImVec2(handleScreenX, handleScreenY), hr, selection, 16);
+                    dl->AddCircle(ImVec2(handleScreenX, handleScreenY), hr,
+                                  IM_COL32(255, 255, 255, 210), 16, 1.5f);
+                }
+            }
             }
         }
     }

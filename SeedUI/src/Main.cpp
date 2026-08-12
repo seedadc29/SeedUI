@@ -8,6 +8,8 @@
 
 #include "App.h"
 #include "Project.h"
+#include "SmartGuides.h"
+#include "AlignUtils.h"
 
 namespace
 {
@@ -154,6 +156,558 @@ namespace
               "grupo calcula os limites visuais da selecao");
         check(Project::ElementoNoPonto(groupMode, 30.0f, 40.0f) == grouped,
               "clique dentro do grupo seleciona a unidade agrupada");
+
+        // Desagrupar (M04): filhos voltam ao nível do grupo preservando posição.
+        Element* groupedPtr = Project::ResolverId(groupMode, groupId);
+        groupedPtr->bloqueado = true;
+        check(!Project::DesagruparElementos(groupMode, groupId),
+              "grupo bloqueado recusa desagrupar");
+        groupedPtr->bloqueado = false;
+        check(Project::DesagruparElementos(groupMode, groupId),
+              "desagrupar remove o grupo");
+        check(groupMode.raiz.size() == 2 &&
+              Project::ResolverId(groupMode, "painel_a") &&
+              Project::ResolverId(groupMode, "painel_b"),
+              "desagrupar devolve os filhos ao nivel do grupo");
+        Element* ungroupedA = Project::ResolverId(groupMode, "painel_a");
+        Element* ungroupedB = Project::ResolverId(groupMode, "painel_b");
+        check(ungroupedA && ungroupedA->transformacao.value("x", -1.0f) == 10.0f &&
+              ungroupedB && ungroupedB->transformacao.value("y", -1.0f) == 140.0f,
+              "desagrupar preserva a posicao dos elementos");
+
+        // Clone com o botão direito (M04): cópia com IDs novos ao lado do
+        // original, posição preservada; bloqueado recusa.
+        {
+            Modo cloneMode;
+            Element original = makeElement("origem", "painel");
+            original.transformacao = { { "x", 40.0f }, { "y", 60.0f },
+                                       { "largura", 200.0f }, { "altura", 80.0f } };
+            original.filhos.push_back(makeElement("origem_filho", "texto"));
+            cloneMode.raiz.push_back(std::move(original));
+            Project cloneProject;
+            cloneProject.CriarNovo("Clone", 1280, 720);
+            const std::string cloneId =
+                Project::ClonarElemento(cloneMode, cloneProject, "origem");
+            check(!cloneId.empty() && cloneId != "origem",
+                  "clone recebe ID novo");
+            check(cloneMode.raiz.size() == 2 &&
+                  cloneMode.raiz[1].id == cloneId,
+                  "clone entra logo apos o original");
+            Element* clone = Project::ResolverId(cloneMode, cloneId);
+            check(clone && clone->transformacao.value("x", -1.0f) == 40.0f &&
+                  clone->filhos.size() == 1 &&
+                  clone->filhos[0].id != "origem_filho",
+                  "clone preserva posicao e renomeia descendentes");
+            cloneMode.raiz[0].bloqueado = true;
+            check(Project::ClonarElemento(cloneMode, cloneProject, "origem").empty(),
+                  "elemento bloqueado recusa clone");
+        }
+
+        // Guias inteligentes (M04): encaixe de bordas/centros no arraste.
+        {
+            Modo guideMode;
+            Element moving = makeElement("move", "painel");
+            moving.transformacao = { { "x", 100.0f }, { "y", 100.0f },
+                                     { "largura", 200.0f }, { "altura", 50.0f } };
+            Element target = makeElement("alvo", "painel");
+            target.transformacao = { { "x", 500.0f }, { "y", 100.0f },
+                                     { "largura", 120.0f }, { "altura", 50.0f } };
+            guideMode.raiz.push_back(std::move(moving));
+            guideMode.raiz.push_back(std::move(target));
+
+            std::vector<SmartGuides::Rect> starts = { { 100.0f, 100.0f, 200.0f, 50.0f } };
+            std::vector<std::string> selection = { "move" };
+
+            // Borda direita a 3px da esquerda do alvo -> encaixa em dx=200.
+            float dx = 197.0f, dy = 5.0f, gx = -1.0f, gy = -1.0f;
+            SmartGuides::Apply(guideMode, starts, selection, dx, dy,
+                               1280.0f, 720.0f, 5.0f, gx, gy);
+            check(dx == 200.0f && gx == 500.0f,
+                  "guia inteligente encaixa borda direita na esquerda do alvo");
+            check(dy == 5.0f && gy == -1.0f,
+                  "sem encaixe vertical fora da tolerancia");
+
+            // Centro do elemento puxado ao centro da tela (640).
+            dx = 441.8f; dy = 0.0f; gx = gy = -1.0f;
+            starts[0] = { 100.0f, 100.0f, 200.0f, 50.0f };
+            SmartGuides::Apply(guideMode, starts, selection, dx, dy,
+                               1280.0f, 720.0f, 5.0f, gx, gy);
+            check(dx == 440.0f && gx == 640.0f,
+                  "guia inteligente encaixa centro no centro da tela");
+
+            // Fora da tolerância: nenhum ajuste.
+            dx = 150.0f; dy = 0.0f; gx = gy = -1.0f;
+            starts[0] = { 100.0f, 100.0f, 200.0f, 50.0f };
+            SmartGuides::Apply(guideMode, starts, selection, dx, dy,
+                               1280.0f, 720.0f, 5.0f, gx, gy);
+            check(dx == 150.0f && gx == -1.0f,
+                  "guia inteligente ignora posicao fora da tolerancia");
+
+            // Seleção contendo os dois: sem candidatas além da tela.
+            selection.push_back("alvo");
+            dx = 197.0f; dy = 0.0f; gx = gy = -1.0f;
+            starts = { { 100.0f, 100.0f, 200.0f, 50.0f },
+                       { 500.0f, 100.0f, 120.0f, 50.0f } };
+            SmartGuides::Apply(guideMode, starts, selection, dx, dy,
+                               1280.0f, 720.0f, 5.0f, gx, gy);
+            check(gx == -1.0f && gy == -1.0f,
+                  "guias ignoram elementos da propria selecao");
+
+            // Moldura da tela-base: snap FORTE (tolerância 3x). Elemento a
+            // 14px da borda esquerda (dentro de 15px) encaixa na moldura,
+            // mesmo estando fora da tolerância normal de 5px.
+            Modo frameMode;
+            Element fm = makeElement("move", "painel");
+            fm.transformacao = { { "x", 10.0f }, { "y", 100.0f },
+                                 { "largura", 100.0f }, { "altura", 40.0f } };
+            frameMode.raiz.push_back(std::move(fm));
+            selection = { "move" };
+            dx = -24.0f; dy = 0.0f; gx = gy = -1.0f;
+            starts = { { 10.0f, 100.0f, 100.0f, 40.0f } };
+            SmartGuides::Apply(frameMode, starts, selection, dx, dy,
+                               1280.0f, 720.0f, 5.0f, gx, gy);
+            check(dx == -10.0f && gx == 0.0f && dy == 0.0f && gy == -1.0f,
+                  "moldura tem snap forte (3x tolerancia) e vence os demais");
+        }
+
+        // Guias de espaçamento (M04): replicam espaços repetidos.
+        {
+            Modo spacingMode;
+            Element a = makeElement("a", "painel");
+            a.transformacao = { { "x", 0.0f }, { "y", 0.0f },
+                                { "largura", 100.0f }, { "altura", 40.0f } };
+            Element b = makeElement("b", "painel");
+            b.transformacao = { { "x", 120.0f }, { "y", 0.0f },
+                                { "largura", 100.0f }, { "altura", 40.0f } };
+            Element c = makeElement("c", "painel");
+            c.transformacao = { { "x", 240.0f }, { "y", 0.0f },
+                                { "largura", 100.0f }, { "altura", 40.0f } };
+            Element mov = makeElement("move", "painel");
+            mov.transformacao = { { "x", 358.0f }, { "y", 0.0f },
+                                  { "largura", 100.0f }, { "altura", 40.0f } };
+            spacingMode.raiz.push_back(std::move(a));
+            spacingMode.raiz.push_back(std::move(b));
+            spacingMode.raiz.push_back(std::move(c));
+            spacingMode.raiz.push_back(std::move(mov));
+
+            std::vector<SmartGuides::Rect> s = { { 358.0f, 0.0f, 100.0f, 40.0f } };
+            std::vector<std::string> sel = { "move" };
+            float dx = 0.0f, dy = 0.0f;
+            float x1 = -1.0f, x2 = -1.0f, y1 = -1.0f, y2 = -1.0f;
+            SmartGuides::ApplySpacing(spacingMode, s, sel, dx, dy, 4.0f,
+                                       0.0f, 0.0f, x1, x2, y1, y2);
+            // Espaço de 18px -> 20px (repetido entre a/b e b/c): dx += 2 e
+            // guias em 340 e 360 delimitando o espaço repetido.
+            check(dx == 2.0f && x1 == 340.0f && x2 == 360.0f,
+                  "guia de espacamento replica espaco repetido dos vizinhos");
+            check(y1 == -1.0f && y2 == -1.0f,
+                  "sem guia de espacamento em eixo sem repeticao");
+        }
+
+        // Preview de espaçamento com Shift (M04): linhas-guia acima/abaixo da
+        // fileira + ticks delimitando cada espaço entre peças.
+        {
+            Modo previewMode;
+            Element p1 = makeElement("p1", "painel");
+            p1.transformacao = { { "x", 0.0f }, { "y", 0.0f },
+                                 { "largura", 100.0f }, { "altura", 40.0f } };
+            Element p2 = makeElement("p2", "painel");
+            p2.transformacao = { { "x", 120.0f }, { "y", 0.0f },
+                                 { "largura", 100.0f }, { "altura", 40.0f } };
+            Element p3 = makeElement("p3", "painel");
+            p3.transformacao = { { "x", 240.0f }, { "y", 0.0f },
+                                 { "largura", 100.0f }, { "altura", 40.0f } };
+            Element pmove = makeElement("move", "painel");
+            pmove.transformacao = { { "x", 360.0f }, { "y", 0.0f },
+                                    { "largura", 100.0f }, { "altura", 40.0f } };
+            previewMode.raiz.push_back(std::move(p1));
+            previewMode.raiz.push_back(std::move(p2));
+            previewMode.raiz.push_back(std::move(p3));
+            previewMode.raiz.push_back(std::move(pmove));
+
+            std::vector<std::string> sel = { "move" };
+            std::vector<SmartGuides::GuideLine> lines;
+            std::vector<SmartGuides::GuideLabel> labels;
+            SmartGuides::ComputeSpacingPreview(previewMode, sel, 4.0f,
+                                               7.0f, -1.0f, lines, labels);
+            // Fileira de 4: 4 objetos x 4 traços = 16 traços nas quinas das
+            // laterais (todos horizontais); 3 rótulos de distância.
+            check(lines.size() == 16,
+                  "preview Shift: 16 tracos nas quinas das laterais (4 objetos)");
+            check(labels.size() == 3,
+                  "preview Shift rotula os 3 espacos");
+            int horizontal = 0;
+            for (const auto& line : lines)
+                if (line.horizontal) ++horizontal;
+            check(horizontal == 16,
+                  "preview Shift: todos os tracos da fileira sao horizontais");
+
+            // Com valor previsto (engatado): os rótulos do espaço previsto
+            // ficam destacados para o usuário.
+            SmartGuides::ComputeSpacingPreview(previewMode, sel, 4.0f, 7.0f,
+                                               20.0f, lines, labels);
+            int highlighted = 0;
+            for (const auto& label : labels)
+                if (label.highlight) ++highlighted;
+            check(highlighted == 3,
+                  "preview Shift destaca os rotulos do espaco previsto (20)");
+
+            // Coluna vertical: traços verticais nos cantos de topo/base.
+            Modo colMode;
+            Element c1 = makeElement("c1", "painel");
+            c1.transformacao = { { "x", 0.0f }, { "y", 0.0f },
+                                 { "largura", 100.0f }, { "altura", 40.0f } };
+            Element c2 = makeElement("c2", "painel");
+            c2.transformacao = { { "x", 0.0f }, { "y", 120.0f },
+                                 { "largura", 100.0f }, { "altura", 40.0f } };
+            Element cmove = makeElement("cmove", "painel");
+            cmove.transformacao = { { "x", 0.0f }, { "y", 240.0f },
+                                    { "largura", 100.0f }, { "altura", 40.0f } };
+            colMode.raiz.push_back(std::move(c1));
+            colMode.raiz.push_back(std::move(c2));
+            colMode.raiz.push_back(std::move(cmove));
+            std::vector<std::string> selC = { "cmove" };
+            SmartGuides::ComputeSpacingPreview(colMode, selC, 4.0f, 7.0f,
+                                               -1.0f, lines, labels);
+            check(lines.size() == 12 && labels.size() == 2,
+                  "preview Shift: coluna gera 12 tracos verticais e 2 rotulos");
+            horizontal = 0;
+            for (const auto& line : lines)
+                if (line.horizontal) ++horizontal;
+            check(horizontal == 0,
+                  "preview Shift: tracos da coluna sao verticais");
+
+            // Elemento com ALTURA diferente não forma fileira: sem traços.
+            Modo mismatchMode;
+            Element m1 = makeElement("m1", "painel");
+            m1.transformacao = { { "x", 0.0f }, { "y", 0.0f },
+                                 { "largura", 100.0f }, { "altura", 40.0f } };
+            Element m2 = makeElement("m2", "painel");
+            m2.transformacao = { { "x", 120.0f }, { "y", 0.0f },
+                                 { "largura", 100.0f }, { "altura", 60.0f } };
+            mismatchMode.raiz.push_back(std::move(m1));
+            mismatchMode.raiz.push_back(std::move(m2));
+            std::vector<std::string> sel2 = { "m2" };
+            SmartGuides::ComputeSpacingPreview(mismatchMode, sel2, 4.0f,
+                                               7.0f, -1.0f, lines, labels);
+            check(lines.empty() && labels.empty(),
+                  "preview Shift ignora elementos de alturas diferentes");
+        }
+
+        // Previsão ASSERTIVA: dois objetos com espaço de 62 preveem 62 para
+        // a próxima peça (referência única — não precisa estar repetida).
+        {
+            Modo predictMode;
+            Element a = makeElement("a", "painel");
+            a.transformacao = { { "x", 0.0f }, { "y", 0.0f },
+                                { "largura", 100.0f }, { "altura", 40.0f } };
+            Element b = makeElement("b", "painel");
+            b.transformacao = { { "x", 162.0f }, { "y", 0.0f },
+                                { "largura", 100.0f }, { "altura", 40.0f } };
+            Element mov = makeElement("move", "painel");
+            mov.transformacao = { { "x", 320.0f }, { "y", 0.0f },
+                                  { "largura", 100.0f }, { "altura", 40.0f } };
+            predictMode.raiz.push_back(std::move(a));
+            predictMode.raiz.push_back(std::move(b));
+            predictMode.raiz.push_back(std::move(mov));
+
+            std::vector<SmartGuides::Rect> s = { { 320.0f, 0.0f, 100.0f, 40.0f } };
+            std::vector<std::string> sel = { "move" };
+            float dx = 0.0f, dy = 0.0f;
+            float x1 = -1.0f, x2 = -1.0f, y1 = -1.0f, y2 = -1.0f;
+            SmartGuides::ApplySpacing(predictMode, s, sel, dx, dy, 10.0f,
+                                       0.0f, 0.0f, x1, x2, y1, y2);
+            // Espaço atual 58 (320-262); prevê 62: dx += 4, guias 262..324.
+            check(dx == 4.0f && x1 == 262.0f && x2 == 324.0f,
+                  "previsao assertiva: dois objetos com 62 preveem 62");
+            check(y1 == -1.0f && y2 == -1.0f,
+                  "sem previsao no eixo vertical");
+        }
+
+        // ENCADEAMENTO COMPLETO (grade 8px + previsão): com a referência de
+        // 32, qualquer posição bruta próxima pousa EXATAMENTE em 32 — não em
+        // 31 ou 33 (a previsão vence a grade e o alvo é o valor exato).
+        {
+            Modo m;
+            Element a = makeElement("a", "painel");
+            a.transformacao = { { "x", 0.0f }, { "y", 0.0f },
+                                { "largura", 100.0f }, { "altura", 40.0f } };
+            Element b = makeElement("b", "painel");
+            b.transformacao = { { "x", 132.0f }, { "y", 0.0f },
+                                { "largura", 100.0f }, { "altura", 40.0f } };
+            m.raiz.push_back(std::move(a));
+            m.raiz.push_back(std::move(b));
+
+            // Posições brutas do clone que a grade levaria a 31/33/32:
+            // todas devem terminar com gap EXATO 32 (clone.left == 264).
+            const float rawPositions[] = { 259.0f, 261.0f, 263.0f, 265.0f, 267.0f };
+            bool allExact = true;
+            for (float raw : rawPositions)
+            {
+                float dx = 0.0f, dy = 0.0f;
+                float x1 = -1.0f, x2 = -1.0f, y1 = -1.0f, y2 = -1.0f;
+                std::vector<SmartGuides::Rect> s = { { raw, 0.0f, 100.0f, 40.0f } };
+                // Grade de 8px primeiro (como no App).
+                dx = roundf((raw + dx) / 8.0f) * 8.0f - raw;
+                // Re-puxada (sem candidatas) + previsão por último.
+                SmartGuides::ApplySpacing(m, s, { "move" }, dx, dy, 12.0f,
+                                          0.0f, 0.0f, x1, x2, y1, y2);
+                const float finalX = raw + dx;
+                const float gap = finalX - 232.0f;
+                if (fabsf(gap - 32.0f) > 0.01f) allExact = false;
+            }
+            check(allExact,
+                  "grade+previsao pousam EXATAMENTE em 32 (nunca 31 ou 33)");
+        }
+
+        // Referência NÃO inteira: uma referência de 32.4 prevê 32.4 exato
+        // (sem arredondar a 0.5 — antes pousava em 32.5 e exibia 33).
+        {
+            Modo m;
+            Element a = makeElement("a", "painel");
+            a.transformacao = { { "x", 0.0f }, { "y", 0.0f },
+                                { "largura", 100.0f }, { "altura", 40.0f } };
+            Element b = makeElement("b", "painel");
+            b.transformacao = { { "x", 132.4f }, { "y", 0.0f },
+                                { "largura", 100.0f }, { "altura", 40.0f } };
+            m.raiz.push_back(std::move(a));
+            m.raiz.push_back(std::move(b));
+
+            std::vector<SmartGuides::Rect> s = { { 264.1f, 0.0f, 100.0f, 40.0f } };
+            float dx = 0.0f, dy = 0.0f;
+            float x1 = -1.0f, x2 = -1.0f, y1 = -1.0f, y2 = -1.0f;
+            SmartGuides::ApplySpacing(m, s, { "move" }, dx, dy, 12.0f,
+                                      0.0f, 0.0f, x1, x2, y1, y2);
+            // gap = 264.1 - 232.4 = 31.7 -> alvo 32.4 exato: dx += 0.7.
+            check(fabsf(dx - 0.7f) < 0.01f && fabsf(x2 - x1 - 32.4f) < 0.01f,
+                  "referencia nao inteira prevê valor exato (32.4)");
+        }
+
+        // AS 4 DIREÇÕES do encaixe de espaçamento (M04): a previsão precisa
+        // pousar EXATAMENTE no valor de referência em qualquer orientação.
+        // Referência vertical: a(0,0,100,40) e b(0,72,100,40) -> gap 32.
+        {
+            Modo m;
+            Element a = makeElement("a", "painel");
+            a.transformacao = { { "x", 0.0f }, { "y", 0.0f },
+                                { "largura", 100.0f }, { "altura", 40.0f } };
+            Element b = makeElement("b", "painel");
+            b.transformacao = { { "x", 0.0f }, { "y", 72.0f },
+                                { "largura", 100.0f }, { "altura", 40.0f } };
+            m.raiz.push_back(std::move(a));
+            m.raiz.push_back(std::move(b));
+
+            // Seleção ABAIXO do vizinho (gap = selTop - (o.y + o.h)):
+            // bruto 28 em vez de 32 -> deve pousar exato em 32.
+            {
+                std::vector<SmartGuides::Rect> s = { { 0.0f, 140.0f, 100.0f, 40.0f } };
+                float dx = 0.0f, dy = 0.0f;
+                float x1 = -1.0f, x2 = -1.0f, y1 = -1.0f, y2 = -1.0f;
+                SmartGuides::ApplySpacing(m, s, { "move" }, dx, dy, 12.0f,
+                                          0.0f, 0.0f, x1, x2, y1, y2);
+                const float gap = (140.0f + dy) - 112.0f;
+                check(fabsf(gap - 32.0f) < 0.01f && y1 == 112.0f && y2 == 144.0f,
+                      "vertical ABAIXO: previsao pousa exatamente em 32");
+            }
+            // Seleção ACIMA do vizinho (gap = o.y - selBottom):
+            // bruto 28 -> deve pousar exato em 32.
+            {
+                std::vector<SmartGuides::Rect> s = { { 0.0f, -68.0f, 100.0f, 40.0f } };
+                float dx = 0.0f, dy = 0.0f;
+                float x1 = -1.0f, x2 = -1.0f, y1 = -1.0f, y2 = -1.0f;
+                SmartGuides::ApplySpacing(m, s, { "move" }, dx, dy, 12.0f,
+                                          0.0f, 0.0f, x1, x2, y1, y2);
+                const float gap = 0.0f - ((-68.0f + dy) + 40.0f);
+                check(fabsf(gap - 32.0f) < 0.01f && y1 == -32.0f && y2 == 0.0f,
+                      "vertical ACIMA: previsao pousa exatamente em 32");
+            }
+        }
+        // Referência horizontal DIREITA (gap = selLeft - (o.x + o.w)):
+        // a(0,0,100,40) e b(132,0,100,40) -> gap 32; bruto 28 -> exato 32.
+        {
+            Modo m;
+            Element a = makeElement("a", "painel");
+            a.transformacao = { { "x", 0.0f }, { "y", 0.0f },
+                                { "largura", 100.0f }, { "altura", 40.0f } };
+            Element b = makeElement("b", "painel");
+            b.transformacao = { { "x", 132.0f }, { "y", 0.0f },
+                                { "largura", 100.0f }, { "altura", 40.0f } };
+            m.raiz.push_back(std::move(a));
+            m.raiz.push_back(std::move(b));
+            std::vector<SmartGuides::Rect> s = { { 260.0f, 0.0f, 100.0f, 40.0f } };
+            float dx = 0.0f, dy = 0.0f;
+            float x1 = -1.0f, x2 = -1.0f, y1 = -1.0f, y2 = -1.0f;
+            SmartGuides::ApplySpacing(m, s, { "move" }, dx, dy, 12.0f,
+                                      0.0f, 0.0f, x1, x2, y1, y2);
+            const float gap = (260.0f + dx) - 232.0f;
+            check(fabsf(gap - 32.0f) < 0.01f && x1 == 232.0f && x2 == 264.0f,
+                  "horizontal DIREITA: previsao pousa exatamente em 32");
+        }
+
+        // CRUZAMENTO (arrasto rápido, M04): o gap pulou de 54 para 18 num
+        // único frame, passando POR CIMA do alvo 32 — mesmo estando fora da
+        // tolerância (|18-32|=14 > 12), o encaixe engata e pousa exato em 32.
+        // Antes, o cursor "pulava" a zona do ímã e a previsão não disparava.
+        {
+            Modo m;
+            Element a = makeElement("a", "painel");
+            a.transformacao = { { "x", 0.0f }, { "y", 0.0f },
+                                { "largura", 100.0f }, { "altura", 40.0f } };
+            Element b = makeElement("b", "painel");
+            b.transformacao = { { "x", 132.0f }, { "y", 0.0f },
+                                { "largura", 100.0f }, { "altura", 40.0f } };
+            m.raiz.push_back(std::move(a));
+            m.raiz.push_back(std::move(b));
+            std::vector<SmartGuides::Rect> s = { { 250.0f, 0.0f, 100.0f, 40.0f } };
+            float dx = 0.0f, dy = 0.0f;
+            float x1 = -1.0f, x2 = -1.0f, y1 = -1.0f, y2 = -1.0f;
+            // Frame anterior em 286 (prevDx = 36): gap era 54; agora é 18.
+            SmartGuides::ApplySpacing(m, s, { "move" }, dx, dy, 12.0f,
+                                      36.0f, 0.0f, x1, x2, y1, y2);
+            const float finalX = 250.0f + dx;
+            check(fabsf(dx - 14.0f) < 0.01f && finalX == 264.0f &&
+                  x1 == 232.0f && x2 == 264.0f,
+                  "arrasto rapido: gap pula 54->18 e engata exato em 32");
+        }
+
+        // CONTEXTO DE FILEIRA (M04): a referência de espaçamento só vale para
+        // a fileira em que a peça está sendo encaixada. Uma peça em outra
+        // altura (y=200) NÃO prevê o espaçamento de 32 da fileira y=0 — a
+        // previsão fica silenciosa em vez de puxar para um alvo errado.
+        {
+            Modo m;
+            Element a = makeElement("a", "painel");
+            a.transformacao = { { "x", 0.0f }, { "y", 0.0f },
+                                { "largura", 100.0f }, { "altura", 40.0f } };
+            Element b = makeElement("b", "painel");
+            b.transformacao = { { "x", 132.0f }, { "y", 0.0f },
+                                { "largura", 100.0f }, { "altura", 40.0f } };
+            m.raiz.push_back(std::move(a));
+            m.raiz.push_back(std::move(b));
+            // Peça em OUTRA fileira, mas com gap 28 (dentro da tolerância do
+            // alvo 32): a previsão NÃO deve engatar (contexto diferente).
+            std::vector<SmartGuides::Rect> s = { { 260.0f, 200.0f, 100.0f, 40.0f } };
+            float dx = 0.0f, dy = 0.0f;
+            float x1 = -1.0f, x2 = -1.0f, y1 = -1.0f, y2 = -1.0f;
+            SmartGuides::ApplySpacing(m, s, { "move" }, dx, dy, 12.0f,
+                                      0.0f, 0.0f, x1, x2, y1, y2);
+            check(dx == 0.0f && x1 == -1.0f && y1 == -1.0f,
+                  "fora da fileira: nao prevê espacamento de outra linha");
+        }
+
+        // GRUPO COMO BLOCO ÚNICO (M04): um grupo (caixa 0..400) que contém um
+        // filho (100..200) não polui as referências — o filho aninhado é
+        // deduplicado. Ao lado do grupo, b(500..600) gera o único alvo real da
+        // fileira: 100. Gap 90 engata em 100; gap 290 (que seria o artefato
+        // filho->b de 300) NÃO engata.
+        {
+            Modo m;
+            Element g = makeElement("g", "grupo");
+            g.transformacao = { { "x", 0.0f }, { "y", 0.0f },
+                                { "largura", 400.0f }, { "altura", 40.0f } };
+            Element f = makeElement("f", "painel");
+            f.transformacao = { { "x", 100.0f }, { "y", 0.0f },
+                                { "largura", 100.0f }, { "altura", 40.0f } };
+            g.filhos.push_back(std::move(f));
+            Element b = makeElement("b", "painel");
+            b.transformacao = { { "x", 500.0f }, { "y", 0.0f },
+                                { "largura", 100.0f }, { "altura", 40.0f } };
+            m.raiz.push_back(std::move(g));
+            m.raiz.push_back(std::move(b));
+            {
+                std::vector<SmartGuides::Rect> s = { { 690.0f, 0.0f, 100.0f, 40.0f } };
+                float dx = 0.0f, dy = 0.0f;
+                float x1 = -1.0f, x2 = -1.0f, y1 = -1.0f, y2 = -1.0f;
+                SmartGuides::ApplySpacing(m, s, { "move" }, dx, dy, 12.0f,
+                                          0.0f, 0.0f, x1, x2, y1, y2);
+                check(dx == 10.0f && x1 == 600.0f && x2 == 700.0f,
+                      "grupo participa como bloco unico (gap 100 previsto)");
+            }
+            {
+                std::vector<SmartGuides::Rect> s = { { 890.0f, 0.0f, 100.0f, 40.0f } };
+                float dx = 0.0f, dy = 0.0f;
+                float x1 = -1.0f, x2 = -1.0f, y1 = -1.0f, y2 = -1.0f;
+                SmartGuides::ApplySpacing(m, s, { "move" }, dx, dy, 12.0f,
+                                          0.0f, 0.0f, x1, x2, y1, y2);
+                check(dx == 0.0f && x1 == -1.0f,
+                      "filho aninhado nao gera alvo espurio de espacamento");
+            }
+        }
+
+        // ALINHAMENTO AO CONJUNTO (M04): a referência é o bounding box dos
+        // vizinhos (elementos fora da seleção), não a tela nem a própria
+        // seleção — centralizar H+V coloca a forma exatamente no centro do
+        // conjunto, com distâncias uniformes nos 4 lados.
+        {
+            // Cinzas formando uma "moldura" simétrica: left 0..100, right
+            // 300..400, top 0..100, bottom 300..400 -> centro exato (200,200).
+            std::vector<AlignUtils::Rect> vizinhos = {
+                { 0.0f, 0.0f, 100.0f, 100.0f },
+                { 300.0f, 0.0f, 100.0f, 100.0f },
+                { 0.0f, 300.0f, 100.0f, 100.0f },
+                { 300.0f, 300.0f, 100.0f, 100.0f },
+            };
+            float l = 0.0f, t = 0.0f, r = 0.0f, b = 0.0f;
+            AlignUtils::SetBounds(vizinhos, l, t, r, b);
+            check(l == 0.0f && t == 0.0f && r == 400.0f && b == 400.0f,
+                  "conjunto: bounding box dos vizinhos (0,0)-(400,400)");
+            // Forma vermelha 80x80 no canto (10,10): centralizar H+V deve
+            // colocá-la em (160,160) — gap de 160 em TODOS os 4 lados.
+            const float cx = AlignUtils::AlignedX(80.0f, l, r, 1);
+            const float cy = AlignUtils::AlignedY(80.0f, t, b, 4);
+            check(cx == 160.0f && cy == 160.0f,
+                  "conjunto: centralizar H+V pousa exato no centro (160,160)");
+            check(cx - 0.0f == 160.0f && (400.0f - (cx + 80.0f)) == 160.0f &&
+                  cy - 0.0f == 160.0f && (400.0f - (cy + 80.0f)) == 160.0f,
+                  "conjunto: distancias uniformes nos 4 lados (160 px)");
+            // Alinhar à esquerda do conjunto / base do conjunto.
+            check(AlignUtils::AlignedX(80.0f, l, r, 0) == 0.0f &&
+                  AlignUtils::AlignedY(80.0f, t, b, 5) == 320.0f,
+                  "conjunto: esquerda e base do conjunto");
+        }
+
+        // CAMADAS (estilo CorelDRAW, M04): MoverCamada reordena o elemento
+        // dentro do seu contêiner — sobe (frente) ou desce (trás).
+        {
+            Modo m;
+            Element a = makeElement("a", "painel");
+            a.transformacao = { { "x", 0.0f }, { "y", 0.0f },
+                                { "largura", 100.0f }, { "altura", 40.0f } };
+            Element b = makeElement("b", "painel");
+            b.transformacao = { { "x", 0.0f }, { "y", 0.0f },
+                                { "largura", 100.0f }, { "altura", 40.0f } };
+            Element c = makeElement("c", "painel");
+            c.transformacao = { { "x", 0.0f }, { "y", 0.0f },
+                                { "largura", 100.0f }, { "altura", 40.0f } };
+            m.raiz.push_back(std::move(a));
+            m.raiz.push_back(std::move(b));
+            m.raiz.push_back(std::move(c));
+            // Ordem inicial: a, b, c (a atrás, c na frente).
+            check(Project::MoverCamada(m, "a", +1),
+                  "camada: sobe um nível");
+            check(m.raiz[0].id == "b" && m.raiz[1].id == "a" &&
+                  m.raiz[2].id == "c",
+                  "camada: ordem b, a, c após subir 'a'");
+            check(Project::MoverCamada(m, "a", -1),
+                  "camada: desce um nível");
+            check(m.raiz[0].id == "a" && m.raiz[1].id == "b" &&
+                  m.raiz[2].id == "c",
+                  "camada: ordem a, b, c após descer 'a'");
+            check(!Project::MoverCamada(m, "c", +1),
+                  "camada: no topo nao sobe mais");
+            check(!Project::MoverCamada(m, "a", -1),
+                  "camada: no fundo nao desce mais");
+            // Filhos de grupo: a camada opera dentro do contêiner.
+            Element g = makeElement("g", "grupo");
+            g.transformacao = { { "x", 0.0f }, { "y", 0.0f },
+                                { "largura", 300.0f }, { "altura", 40.0f } };
+            g.filhos.push_back(makeElement("g1", "painel"));
+            g.filhos.push_back(makeElement("g2", "painel"));
+            m.raiz.push_back(std::move(g));
+            check(Project::MoverCamada(m, "g1", +1) &&
+                  m.raiz[3].filhos[0].id == "g2" && m.raiz[3].filhos[1].id == "g1",
+                  "camada: dentro do grupo sobe o filho");
+        }
 
         const std::string json = Project::Serializar(project);
         Project loaded;

@@ -1,5 +1,7 @@
 #include "Project.h"
 
+#include "Geo.h"
+
 #include <algorithm>
 #include <cfloat>
 #include <ctime>
@@ -95,8 +97,18 @@ namespace seedui
             const float top = element.transformacao.value("y", 0.0f);
             const float width = element.transformacao.value("largura", 160.0f);
             const float height = element.transformacao.value("altura", 32.0f);
-            const bool inside = x >= left && x <= left + width &&
-                                y >= top && y <= top + height;
+            bool inside = false;
+            if (Geo::ElementRotation(element) != 0.0f)
+            {
+                float minX = 0.0f, minY = 0.0f, maxX = 0.0f, maxY = 0.0f;
+                Geo::RotatedAABB(element, minX, minY, maxX, maxY);
+                inside = x >= minX && x <= maxX && y >= minY && y <= maxY;
+            }
+            else
+            {
+                inside = x >= left && x <= left + width &&
+                         y >= top && y <= top + height;
+            }
             if (element.tipo == "grupo" && inside) return &element;
             for (auto it = element.filhos.rbegin(); it != element.filhos.rend(); ++it)
                 if (Element* hit = HitElement(*it, x, y)) return hit;
@@ -525,5 +537,57 @@ namespace seedui
         modo.raiz.insert(modo.raiz.begin() + std::min(insertAt, modo.raiz.size()),
                          std::move(group));
         return groupId;
+    }
+
+    bool Project::DesagruparElementos(Modo& modo, const std::string& groupId)
+    {
+        ElementSlot slot;
+        if (!FindElementSlot(modo.raiz, groupId, slot)) return false;
+        Element& group = (*slot.container)[slot.index];
+        if (group.tipo != "grupo" || group.bloqueado) return false;
+
+        // Os filhos usam coordenadas absolutas (o agrupar move elementos da
+        // raiz sem alterar x/y) — sobem para o nível do grupo intactos.
+        std::vector<Element> children = std::move(group.filhos);
+        slot.container->erase(slot.container->begin() + slot.index);
+        size_t at = std::min(slot.index, slot.container->size());
+        for (Element& child : children)
+            slot.container->insert(slot.container->begin() + at++, std::move(child));
+        return true;
+    }
+
+    std::string Project::ClonarElemento(Modo& modo, Project& projeto,
+                                        const std::string& id)
+    {
+        ElementSlot slot;
+        if (!FindElementSlot(modo.raiz, id, slot)) return std::string();
+        Element& original = (*slot.container)[slot.index];
+        if (original.bloqueado) return std::string();
+
+        Element copy = original;
+        std::vector<std::string> reservedIds;
+        AssignFreshIds(copy, projeto, reservedIds);
+        slot.container->insert(slot.container->begin() + slot.index + 1,
+                               std::move(copy));
+        return (*slot.container)[slot.index + 1].id;
+    }
+
+    bool Project::MoverCamada(Modo& modo, const std::string& id, int delta)
+    {
+        ElementSlot slot;
+        if (!FindElementSlot(modo.raiz, id, slot)) return false;
+        Element& element = (*slot.container)[slot.index];
+        if (element.bloqueado) return false;
+        if (delta == 0) return false;
+
+        std::vector<Element>& container = *slot.container;
+        size_t index = slot.index;
+        size_t target = delta > 0 ? index + 1 : index - 1;
+        if (target >= container.size()) return false;
+
+        // Troca de posição com o vizinho (sobe = renderiza depois = frente;
+        // desce = renderiza antes = atrás). Move o elemento completo.
+        std::swap(container[index], container[target]);
+        return true;
     }
 }

@@ -57,6 +57,7 @@ namespace seedui
         Polygon,
         Contour,
         Transparency,
+        CornersOut,
         Count,
     };
 

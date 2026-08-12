@@ -172,11 +172,15 @@ pelo usuário antes de seguir. Rastreio em `docs/CHECKLIST_M04_PAINEL.md`.
 
 | Etapa | Conteúdo | Status |
 |---|---|---|
-| 1 | **Cores de preenchimento e contorno**: seletor de cor (`cor_fundo`/`cor_borda`) na barra lateral e no Inspetor, swatch no botão, conta-gotas aplicando no selecionado | Pendente |
-| 2 | **Transformações de precisão**: rotação (alça no canvas + valor no Inspetor), espelhar H/V, nudge (setas 1px / Shift 10px), proporção travada (Shift no resize) | Pendente |
-| 3 | **Grupo avançado**: desagrupar (filhos sobem ao nível do pai preservando posição), redimensionar grupo escalando filhos, duplicar (Ctrl+D) com deslocamento fixo, repetir último deslocamento | Pendente |
+| 1 | **Cores de preenchimento e contorno**: seletor de cor (`cor_fundo`/`cor_borda`) na barra lateral e no Inspetor, swatch no botão, conta-gotas aplicando no selecionado | Parcial — paleta fixa na parte inferior (clique = preenchimento, direito = contorno) e seletor de cor com 3 modelos (triângulo, quadrado, barras); canvas já renderiza `cor_fundo`/`cor_borda`. Falta o seletor na barra lateral/Inspetor |
+| 2 | **Transformações de precisão**: rotação (alça no canvas + valor no Inspetor), espelhar H/V, nudge (setas 1px / Shift 10px), proporção travada (Shift no resize) | Parcial — rotação pronta (alça no canvas, pivô, Shift = 15°, hit-test e contorno rotacionados); espelhar/nudge/proporção pendentes |
+| 3 | **Grupo avançado**: desagrupar (filhos sobem ao nível do pai preservando posição), redimensionar grupo escalando filhos, duplicar (Ctrl+D) com deslocamento fixo, repetir último deslocamento | Quase completa — redimensionar grupo, **desagrupar** (Ctrl+Shift+G, ícone corners-out), **caixa de seleção única do conjunto** (união dos limites, clique em espaço vazio move o grupo), **rotação em conjunto** (em torno do centro da caixa conjunta) e **cores em conjunto** (paleta e seletor) prontos; duplicar/repetir pendentes |
 | 4 | **Estilo de linha e sombra**: contorno tracejado, pontas (caps), junções (joins), sombra (`sombra`: cor, deslocamento, desfoque) | Pendente |
-| 5 | **Auxílio de precisão**: guias arrastadas da régua com snap e bloquear/apagar, guias inteligentes (centro/bordas no arraste), ferramenta medir (distância/ângulo com rótulo, sem entrar no JSON) | Pendente |
+| 5 | **Auxílio de precisão**: guias arrastadas da régua com snap e bloquear/apagar, guias inteligentes (centro/bordas no arraste), ferramenta medir (distância/ângulo com rótulo, sem entrar no JSON) | Parcial — guias inteligentes prontas (bordas/centros com a tela e com elementos visíveis, **snap forte da moldura** com tolerância 3×, **guias de espaçamento repetido** com linhas tracejadas, linha magenta, tolerância 10px, só com snap ativo); guias da régua e medir pendentes |
+
+Base vetorial: `src/Geo.h` (tesselação de contorno, rotação/pivô, AABB rotacionado)
+e `src/SmartGuides.h` (matemática das guias inteligentes, coberta pelo autoteste).
+Detalhes e rastreio em `docs/CHECKLIST_M04_PAINEL.md`.
 
 Critérios da etapa: painel com todas as funções vetoriais acima; toda ferramenta
 nova na barra esquerda com ícone + tooltip + atalho; refletir no
@@ -202,6 +206,41 @@ arquivo); autoteste ampliado; avançar uma etapa por vez após validação do us
 
 - A cor aparece **sutil**: ícone ativo/hover e barra fina no separador do grupo;
   ícones inativos ficam em cinza neutro. Detalhes em `IDENTIDADE_VISUAL.md` §6.
+
+### Manipulação de conjunto, camadas e atalhos — parte do M04 (2026-08-12)
+
+- **Rotação em conjunto (corpo rígido)**: multi-seleção e grupos giram como um
+  único objeto, orbitando o centro da caixa de seleção; rotação individual vira
+  função secundária.
+- **Grupo editável em conjunto**: grupo selecionado aceita resize pelas alças,
+  rotação e recolorização — aplica a todos os filhos e recalcula a caixa do grupo.
+- **Seleção temporária (Ctrl+arrastar)**: disponível em qualquer ferramenta,
+  sem trocar de modo.
+- **Snap reforçado da tela base (área de segurança)**: tolerância maior que os
+  demais snaps — segura por mais tempo, indicando o delimitador principal.
+- **Duplo clique na ferramenta de criar retângulo**: cria automaticamente um
+  retângulo no tamanho da tela base (ex.: 1280×720).
+- **Camadas (CorelDRAW)**: menu Objeto → Camadas com subir/descer/primeiro/
+  último + atalhos Ctrl+↑/Ctrl+↓.
+- **Mover com setas**: setas do teclado movem a seleção (1px; 10px com Shift),
+  sem modificador, sem conflito com as camadas.
+
+### Refinamento de precisão e visibilidade — parte do M04 (2026-08-12, tarde)
+
+Atendendo às diretrizes de 12/08 12:14 (áreas 1, 3 e 5):
+
+- **Previsão de espaçamento confiável** (`SmartGuides::ApplySpacing`):
+  referências agora são **filtradas pela fileira/coluna** em que a peça é
+  encaixada (gaps de outras linhas não poluem o alvo); **grupos contam como
+  bloco único** (filhos aninhados são deduplicados — não geram alvo falso);
+  e o ímã **detecta cruzamento entre frames** (arrasto rápido/zoom alto não
+  pula a zona do alvo — engata exato). 4 testes novos.
+- **Janela com limite máximo** (`SetWindowMaxSize` via glfw work area):
+  redimensionar ou maximizar nunca esconde o rodapé (status + paleta de
+  cores) atrás da barra de tarefas — nada "sai da janela principal".
+- **Toolbar com rolagem fina**: ferramentas que não couberem ficam acessíveis
+  pela barra de rolagem da coluna (estilo Blender); nenhum ícone cortado.
+
 ## Milestone 05 — Canvas interativo
 
 **Objetivo**: manipulação visual direta dos elementos.
@@ -375,3 +414,30 @@ com plano próprio e sem alterar silenciosamente o comportamento atual da engine
 | 2026-08-11 | M07 validado pelo usuário: modelo padrão `deepseek/deepseek-v4-flash:free` (gratuito confirmado no OpenRouter; Qwen como alternativa); chat em janela flutuante minimizável e acoplável à lateral (docking completo depois); streaming fora do v1; histórico da conversa salvo por projeto em `projeto.conversas.json` com limpeza automática de mensagens antigas já finalizadas (pendentes nunca apagadas). |
 | 2026-08-12 | Metáfora visual da **Órbita** para a camada de programação visual (público não-programador): o **Sol** = elemento funcional (núcleo/ator, ex.: botão), os **planetas** = submecânicas/ações vinculadas (abrir painel, trocar aba, mostrar mensagem), a **órbita fina/serrilhada** = o vínculo funcional, e os **satélites** = comportamentos aninhados — conversando com o mapa mental e com a hierarquia parental existente. Camada de edição *sem código* em um **workspace próprio** (não junto do canvas), onde o autor arrasta ações para a órbita do elemento. |
 | 2026-08-12 | Programação visual em **workspaces/salas** estilo Blender: o editor dividido em modos de nicho — **Layout** (workspace visual/atual: hierarquia, canvas, inspetor), **Editor/Edit** (parte visual aprofundada) e **Código/Code** (etapa programacional das órbitas, com auxílio de IA open-source) — uma sala por setor, alternáveis como no Blender; a interface visual já existente permanece intacta no workspace Layout, e o Code mode constrói a camada comportamental sobre ela. |
+| 2026-08-12 | M04 (painel vetorial) — base e rotação: `src/Geo.h` (tesselação de contorno com quinas, rotação em torno de pivô com `transformacao.rotacao`/`centro_rotacao`, AABB rotacionado); render e seleção do Canvas cientes de rotação; alça de rotação acima do topo rotacionado; hit-test por AABB rotacionado em `Project.cpp`. |
+| 2026-08-12 | M04 — redimensionar grupo: multi-seleção redimensiona pela caixa conjunta escalando cada elemento proporcionalmente (preserva layout relativo). |
+| 2026-08-12 | M04 — guias inteligentes estilo CorelDRAW (`src/SmartGuides.h`): durante o mover, bordas e centros da seleção encaixam na tela-base e em elementos visíveis (tolerância 5px, ativas junto com o snap); linha magenta desenhada no canvas; não entram no JSON. Cobertas por 4 verificações no autoteste M04. |
+| 2026-08-12 | Correção de bug pré-existente que travava o build Debug no primeiro clique: `Missing PopStyleColor()` — os toggles de Snap, Réguas e Zoom In alteravam o estado entre o `PushStyleColor` e o `PopStyleColor` (o clique invertia o flag no meio), vazando 1 estilo e disparando o assert do ImGui no `End()`. Corrigido capturando o estado ANTES do botão e usando-o nos dois lados (padrão do `ToolButton`). Atinge só builds Debug/assert; Development/Release não travavam, mas o vazamento corrompia a pilha de cores em qualquer build. |
+| 2026-08-12 | M04 — **desagrupar** (pedido direto do usuário): `Project::DesagruparElementos` devolve os filhos ao nível do grupo preservando posição (coordenadas absolutas); bloqueado recusa. Atalho **Ctrl+Shift+G**, item no menu Objeto e botão na barra de ações com novo ícone `corners-out` (Lucide, ISC). 4 verificações novas no autoteste (total 41). |
+| 2026-08-12 | **Centralização de grupo corrigida**: alinhar/distribuir moviam só a `transformacao` do grupo (a caixa), deixando os filhos parados — agora `ApplyPositionDelta` aplica o deslocamento também aos descendentes (coordenadas absolutas). |
+| 2026-08-12 | **Snap reforçado** (estilo CorelDRAW): guias inteligentes encaixam PRIMEIRO no movimento bruto, depois a grade de 8px e uma re-puxada — o encaixe de bordas/centros vence a grade e o elemento não "escapa"; tolerância subiu de 5px para 10px de tela. **Grade do canvas agora em espaço de projeto** (minor 8 / major 40 unidades, alinhada exatamente com o snap) e contida na moldura da tela base — antes era desenhada em espaço de tela fixo (24px), sem relação com o snap. |
+| 2026-08-12 | **Zoom**: limites ampliados de 0.25×–4× para 0.1×–16×; nova opção **"Zoom no cursor"** (menu Exibir, padrão ligada) — a roda mantém o ponto do projeto sob o mouse fixo na tela. |
+| 2026-08-12 | **Clone com o botão direito** (estilo CorelDRAW): pressionar sobre um elemento e arrastar cria uma cópia (IDs novos, mesma posição/z) e move a cópia; clique simples não faz nada. `Project::ClonarElemento` (insere logo após o original, bloqueado recusa) + 4 verificações no autoteste (total 45). |
+| 2026-08-12 | **Cores (etapa 1 parcial)**: canvas passa a renderizar `estilos.cor_fundo`/`cor_borda` (`#rrggbb`, fallback neutro); **paleta fixa na parte inferior** (30 swatches, clique esq. = preenchimento, dir. = contorno) e **seletor de cor com 3 modelos estilo Photoshop** (Triângulo HSV, Quadrado SV, Barras RGB) em `src/ColorPicker.{h,cpp}` (novo arquivo registrado no .vcxproj). |
+| 2026-08-12 | **Barra de ações centralizada**: itens de alturas diferentes (campos, botões de distribuir, alinhamentos) agora são centralizados pelo eixo vertical da barra (42px), não alinhados pelo topo. |
+| 2026-08-12 | **Paleta reposicionada**: sai da borda inferior (ficava "sufocada") para **acima da barra de status** (rodapé), sem sobrepor nem esconder informações; nada vaza da janela principal. |
+| 2026-08-12 | **Zoom teleguiado completo**: o modo "Zoom no cursor" agora vale para **todos** os controles (roda, botões +/−, atalho Z) — o ponto sob o mouse permanece fixo até o limite de 16×. |
+| 2026-08-12 | **Seleção por caixa — modo alternável**: nova opção no menu (padrão: **cobertura total** — o elemento só é selecionado quando a caixa cobre o corpo inteiro; opcional: **encostar** — qualquer contato seleciona). |
+| 2026-08-12 | **Seletor de cor premium**: triângulo HSV reescrito com subdivisão em quads e interpolação suave (bordas retas sem serrilhado), alças maiores, prévia com borda, título "Preenchimento" com swatch e espaço de trabalho maior — acabamento profissional. |
+| 2026-08-12 | **Espaço de trabalho livre**: objetos não ficam mais presos à moldura 1280×720 — mover/redimensionar/criar/marquee funcionam no canvas inteiro; as conversões `CanvasScreenToProject`/`CanvasProjectToScreen` devolvem coordenadas além da tela-base (zoom consistente até 32×) e `limitarNaMoldura` virou opcional. **Grade pontilhada percorre o canvas inteiro** (ainda em unidades de projeto 8/40, em compasso com o snap). |
+| 2026-08-12 | **Área de segurança**: ao sair da tela-base com elementos selecionados, um **contorno vermelho fino tracejado** contorna a moldura (aviso de limite principal); o usuário pode sair por conta própria e voltar arrastando. |
+| 2026-08-12 | **Snap forte da moldura**: a tela-base (bordas/centro) tem tolerância 3× das demais guias — o delimitador principal vence os outros snaps (a re-puxada após a grade reforça a trava). |
+| 2026-08-12 | **Guias de espaçamento**: `SmartGuides::ApplySpacing` detecta espaços repetidos entre elementos adjacentes e puxa a seleção para replicá-los, desenhando duas linhas tracejadas delimitando o espaço (como no CorelDRAW). |
+| 2026-08-12 | **Multi-seleção em conjunto**: caixa de seleção única cobrindo todo o conjunto (união dos limites rotacionados) com 8 alças + rotação; rotação gira todos em torno do centro da caixa conjunta (cada um preserva a rotação inicial); paleta e seletor de cor aplicam a todos os selecionados; clique em espaço vazio dentro da caixa move o grupo. Autoteste M04 agora com **48 verificações PASS**. |
+| 2026-08-12 | **Clone durante o arrasto (fork)** — fluxo final do usuário: mover é só com o **botão esquerdo**; no meio do arrasto, **apertar o direito** faz o ORIGINAL voltar ao ponto de partida e o CLONE assumir o arrasto a partir da posição atual (delta zerado no quadro do fork, sem salto), seguindo o cursor até soltar. Seleção migra para o clone; grupo inteiro clona e reverte junto. O fluxo antigo (direito + arrastar) permanece como alternativa. |
+| 2026-08-12 | **Preview de espaçamento com Shift** (estilo CorelDRAW): durante o mover (incluindo o fork de clone), segurar **Shift** mostra **pequenos traços nos cantos das laterais** de cada objeto da fileira alinhada (traços horizontais nas laterais esquerda/direita; verticais em colunas de topo/base) + **valor da distância** de cada espaço — delimitação limpa, sem linhas longas (representação refinada a pedido do usuário). `SmartGuides::ComputeSpacingPreview` (testável) — 6 verificações novas no autoteste (total **54 PASS**). |
+| 2026-08-12 | **Limiar de arrasto (clique não move)**: ao clicar num objeto ele fica **fixo** (seleciona sem se mexer); o mover só engaja após ~4px de arrasto real de tela, com trava que não volta atrás no mesmo gesto (`mCanvasDragPastThreshold`). Elimina deslocamentos acidentais no clique. |
+| 2026-08-12 | **Previsão de espaçamento assertiva**: QUALQUER espaço existente entre dois vizinhos é alvo de previsão (não só os repetidos) — dois objetos com 62px preveem 62 para a próxima peça; ímã de ~10px (forte, sem prender). Ao engatar, os traços nas quinas aparecem e o **rótulo do espaço previsto fica destacado** (pílula escura + valor claro); linhas longas magenta de espaçamento removidas (representação unificada nos traços). Autoteste agora com **57 PASS**. |
+| 2026-08-12 | **Previsão exata (correção da assertividade)**: alvos são os VALORES EXATOS da referência (removido o arredondamento de 0,5 — uma referência de 32,4 agora prevê 32,4, não 32,5); a previsão **vence a grade de 8px** no eixo em que engatou (a grade não desfaz mais o encaixe exato); re-afirmação por último; rótulos com **1 decimal** ("32.0"). Simulação do encadeamento grade+previsão com referência 32 prova que o pouso é exatamente 32 em qualquer posição bruta (nunca 31/33). Autoteste com **59 PASS**. |
+| 2026-08-12 | **Correção da assertividade VERTICAL**: as ramificações "seleção à esquerda do vizinho" (eixo X) e "seleção acima do vizinho" (eixo Y) do `SmartGuides::ApplySpacing` corrigiam o deslocamento na direção **invertida** (erro de sinal), fazendo o encaixe vertical cair em 31/33 em vez de 32. Sinais corrigidos nas 4 direções e testes novos cobrindo **vertical abaixo**, **vertical acima** e **horizontal direita** (a esquerda já era coberta) — todos pousam EXATAMENTE em 32. Autoteste com **61 PASS**. |
+| 2026-08-12 | **Pacote de refinamento UX (diretrizes 12/08)**: (1) novo alvo de alinhamento **"Conjunto"** (`AlignUtils.h`, testável): a referência passa a ser o **bounding box dos vizinhos** (elementos visíveis fora da seleção) — centralizar H+V coloca a forma exatamente no centro do conjunto com **distâncias uniformes nos 4 lados** (ex.: forma vermelha no centro dos quadros cinza); (2) **paleta de cores centralizada verticalmente** na faixa; (3) **bloco de debug/exportar movido do rodapé para o menu bar** do topo (nada mais sufoca a barra inferior); (4) **ponto de sangria do topo-esquerda alinhado** com a régua da coluna de ferramentas; (5) **painel direito convertido em abas** (Hierarquia / Inspetor / Biblioteca / Diretrizes / Recursos / Histórico — uma seção por vez, sem pilhas confusas). Autoteste com **65 PASS**. |

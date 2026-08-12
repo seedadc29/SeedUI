@@ -74,6 +74,7 @@ namespace seedui
             { IconId::Polygon,   "polygon" },
             { IconId::Contour,   "contour" },
             { IconId::Transparency, "transparency" },
+            { IconId::CornersOut, "corners-out" },
         };
 
         const char* kIconDirs[] = {

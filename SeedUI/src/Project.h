@@ -99,6 +99,17 @@ namespace seedui
             float deslocamento);
         static std::string AgruparElementos(Modo& modo,
                                              const std::vector<std::string>& ids);
+        // Desagrupa: filhos sobem para o nível do grupo preservando posição.
+        static bool DesagruparElementos(Modo& modo, const std::string& groupId);
+        // Clona um elemento (com descendentes) com IDs novos, logo após o
+        // original. Retorna o ID do clone (vazio se bloqueado/ausente).
+        static std::string ClonarElemento(Modo& modo, Project& projeto,
+                                          const std::string& id);
+
+        // Camadas (estilo CorelDRAW): reordena o elemento dentro do seu
+        // contêiner (raiz do modo ou pai). delta > 0 sobe (renderiza depois,
+        // fica na frente); delta < 0 desce. Retorna false se ausente/bloqueado.
+        static bool MoverCamada(Modo& modo, const std::string& id, int delta);
 
         // Timestamp atual no formato do formato ("YYYY-MM-DD HH:MM:SS").
         static std::string StampAtual();
