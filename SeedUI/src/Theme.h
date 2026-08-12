@@ -18,6 +18,12 @@ namespace seedui
                           alpha);
         }
 
+        inline ImU32 Hex32(uint32_t rgb, float alpha = 1.0f)
+        {
+            const ImVec4 c = Hex(rgb, alpha);
+            return ImGui::ColorConvertFloat4ToU32(c);
+        }
+
         // Paleta premium inspirada no Visual Studio dark.
         inline const ImVec4 BackgroundWindow = Hex(0x1e1e1e);
         inline const ImVec4 BackgroundPanel   = Hex(0x252526);
@@ -32,6 +38,9 @@ namespace seedui
         inline const ImVec4 AccentBlue        = Hex(0x4f8cff);
         inline const ImVec4 AccentOrange      = Hex(0xf57900);
         inline const ImVec4 Success           = Hex(0x2ecc71);
+        inline const ImVec4 FamilyGreen       = Hex(0x2ecc71);
+        inline const ImVec4 FamilyPurple      = Hex(0xa78bfa);
+        inline const ImVec4 FamilyNeutral     = Hex(0xa0a0a0);
         inline const ImVec4 Warning           = Hex(0xf1c40f);
         inline const ImVec4 Error             = Hex(0xe74c3c);
         inline const ImVec4 CanvasBackground  = Hex(0x1a1a1a);

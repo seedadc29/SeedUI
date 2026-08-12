@@ -45,7 +45,8 @@ namespace seedui
         void DrawNovoProjetoDialog();
         void DrawManualWindow();
         void DrawAboutWindow();
-        void ToolButton(IconId id, const char* tip);
+        void ToolButton(IconId id, const char* tip, ImU32 familyColor);
+        void DrawToolFamilySeparator(ImU32 familyColor);
         void ExportDirectives();
         void DoExportDirectives();
         void NovoProjeto();

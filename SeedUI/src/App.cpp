@@ -65,6 +65,13 @@ namespace seedui
         constexpr float kRightPanelMaxWidth = 520.0f;
         constexpr float kRightRailWidth = 50.0f;
 
+        // Cores de família da barra de ferramentas (identidade premium).
+        constexpr ImU32 kFamilySelect     = IM_COL32(0x4f, 0x8c, 0xff, 255);
+        constexpr ImU32 kFamilyCreate     = IM_COL32(0x2e, 0xcc, 0x71, 255);
+        constexpr ImU32 kFamilyAppearance = IM_COL32(0xa7, 0x8b, 0xfa, 255);
+        constexpr ImU32 kFamilyNav        = IM_COL32(0xa0, 0xa0, 0xa0, 255);
+        constexpr ImU32 kFamilyReview     = IM_COL32(0xf5, 0x79, 0x00, 255);
+
         void EnableDarkTitleBar()
         {
             void* hwnd = GetWindowHandle();
@@ -2248,22 +2255,25 @@ namespace seedui
     void App::DrawToolbar()
     {
         // Somente ferramentas que atuam diretamente no canvas.
+        // Agrupadas por família (identidade premium): cada grupo tem um
+        // separador fino na cor da família; o ícone ativo usa essa cor.
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6, 6));
         ImGui::Spacing();
 
-        ToolButton(IconId::Select, "Seleção · Selecionar (V)");
-        ToolButton(IconId::Move, "Transformação · Mover (M)");
+        ToolButton(IconId::Select, "Seleção · Selecionar (V)", kFamilySelect);
+        ToolButton(IconId::Move, "Transformação · Mover (M)", kFamilySelect);
+        DrawToolFamilySeparator(kFamilySelect);
 
-        ImGui::Separator();
-        ImGui::Spacing();
-        ToolButton(IconId::Text, "Criação · Texto (T)");
-        ToolButton(IconId::Rectangle, "Criar retângulo · arraste no canvas");
-        ToolButton(IconId::Ellipse, "Criar elipse · arraste no canvas");
-        ToolButton(IconId::Polygon, "Criar polígono · arraste no canvas");
-        ToolButton(IconId::Color, "Aparência · Conta-gotas (I)");
+        ToolButton(IconId::Text, "Criação · Texto (T)", kFamilyCreate);
+        ToolButton(IconId::Rectangle, "Criar retângulo · arraste no canvas", kFamilyCreate);
+        ToolButton(IconId::Ellipse, "Criar elipse · arraste no canvas", kFamilyCreate);
+        ToolButton(IconId::Polygon, "Criar polígono · arraste no canvas", kFamilyCreate);
+        DrawToolFamilySeparator(kFamilyCreate);
+
+        ToolButton(IconId::Color, "Aparência · Conta-gotas (I)", kFamilyAppearance);
         ImGui::SetCursorPosX((kToolbarWidth - kToolButtonSize) * 0.5f);
         if (IconButton(IconId::Contour, "Espessura do contorno selecionado",
-                       kToolButtonSize))
+                       kToolButtonSize, kFamilyAppearance))
             ImGui::OpenPopup("##contour_tool");
         if (ImGui::BeginPopup("##contour_tool"))
         {
@@ -2287,7 +2297,7 @@ namespace seedui
         }
         ImGui::SetCursorPosX((kToolbarWidth - kToolButtonSize) * 0.5f);
         if (IconButton(IconId::Transparency, "Transparência do elemento selecionado",
-                       kToolButtonSize))
+                       kToolButtonSize, kFamilyAppearance))
             ImGui::OpenPopup("##transparency_tool");
         if (ImGui::BeginPopup("##transparency_tool"))
         {
@@ -2311,41 +2321,59 @@ namespace seedui
             }
             ImGui::EndPopup();
         }
+        DrawToolFamilySeparator(kFamilyAppearance);
 
-        ImGui::Separator();
-        ImGui::Spacing();
         ImGui::SetCursorPosX((kToolbarWidth - kToolButtonSize) * 0.5f);
         if (mCurrentTool == Tool::Zoom)
             ImGui::PushStyleColor(ImGuiCol_Button, Theme::Hex(0x4f8cff, 0.30f));
-        if (IconButton(IconId::ZoomIn, "Zoom In - clique ou use Z no canvas", kToolButtonSize))
+        if (IconButton(IconId::ZoomIn, "Zoom In - clique ou use Z no canvas",
+                       kToolButtonSize, kFamilyNav))
         {
             mCurrentTool = Tool::Zoom;
             mCanvasZoom = std::min(4.0f, mCanvasZoom * 1.25f);
         }
         if (mCurrentTool == Tool::Zoom) ImGui::PopStyleColor();
         ImGui::SetCursorPosX((kToolbarWidth - kToolButtonSize) * 0.5f);
-        if (IconButton(IconId::ZoomOut, "Zoom Out - botao direito com Z", kToolButtonSize))
+        if (IconButton(IconId::ZoomOut, "Zoom Out - botao direito com Z",
+                       kToolButtonSize, kFamilyNav))
         {
             mCurrentTool = Tool::Zoom;
             mCanvasZoom = std::max(0.25f, mCanvasZoom / 1.25f);
         }
-        ToolButton(IconId::Pan, "Navegação · Mão (H)");
-        ToolButton(IconId::Grid, "Visualização · Grade (G)");
+        ToolButton(IconId::Pan, "Navegação · Mão (H)", kFamilyNav);
+        ToolButton(IconId::Grid, "Visualização · Grade (G)", kFamilyNav);
+        DrawToolFamilySeparator(kFamilyNav);
 
-        ImGui::Separator();
-        ImGui::Spacing();
         ToolButton(IconId::Annotate,
-                   "Revisão · Anotar para a IA (A)");
+                   "Revisão · Anotar para a IA (A)", kFamilyReview);
 
         ImGui::PopStyleVar();
     }
-    void App::ToolButton(IconId id, const char* tip)
+    void App::DrawToolFamilySeparator(ImU32 familyColor)
+    {
+        ImGui::Separator();
+        ImGui::Spacing();
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const float lineW = 22.0f;
+        dl->AddRectFilled(ImVec2(p.x + (kToolbarWidth - lineW) * 0.5f, p.y + 2.0f),
+                          ImVec2(p.x + (kToolbarWidth - lineW) * 0.5f + lineW, p.y + 3.0f),
+                          familyColor);
+        ImGui::Dummy(ImVec2(1, 3));
+    }
+    void App::ToolButton(IconId id, const char* tip, ImU32 familyColor)
     {
         // Centro geométrico da coluna: (50 - 32) / 2 = 9 px.
         ImGui::SetCursorPosX((kToolbarWidth - kToolButtonSize) * 0.5f);
         const bool active = (mCurrentTool == ToolFromIcon(id));
-        if (active) ImGui::PushStyleColor(ImGuiCol_Button, Theme::Hex(0x4f8cff, 0.30f));
-        if (IconButton(id, tip, kToolButtonSize))
+        const ImU32 tint = active ? familyColor : kIconTintDefault;
+        if (active)
+        {
+            const ImVec4 fc = ImGui::ColorConvertU32ToFloat4(familyColor);
+            ImGui::PushStyleColor(ImGuiCol_Button,
+                                  ImVec4(fc.x, fc.y, fc.z, 0.28f));
+        }
+        if (IconButton(id, tip, kToolButtonSize, tint))
         {
             const Tool requested = ToolFromIcon(id);
             if (requested == Tool::Annotate)

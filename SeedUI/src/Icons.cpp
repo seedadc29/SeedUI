@@ -238,14 +238,14 @@ namespace seedui
         gTextures.clear();
     }
 
-    void DrawIcon(IconId id, float size)
+    void DrawIcon(IconId id, float size, ImU32 tint)
     {
         const ImVec2 p = ImGui::GetCursorScreenPos();
-        DrawIconAt(id, p.x, p.y, size);
+        DrawIconAt(id, p.x, p.y, size, tint);
         ImGui::Dummy(ImVec2(size, size));
     }
 
-    void DrawIconAt(IconId id, float x, float y, float size)
+    void DrawIconAt(IconId id, float x, float y, float size, ImU32 tint)
     {
         const ImTextureID tex = Tex(id);
         if (!tex)
@@ -254,10 +254,12 @@ namespace seedui
             return;
         }
 
-        ImGui::GetWindowDrawList()->AddImage(tex, ImVec2(x, y), ImVec2(x + size, y + size));
+        ImGui::GetWindowDrawList()->AddImage(tex, ImVec2(x, y),
+                                             ImVec2(x + size, y + size),
+                                             ImVec2(0, 0), ImVec2(1, 1), tint);
     }
 
-    bool IconButton(IconId id, const char* tooltip, float buttonSize)
+    bool IconButton(IconId id, const char* tooltip, float buttonSize, ImU32 tint)
     {
         const ImTextureID tex = Tex(id);
         bool clicked = false;
@@ -270,7 +272,8 @@ namespace seedui
             const float icon = std::round(buttonSize * 0.70f);
             const ImVec2 ip(std::round(p.x + (buttonSize - icon) * 0.5f),
                             std::round(p.y + (buttonSize - icon) * 0.5f));
-            ImGui::GetWindowDrawList()->AddImage(tex, ip, ImVec2(ip.x + icon, ip.y + icon));
+            ImGui::GetWindowDrawList()->AddImage(tex, ip, ImVec2(ip.x + icon, ip.y + icon),
+                                                 ImVec2(0, 0), ImVec2(1, 1), tint);
         }
         else
         {
