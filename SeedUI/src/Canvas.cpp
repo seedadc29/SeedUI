@@ -237,6 +237,18 @@ namespace seedui
 
             if (e.tipo != "grupo")
             {
+                if (e.tipo == "linha")
+                {
+                    // Linha: traço diagonal da caixa, com espessura e cor do
+                    // contorno. Pontas arredondadas (traço grosso).
+                    float x1 = 0.0f, y1 = 0.0f, x2 = 0.0f, y2 = 0.0f;
+                    Geo::LineEndpointsScreen(e, origin.x, origin.y, scale,
+                                             x1, y1, x2, y2);
+                    const float lineWidth = std::max(1.0f, outlineWidth);
+                    dl->AddLine(ImVec2(x1, y1), ImVec2(x2, y2), outline, lineWidth);
+                }
+                else
+                {
                 DrawShadow(e, origin, scale, opacity, dl);
                 if (dashed)
                 {
@@ -309,6 +321,7 @@ namespace seedui
                 {
                     const char* text = e.nome.empty() ? e.id.c_str() : e.nome.c_str();
                     dl->AddText(ImVec2(a.x + 4, a.y + 4), label, text);
+                }
                 }
             }
 

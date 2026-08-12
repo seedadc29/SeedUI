@@ -20,6 +20,7 @@ namespace seedui
         Rectangle,
         Ellipse,
         Polygon,
+        Line,
         Measure,
         Annotate,
     };

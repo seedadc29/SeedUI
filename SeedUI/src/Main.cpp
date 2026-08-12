@@ -7,6 +7,7 @@
 #include <string>
 
 #include "App.h"
+#include "Geo.h"
 #include "Project.h"
 #include "SmartGuides.h"
 #include "AlignUtils.h"
@@ -182,6 +183,24 @@ namespace
         check(mA2 && mA2->transformacao.value("y", 0.0f) == 100.0f &&
               mA2->transformacao.value("espelhado_v", 0.0f) == 1.0f,
               "espelhar elemento unico mantem posicao (espelha no lugar)");
+
+        // Linha: extremos (0,0)->(w,h) da caixa e clique por distância ao
+        // segmento (o traço fino é difícil de acertar por AABB).
+        Modo lineMode;
+        Element lineEl = makeElement("linha_1", "linha");
+        lineEl.transformacao = { { "x", 100.0f }, { "y", 100.0f },
+                                 { "largura", 200.0f }, { "altura", 100.0f } };
+        lineMode.raiz.push_back(std::move(lineEl));
+        float lx1 = 0.0f, ly1 = 0.0f, lx2 = 0.0f, ly2 = 0.0f;
+        Element* lineRef = Project::ResolverId(lineMode, "linha_1");
+        Geo::LineEndpointsProject(*lineRef, lx1, ly1, lx2, ly2);
+        check(lx1 == 100.0f && ly1 == 100.0f && lx2 == 300.0f && ly2 == 200.0f,
+              "linha: extremos seguem a diagonal da caixa");
+        check(Project::ElementoNoPonto(lineMode, 200.0f, 150.0f) &&
+              Project::ElementoNoPonto(lineMode, 200.0f, 150.0f)->id == "linha_1",
+              "linha: clique no meio do traco seleciona");
+        check(Project::ElementoNoPonto(lineMode, 200.0f, 400.0f) == nullptr,
+              "linha: clique longe do traco nao seleciona");
 
         Modo groupMode;
         Element groupA = makeElement("painel_a", "painel");

@@ -175,6 +175,7 @@ namespace seedui
             case IconId::Rectangle: return Tool::Rectangle;
             case IconId::Ellipse: return Tool::Ellipse;
             case IconId::Polygon: return Tool::Polygon;
+            case IconId::Slash:  return Tool::Line;
             case IconId::Color:  return Tool::Color;
             case IconId::Grid:   return Tool::Grid;
             case IconId::Ruler:  return Tool::Measure;
@@ -784,6 +785,13 @@ namespace seedui
             e.propriedades["valor"] = 50;
             e.propriedades["min"] = 0;
             e.propriedades["max"] = 100;
+        }
+        else if (base == "linha")
+        {
+            // Linha: sem preenchimento, traço visível por padrão.
+            e.estilos["cor_fundo"] = "#00000000";
+            e.estilos["cor_borda"] = "#cfcfcf";
+            e.estilos["espessura_borda"] = 3.0f;
         }
 
         modo.raiz.push_back(std::move(e));
@@ -1514,7 +1522,8 @@ namespace seedui
         const bool ctrlTemporary = ImGui::GetIO().KeyCtrl;
         const bool shapeTool = mCurrentTool == Tool::Rectangle ||
                                mCurrentTool == Tool::Ellipse ||
-                               mCurrentTool == Tool::Polygon;
+                               mCurrentTool == Tool::Polygon ||
+                               mCurrentTool == Tool::Line;
         if (PossuiModoAtivo() && shapeTool && !ctrlTemporary)
         {
             const ImVec2 mouse = ImGui::GetMousePos();
@@ -1540,9 +1549,11 @@ namespace seedui
                 const float w = std::max(8.0f, fabsf(mShapeEndX - mShapeStartX));
                 const float h = std::max(8.0f, fabsf(mShapeEndY - mShapeStartY));
                 const char* type = mCurrentTool == Tool::Rectangle ? "retangulo" :
-                                   mCurrentTool == Tool::Ellipse ? "elipse" : "poligono";
+                                   mCurrentTool == Tool::Ellipse ? "elipse" :
+                                   mCurrentTool == Tool::Line ? "linha" : "poligono";
                 const char* name = mCurrentTool == Tool::Rectangle ? "Retangulo" :
-                                   mCurrentTool == Tool::Ellipse ? "Elipse" : "Poligono";
+                                   mCurrentTool == Tool::Ellipse ? "Elipse" :
+                                   mCurrentTool == Tool::Line ? "Linha" : "Poligono";
                 if (AdicionarComponente(type, name, x, y))
                 {
                     Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
@@ -4492,6 +4503,7 @@ namespace seedui
             CriarRetanguloTelaBase();
         ToolButton(IconId::Ellipse, "Criar elipse · arraste no canvas", kFamilyCreate);
         ToolButton(IconId::Polygon, "Criar polígono · arraste no canvas", kFamilyCreate);
+        ToolButton(IconId::Slash, "Criar linha · arraste para definir o traço", kFamilyCreate);
         DrawToolFamilySeparator(kFamilyCreate);
 
         ToolButton(IconId::Color, "Aparência · Conta-gotas (I)", kFamilyAppearance);

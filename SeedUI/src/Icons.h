@@ -58,6 +58,7 @@ namespace seedui
         Rectangle,
         Ellipse,
         Polygon,
+        Slash,
         Contour,
         FlipH,
         FlipV,

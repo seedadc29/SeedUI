@@ -104,7 +104,23 @@ namespace seedui
             const float width = element.transformacao.value("largura", 160.0f);
             const float height = element.transformacao.value("altura", 32.0f);
             bool inside = false;
-            if (Geo::ElementRotation(element) != 0.0f)
+            if (element.tipo == "linha")
+            {
+                // Linha: clique próximo ao traço (distância ao segmento).
+                float x1 = 0.0f, y1 = 0.0f, x2 = 0.0f, y2 = 0.0f;
+                Geo::LineEndpointsProject(element, x1, y1, x2, y2);
+                const float dx = x2 - x1, dy = y2 - y1;
+                const float len2 = dx * dx + dy * dy;
+                if (len2 > 0.0f)
+                {
+                    float t = ((x - x1) * dx + (y - y1) * dy) / len2;
+                    t = std::max(0.0f, std::min(1.0f, t));
+                    const float px = x1 + t * dx, py = y1 + t * dy;
+                    const float ddx = x - px, ddy = y - py;
+                    inside = (ddx * ddx + ddy * ddy) <= 64.0f; // raio 8px
+                }
+            }
+            else if (Geo::ElementRotation(element) != 0.0f)
             {
                 float minX = 0.0f, minY = 0.0f, maxX = 0.0f, maxY = 0.0f;
                 Geo::RotatedAABB(element, minX, minY, maxX, maxY);

@@ -148,6 +148,54 @@ namespace seedui
             return ShapeKind::Rect;
         }
 
+        // Linha: os dois extremos da diagonal da caixa (0,0)->(w,h) no espaço
+        // local, com espelhamento/rotação aplicados, em coordenadas do projeto.
+        inline void LineEndpointsProject(const Element& e,
+                                         float& x1, float& y1,
+                                         float& x2, float& y2)
+        {
+            const float x = e.transformacao.value("x", 0.0f);
+            const float y = e.transformacao.value("y", 0.0f);
+            const float w = e.transformacao.value("largura", 160.0f);
+            const float h = e.transformacao.value("altura", 32.0f);
+            float p[4] = { 0.0f, 0.0f, w, h };
+            if (e.transformacao.value("espelhado_h", 0.0f) > 0.5f)
+            {
+                p[0] = w - p[0];
+                p[2] = w - p[2];
+            }
+            if (e.transformacao.value("espelhado_v", 0.0f) > 0.5f)
+            {
+                p[1] = h - p[1];
+                p[3] = h - p[3];
+            }
+            const float radians = DegToRad(ElementRotation(e));
+            float px = 0.0f, py = 0.0f;
+            ElementPivot(e, px, py);
+            for (int i = 0; i < 4; i += 2)
+            {
+                float ex = x + p[i];
+                float ey = y + p[i + 1];
+                if (fabsf(radians) > 0.0001f)
+                    RotatePoint(ex, ey, px, py, radians);
+                p[i] = ex;
+                p[i + 1] = ey;
+            }
+            x1 = p[0]; y1 = p[1]; x2 = p[2]; y2 = p[3];
+        }
+
+        // Extremos da linha em coordenadas de tela.
+        inline void LineEndpointsScreen(const Element& e, float originX, float originY,
+                                        float scale, float& x1, float& y1,
+                                        float& x2, float& y2)
+        {
+            LineEndpointsProject(e, x1, y1, x2, y2);
+            x1 = originX + x1 * scale;
+            y1 = originY + y1 * scale;
+            x2 = originX + x2 * scale;
+            y2 = originY + y2 * scale;
+        }
+
         // Aplica os flags de espelhamento (transformacao.espelhado_h/v) aos
         // pontos locais. Chamado ao final de OutlineLocal.
         inline void ApplyMirror(const Element& e, float w, float h,
