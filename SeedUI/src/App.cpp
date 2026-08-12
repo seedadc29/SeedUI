@@ -1711,7 +1711,8 @@ namespace seedui
         const ImGuiWindowFlags flags =
             ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
             ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings |
-            ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_MenuBar;
+            ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_MenuBar |
+            ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
 
         ImGui::Begin("##workspace", nullptr, flags);
         {
@@ -1733,31 +1734,36 @@ namespace seedui
                 const float availY = ImGui::GetContentRegionAvail().y - kStatusBarHeight;
 
                 ImGui::BeginChild("##toolbar", ImVec2(kToolbarWidth, availY), false,
-                                  ImGuiWindowFlags_NoScrollbar);
+                                  ImGuiWindowFlags_NoScrollbar |
+                                  ImGuiWindowFlags_NoScrollWithMouse);
                 DrawToolbar();
                 ImGui::EndChild();
 
                 ImGui::SameLine();
 
                 const float rightWidth = mRightPanelCollapsed ? kRightRailWidth : mRightPanelWidth;
-                ImGui::BeginChild("##canvas", ImVec2(-(rightWidth + 6.0f), availY), true);
+                ImGui::BeginChild("##canvas", ImVec2(-(rightWidth + 6.0f), availY), true,
+                                  ImGuiWindowFlags_NoScrollbar |
+                                  ImGuiWindowFlags_NoScrollWithMouse);
                 const ImVec2 canvasSurface = ImGui::GetContentRegionAvail();
                 ImGui::InvisibleButton("##canvas_surface", canvasSurface);
                 const ImVec2 canvasDropMin = ImGui::GetItemRectMin();
                 const ImVec2 canvasDropMax = ImGui::GetItemRectMax();
                 const bool canvasHovered = ImGui::IsItemHovered(
                     ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
-                if (canvasHovered &&
-                    (mCurrentTool == Tool::Zoom || ImGui::GetIO().KeyCtrl))
+                if (canvasHovered)
                 {
-                    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
-                        mCanvasZoom = std::min(4.0f, mCanvasZoom * 1.25f);
-                    if (ImGui::IsMouseClicked(ImGuiMouseButton_Right))
-                        mCanvasZoom = std::max(0.25f, mCanvasZoom / 1.25f);
                     const float wheel = ImGui::GetIO().MouseWheel;
                     if (wheel > 0.0f) mCanvasZoom = std::min(4.0f, mCanvasZoom * 1.1f);
                     if (wheel < 0.0f) mCanvasZoom = std::max(0.25f, mCanvasZoom / 1.1f);
-                    ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+                    if (mCurrentTool == Tool::Zoom)
+                    {
+                        if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+                            mCanvasZoom = std::min(4.0f, mCanvasZoom * 1.25f);
+                        if (ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+                            mCanvasZoom = std::max(0.25f, mCanvasZoom / 1.25f);
+                        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+                    }
                 }
                 HandleCanvasInteraction(canvasHovered);
                 CanvasDraw(mHasProject ? &mProject : nullptr, mTelaAtiva, mModoAtivo,
