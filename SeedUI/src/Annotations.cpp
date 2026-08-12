@@ -99,7 +99,19 @@ namespace seedui
         // Coordenadas GLOBAIS (janela do SeedUI inteira): a anotação pode cobrir
         // menus, ícones da barra lateral, painéis e o canvas.
         const ImVec2 mouse = ImGui::GetMousePos();
-        const bool hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
+        // O canvas usa um InvisibleButton que fica ativo durante o arraste;
+        // depender de IsWindowHovered bloqueava falsamente as anotações.
+        const bool hovered = PointInRect(mouse, ImVec2(0.0f, 0.0f), viewportSize);
+
+        // O popup da anotação precisa receber clique e teclado. Sem esta
+        // exclusão, a captura global desmarcava a anotação antes do campo focar.
+        if (!st.creating && st.dragging < 0 && st.selected >= 0 &&
+            st.selected < (int)st.items.size())
+        {
+            const AnnotationsPopupRect popup =
+                AnnotationsPopupRectFor(st.items[st.selected], viewportSize);
+            if (PointInRect(mouse, popup.min, popup.max)) return;
+        }
 
         if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && hovered)
         {
@@ -294,9 +306,11 @@ namespace seedui
         }
 
         Annotation& a = st.items[st.selected];
+        bool focusEditor = false;
 
         if (st.editedIndex != st.selected)
         {
+            focusEditor = true;
             strncpy(st.editBuf, a.text.c_str(), sizeof(st.editBuf) - 1);
             st.editBuf[sizeof(st.editBuf) - 1] = 0;
             st.editedIndex = st.selected;
@@ -329,6 +343,7 @@ namespace seedui
             return AnnotationsEdit_Confirmed;
         }
 
+        if (focusEditor) ImGui::SetKeyboardFocusHere();
         ImGui::InputTextMultiline("##texto", st.editBuf, sizeof(st.editBuf),
                                   ImVec2(-1.0f, 84.0f));
         a.text = st.editBuf; // salvo automaticamente: o rótulo atualiza em tempo real

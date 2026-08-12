@@ -27,7 +27,10 @@ extern "C"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 
+#include <algorithm>
+#include <cctype>
 #include <cfloat>
+#include <cmath>
 #include <cstdarg>
 #include <cstdio>
 #include <ctime>
@@ -120,6 +123,122 @@ namespace seedui
             default:             return Tool::Select;
             }
         }
+
+        std::string LowerAscii(std::string value)
+        {
+            for (char& c : value) c = (char)std::tolower((unsigned char)c);
+            return value;
+        }
+
+        bool ElementMatchesSearch(const Element& element, const char* query)
+        {
+            if (!query || !query[0]) return true;
+            const std::string needle = LowerAscii(query);
+            if (LowerAscii(element.nome).find(needle) != std::string::npos ||
+                LowerAscii(element.id).find(needle) != std::string::npos ||
+                LowerAscii(element.tipo).find(needle) != std::string::npos)
+                return true;
+            for (const Element& child : element.filhos)
+                if (ElementMatchesSearch(child, query)) return true;
+            return false;
+        }
+
+        void CollectElementsInRect(const std::vector<Element>& elements,
+                                   float left, float top, float right, float bottom,
+                                   std::vector<std::string>& out)
+        {
+            for (const Element& element : elements)
+            {
+                if (!element.visivel) continue;
+                const float x = element.transformacao.value("x", 0.0f);
+                const float y = element.transformacao.value("y", 0.0f);
+                const float w = element.transformacao.value("largura", 160.0f);
+                const float h = element.transformacao.value("altura", 32.0f);
+                if (x < right && x + w > left && y < bottom && y + h > top)
+                    out.push_back(element.id);
+                CollectElementsInRect(element.filhos, left, top, right, bottom, out);
+            }
+        }
+
+        const char* CornerKeyForDragMode(int dragMode)
+        {
+            switch (dragMode)
+            {
+            case 10: return "superior_esquerda";
+            case 11: return "superior_direita";
+            case 12: return "inferior_direita";
+            case 13: return "inferior_esquerda";
+            default: return nullptr;
+            }
+        }
+
+        float ElementCornerRadius(const Element& element, int dragMode)
+        {
+            const char* key = CornerKeyForDragMode(dragMode);
+            if (!key) return 0.0f;
+            float uniform = 0.0f;
+            if (element.estilos.is_object())
+            {
+                const auto uniformIt = element.estilos.find("raio");
+                if (uniformIt != element.estilos.end() && uniformIt->is_number())
+                    uniform = std::max(0.0f, uniformIt->get<float>());
+                const auto cornersIt = element.estilos.find("raio_quinas");
+                if (cornersIt != element.estilos.end() && cornersIt->is_object())
+                {
+                    const auto valueIt = cornersIt->find(key);
+                    if (valueIt != cornersIt->end() && valueIt->is_number())
+                        return std::max(0.0f, valueIt->get<float>());
+                }
+            }
+            return uniform;
+        }
+
+        void SetElementCornerRadius(Element& element, int dragMode, float radius)
+        {
+            const char* key = CornerKeyForDragMode(dragMode);
+            if (!key) return;
+            if (!element.estilos.is_object()) element.estilos = nlohmann::json::object();
+            if (!element.estilos.contains("raio_quinas") ||
+                !element.estilos["raio_quinas"].is_object())
+                element.estilos["raio_quinas"] = nlohmann::json::object();
+            element.estilos["raio_quinas"][key] = std::max(0.0f, radius);
+        }
+
+        void ClampElementCornerRadii(Element& element)
+        {
+            const float width = element.transformacao.value("largura", 160.0f);
+            const float height = element.transformacao.value("altura", 32.0f);
+            const float maximum = std::max(0.0f, std::min(width, height) * 0.5f);
+            for (int mode = 10; mode <= 13; ++mode)
+                SetElementCornerRadius(element, mode,
+                    std::min(maximum, ElementCornerRadius(element, mode)));
+        }
+
+        void DrawDashedLine(ImDrawList* dl, const ImVec2& a, const ImVec2& b, ImU32 color)
+        {
+            const float dx = b.x - a.x;
+            const float dy = b.y - a.y;
+            const float length = sqrtf(dx * dx + dy * dy);
+            if (length <= 0.0f) return;
+            const float ux = dx / length;
+            const float uy = dy / length;
+            for (float p = 0.0f; p < length; p += 10.0f)
+            {
+                const float end = std::min(length, p + 6.0f);
+                dl->AddLine(ImVec2(a.x + ux * p, a.y + uy * p),
+                            ImVec2(a.x + ux * end, a.y + uy * end), color, 1.5f);
+            }
+        }
+
+        void DrawDashedRect(ImDrawList* dl, const ImVec2& a, const ImVec2& b, ImU32 color)
+        {
+            const ImVec2 mn(std::min(a.x, b.x), std::min(a.y, b.y));
+            const ImVec2 mx(std::max(a.x, b.x), std::max(a.y, b.y));
+            DrawDashedLine(dl, mn, ImVec2(mx.x, mn.y), color);
+            DrawDashedLine(dl, ImVec2(mx.x, mn.y), mx, color);
+            DrawDashedLine(dl, mx, ImVec2(mn.x, mx.y), color);
+            DrawDashedLine(dl, ImVec2(mn.x, mx.y), mn, color);
+        }
     }    void App::Run(bool captureAfterBoot)
     {
         mCaptureAfterBoot = captureAfterBoot;
@@ -192,7 +311,20 @@ namespace seedui
                 {
                     TraceLog(LOG_INFO, "CAPTURE: capturando tela inicial");
                     TakeScreenshot("seedui_capture_start.png");
-                    mHasProject = true; // segunda captura mostra o workspace
+                    mProject.CriarNovo("Captura automatica", 1280, 720);
+                    mHasProject = true; // segunda captura mostra um workspace valido
+                    AdicionarComponente("painel", "Painel de validacao", 360.0f, 220.0f);
+                    if (Element* panel = Project::ResolverId(mProject, mSelectedElementId))
+                    {
+                        panel->estilos["raio_quinas"] = {
+                            { "superior_esquerda", 48.0f },
+                            { "superior_direita", 12.0f },
+                            { "inferior_direita", 72.0f },
+                            { "inferior_esquerda", 28.0f }
+                        };
+                        mCornerSelectionElementId = panel->id;
+                        mSelectedCornerMask = 0x0Fu;
+                    }
                 }
                 else if (mFrameCount == 60)
                 {
@@ -384,13 +516,35 @@ namespace seedui
         mProjectDirty = false;
     }
 
-    void App::AdicionarComponente(const char* tipo, const char* nome)
+    bool App::PossuiModoAtivo() const
     {
-        if (!mHasProject || mProject.telas.empty()) return;
-        if (mTelaAtiva < 0 || mTelaAtiva >= (int)mProject.telas.size()) return;
+        if (!mHasProject || mTelaAtiva < 0 ||
+            mTelaAtiva >= (int)mProject.telas.size())
+            return false;
+        const Tela& tela = mProject.telas[mTelaAtiva];
+        return mModoAtivo >= 0 && mModoAtivo < (int)tela.modos.size();
+    }
+
+    bool App::AdicionarComponente(const char* tipo, const char* nome,
+                                  float projectX, float projectY)
+    {
+        if (!mHasProject || mProject.telas.empty())
+        {
+            TraceLog(LOG_WARNING, "M04: componente recusado: nenhum projeto aberto");
+            return false;
+        }
+        if (mTelaAtiva < 0 || mTelaAtiva >= (int)mProject.telas.size())
+        {
+            TraceLog(LOG_WARNING, "M04: componente recusado: tela ativa invalida");
+            return false;
+        }
 
         Tela& tela = mProject.telas[mTelaAtiva];
-        if (tela.modos.empty()) return;
+        if (tela.modos.empty())
+        {
+            TraceLog(LOG_WARNING, "M04: componente recusado: tela sem modos");
+            return false;
+        }
         if (mModoAtivo < 0 || mModoAtivo >= (int)tela.modos.size()) mModoAtivo = 0;
 
         Modo& modo = tela.modos[mModoAtivo];
@@ -402,37 +556,42 @@ namespace seedui
             if (!Project::ResolverId(mProject, id)) break;
         }
 
+        float width = 180.0f;
+        float height = 42.0f;
+        if (base == "janela" || base == "painel")
+        {
+            width = 320.0f;
+            height = base == "janela" ? 220.0f : 160.0f;
+        }
+        else if (base == "texto")
+        {
+            width = 220.0f;
+            height = 32.0f;
+        }
+
         const int index = (int)modo.raiz.size();
+        const float requestedX = projectX >= 0.0f ? projectX : (float)(80 + (index % 5) * 28);
+        const float requestedY = projectY >= 0.0f ? projectY : (float)(80 + (index % 7) * 24);
+        const float maxX = std::max(0.0f, (float)mProject.telaBaseLargura - width);
+        const float maxY = std::max(0.0f, (float)mProject.telaBaseAltura - height);
+        const float initialX = std::max(0.0f, std::min(maxX, requestedX));
+        const float initialY = std::max(0.0f, std::min(maxY, requestedY));
+
         Element e;
         e.id = id;
         e.tipo = base;
         e.nome = nome ? nome : base.c_str();
         e.transformacao = {
-            { "x", 80 + (index % 5) * 28 },
-            { "y", 80 + (index % 7) * 24 },
-            { "largura", 180 },
-            { "altura", 42 }
+            { "x", initialX }, { "y", initialY },
+            { "largura", width }, { "altura", height }
         };
 
-        if (base == "janela" || base == "painel")
-        {
-            e.transformacao["largura"] = 320;
-            e.transformacao["altura"] = base == "janela" ? 220 : 160;
-        }
-        else if (base == "texto")
-        {
-            e.transformacao["largura"] = 220;
-            e.transformacao["altura"] = 32;
+        if (base == "texto")
             e.propriedades["texto"] = "Texto";
-        }
         else if (base == "botao")
-        {
             e.propriedades["texto"] = "Botao";
-        }
         else if (base == "campo_numerico")
-        {
             e.propriedades["valor"] = 0;
-        }
         else if (base == "slider")
         {
             e.propriedades["valor"] = 50;
@@ -442,28 +601,536 @@ namespace seedui
 
         modo.raiz.push_back(std::move(e));
         mSelectedElementId = id;
+        mSelectedElementIds.clear();
+        mSelectedElementIds.push_back(id);
         mProjectDirty = true;
-        mStatusMsg = "Componente adicionado: " + id;
+        mStatusMsg = "Componente fixado no canvas: " + id;
         mStatusMsgUntil = GetTime() + 5.0;
+        TraceLog(LOG_INFO, "M04: %s fixado em %.1f, %.1f (%0.fx%.0f)",
+                 id.c_str(), initialX, initialY, width, height);
+        return true;
     }
 
+    void App::AlternarModoAnotacao()
+    {
+        if (mCurrentTool == Tool::Annotate)
+        {
+            mCurrentTool = Tool::Select;
+            mAnnot.creating = false;
+            mAnnot.dragging = -1;
+            mAnnot.dragMode = 0;
+            mStatusMsg = "Modo de anotacoes desativado";
+        }
+        else
+        {
+            mCurrentTool = Tool::Annotate;
+            mStatusMsg = "Modo de anotacoes ativado";
+        }
+        mStatusMsgUntil = GetTime() + 4.0;
+    }
+
+    void App::CopiarElementosSelecionados()
+    {
+        mElementClipboard.clear();
+        mElementPasteGeneration = 0;
+        if (!PossuiModoAtivo()) return;
+
+        std::vector<std::string> ids = mSelectedElementIds;
+        if (!mSelectedElementId.empty() &&
+            std::find(ids.begin(), ids.end(), mSelectedElementId) == ids.end())
+            ids.push_back(mSelectedElementId);
+
+        const Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+        mElementClipboard = Project::CopiarElementos(mode, ids);
+        if (mElementClipboard.empty())
+        {
+            mStatusMsg = "Selecione um elemento para copiar";
+            mStatusMsgUntil = GetTime() + 4.0;
+            return;
+        }
+
+        mStatusMsg = std::to_string(mElementClipboard.size()) +
+                     " elemento(s) copiado(s)";
+        mStatusMsgUntil = GetTime() + 4.0;
+    }
+
+    void App::ColarElementosCopiados()
+    {
+        if (!PossuiModoAtivo() || mElementClipboard.empty())
+        {
+            mStatusMsg = "Nada copiado para colar";
+            mStatusMsgUntil = GetTime() + 4.0;
+            return;
+        }
+
+        Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+        ++mElementPasteGeneration;
+        const float delta = 16.0f * (float)mElementPasteGeneration;
+        const std::vector<std::string> pastedRootIds = Project::ColarElementos(
+            mProject, mode, mElementClipboard, delta);
+
+        mSelectedElementIds = pastedRootIds;
+        mSelectedElementId = pastedRootIds.empty() ? std::string() : pastedRootIds.back();
+        mProjectDirty = true;
+        mStatusMsg = std::to_string(pastedRootIds.size()) +
+                     " elemento(s) colado(s)";
+        mStatusMsgUntil = GetTime() + 4.0;
+    }
+
+    void App::HandleCanvasInteraction(bool canvasHovered)
+    {
+        const bool editTool = mCurrentTool == Tool::Select || mCurrentTool == Tool::Move;
+        if (!PossuiModoAtivo() || !editTool)
+        {
+            if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
+            {
+                mCanvasDragMode = 0;
+                mCanvasMarquee = false;
+            }
+            return;
+        }
+
+        Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+        auto isSelected = [&](const std::string& id)
+        {
+            return std::find(mSelectedElementIds.begin(), mSelectedElementIds.end(), id) !=
+                   mSelectedElementIds.end();
+        };
+        if (mSelectedElementId.empty())
+        {
+            if (!mCanvasMarquee) mSelectedElementIds.clear();
+        }
+        else if (!isSelected(mSelectedElementId))
+        {
+            mSelectedElementIds.clear();
+            mSelectedElementIds.push_back(mSelectedElementId);
+        }
+        if (mCornerSelectionElementId != mSelectedElementId)
+        {
+            mSelectedCornerMask = 0;
+            mCanvasCornerDragMask = 0;
+            mCornerSelectionElementId = mSelectedElementId;
+        }
+
+        const ImVec2 mouse = ImGui::GetMousePos();
+        float mouseX = 0.0f, mouseY = 0.0f;
+        const bool mouseOnFrame = CanvasScreenToProject(&mProject, mouse.x, mouse.y,
+                                                         mouseX, mouseY, false);
+        float unusedX = 0.0f, unusedY = 0.0f, viewScale = 1.0f;
+        CanvasProjectToScreen(&mProject, 0.0f, 0.0f, unusedX, unusedY, viewScale);
+        const float tolerance = 8.0f / std::max(0.25f, viewScale);
+
+        auto dragModeAt = [&](const Element& element, float x, float y)
+        {
+            const float ex = element.transformacao.value("x", 0.0f);
+            const float ey = element.transformacao.value("y", 0.0f);
+            const float ew = element.transformacao.value("largura", 160.0f);
+            const float eh = element.transformacao.value("altura", 32.0f);
+            if (x < ex - tolerance || x > ex + ew + tolerance ||
+                y < ey - tolerance || y > ey + eh + tolerance)
+                return 0;
+
+            const float minMarkerInset = 14.0f / std::max(0.25f, viewScale);
+            const float maxMarkerInset = std::max(6.0f / std::max(0.25f, viewScale),
+                std::min(ew, eh) * 0.5f - 6.0f / std::max(0.25f, viewScale));
+            auto markerInset = [&](int mode)
+            {
+                return std::min(maxMarkerInset,
+                                std::max(minMarkerInset, ElementCornerRadius(element, mode)));
+            };
+            const float cornerTolerance = 9.0f / std::max(0.25f, viewScale);
+            const float cornerToleranceSq = cornerTolerance * cornerTolerance;
+            const float insets[] = {
+                markerInset(10), markerInset(11), markerInset(12), markerInset(13)
+            };
+            const float cornerX[] = {
+                ex + insets[0], ex + ew - insets[1],
+                ex + ew - insets[2], ex + insets[3]
+            };
+            const float cornerY[] = {
+                ey + insets[0], ey + insets[1],
+                ey + eh - insets[2], ey + eh - insets[3]
+            };
+            for (int index = 0; index < 4; ++index)
+            {
+                const float dx = x - cornerX[index];
+                const float dy = y - cornerY[index];
+                if (dx * dx + dy * dy <= cornerToleranceSq) return 10 + index;
+            }
+
+            const bool left = fabsf(x - ex) <= tolerance;
+            const bool right = fabsf(x - ex - ew) <= tolerance;
+            const bool top = fabsf(y - ey) <= tolerance;
+            const bool bottom = fabsf(y - ey - eh) <= tolerance;
+            if (left && top) return 6;
+            if (right && top) return 7;
+            if (left && bottom) return 8;
+            if (right && bottom) return 9;
+            if (left) return 2;
+            if (right) return 3;
+            if (top) return 4;
+            if (bottom) return 5;
+            return x >= ex && x <= ex + ew && y >= ey && y <= ey + eh ? 1 : 0;
+        };
+
+        auto applyCursor = [](int dragMode)
+        {
+            if (dragMode == 2 || dragMode == 3) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+            else if (dragMode == 4 || dragMode == 5) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
+            else if (dragMode == 6 || dragMode == 9) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNWSE);
+            else if (dragMode == 7 || dragMode == 8) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNESW);
+            else if (dragMode == 10 || dragMode == 12) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNWSE);
+            else if (dragMode == 11 || dragMode == 13) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNESW);
+            else if (dragMode == 1) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
+        };
+
+        if (canvasHovered && mouseOnFrame && mCanvasDragMode == 0 && !mCanvasMarquee)
+        {
+            if (Element* selected = Project::ResolverId(mode, mSelectedElementId))
+                if (!selected->bloqueado) applyCursor(dragModeAt(*selected, mouseX, mouseY));
+        }
+
+        if (canvasHovered && mouseOnFrame &&
+            ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        {
+            Element* current = Project::ResolverId(mode, mSelectedElementId);
+            const int currentHandle = current ? dragModeAt(*current, mouseX, mouseY) : 0;
+            Element* hit = currentHandle >= 2
+                ? current
+                : Project::ElementoNoPonto(mode, mouseX, mouseY);
+            const bool additive = ImGui::GetIO().KeyShift;
+            bool keepHitForDrag = hit != nullptr;
+
+            if (currentHandle >= 10 && currentHandle <= 13 && current)
+            {
+                const unsigned int clickedBit = 1u << (currentHandle - 10);
+                mCornerSelectionElementId = current->id;
+                if (ImGui::GetIO().KeyCtrl)
+                {
+                    mSelectedCornerMask = 0x0Fu;
+                }
+                else if (additive)
+                {
+                    mSelectedCornerMask ^= clickedBit;
+                    if ((mSelectedCornerMask & clickedBit) == 0) keepHitForDrag = false;
+                }
+                else if ((mSelectedCornerMask & clickedBit) == 0)
+                {
+                    mSelectedCornerMask = clickedBit;
+                }
+                mCanvasCornerDragMask = mSelectedCornerMask;
+                mSelectedElementId = current->id;
+                if (!isSelected(current->id))
+                {
+                    mSelectedElementIds.clear();
+                    mSelectedElementIds.push_back(current->id);
+                }
+            }
+            else if (hit && additive)
+            {
+                mSelectedCornerMask = 0;
+                mCanvasCornerDragMask = 0;
+                auto it = std::find(mSelectedElementIds.begin(), mSelectedElementIds.end(), hit->id);
+                if (it == mSelectedElementIds.end())
+                {
+                    mSelectedElementIds.push_back(hit->id);
+                    mSelectedElementId = hit->id;
+                }
+                else
+                {
+                    mSelectedElementIds.erase(it);
+                    keepHitForDrag = false;
+                    mSelectedElementId = mSelectedElementIds.empty()
+                        ? std::string()
+                        : mSelectedElementIds.back();
+                }
+            }
+            else if (hit)
+            {
+                mSelectedCornerMask = 0;
+                mCanvasCornerDragMask = 0;
+                if (!isSelected(hit->id))
+                {
+                    mSelectedElementIds.clear();
+                    mSelectedElementIds.push_back(hit->id);
+                }
+                mSelectedElementId = hit->id;
+            }
+            else
+            {
+                mSelectedCornerMask = 0;
+                mCanvasCornerDragMask = 0;
+                if (!additive)
+                {
+                    mSelectedElementIds.clear();
+                    mSelectedElementId.clear();
+                }
+                mCanvasMarquee = true;
+                mCanvasMarqueeAdditive = additive;
+                mCanvasMarqueeStartX = mCanvasMarqueeEndX = mouseX;
+                mCanvasMarqueeStartY = mCanvasMarqueeEndY = mouseY;
+            }
+
+            mCanvasDragMode = 0;
+            mCanvasDragChanged = false;
+            mCanvasGroupStarts.clear();
+            if (hit && keepHitForDrag && !hit->bloqueado)
+            {
+                mCanvasDragMode = dragModeAt(*hit, mouseX, mouseY);
+                mCanvasDragMouseX = mouseX;
+                mCanvasDragMouseY = mouseY;
+                mCanvasDragX = hit->transformacao.value("x", 0.0f);
+                mCanvasDragY = hit->transformacao.value("y", 0.0f);
+                mCanvasDragW = hit->transformacao.value("largura", 160.0f);
+                mCanvasDragH = hit->transformacao.value("altura", 32.0f);
+                for (int corner = 0; corner < 4; ++corner)
+                    mCanvasCornerRadiusStarts[corner] =
+                        ElementCornerRadius(*hit, 10 + corner);
+                if (mCanvasDragMode == 1)
+                {
+                    for (const std::string& id : mSelectedElementIds)
+                    {
+                        Element* element = Project::ResolverId(mode, id);
+                        if (!element || element->bloqueado) continue;
+                        CanvasTransformStart start;
+                        start.id = id;
+                        start.x = element->transformacao.value("x", 0.0f);
+                        start.y = element->transformacao.value("y", 0.0f);
+                        start.w = element->transformacao.value("largura", 160.0f);
+                        start.h = element->transformacao.value("altura", 32.0f);
+                        mCanvasGroupStarts.push_back(start);
+                    }
+                }
+                applyCursor(mCanvasDragMode);
+            }
+        }
+
+        if (mCanvasMarquee && ImGui::IsMouseDown(ImGuiMouseButton_Left))
+        {
+            CanvasScreenToProject(&mProject, mouse.x, mouse.y, mouseX, mouseY, true);
+            mCanvasMarqueeEndX = mouseX;
+            mCanvasMarqueeEndY = mouseY;
+        }
+
+        if (mCanvasMarquee && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+        {
+            const float left = std::min(mCanvasMarqueeStartX, mCanvasMarqueeEndX);
+            const float top = std::min(mCanvasMarqueeStartY, mCanvasMarqueeEndY);
+            const float right = std::max(mCanvasMarqueeStartX, mCanvasMarqueeEndX);
+            const float bottom = std::max(mCanvasMarqueeStartY, mCanvasMarqueeEndY);
+            if (right - left > tolerance && bottom - top > tolerance)
+            {
+                std::vector<std::string> found;
+                CollectElementsInRect(mode.raiz, left, top, right, bottom, found);
+                for (const std::string& id : found)
+                    if (!isSelected(id)) mSelectedElementIds.push_back(id);
+                mSelectedElementId = mSelectedElementIds.empty()
+                    ? std::string()
+                    : mSelectedElementIds.back();
+                mStatusMsg = std::to_string(mSelectedElementIds.size()) +
+                             " elemento(s) selecionado(s)";
+                mStatusMsgUntil = GetTime() + 4.0;
+            }
+            mCanvasMarquee = false;
+            return;
+        }
+
+        if (mCanvasDragMode != 0 && ImGui::IsMouseDown(ImGuiMouseButton_Left))
+        {
+            CanvasScreenToProject(&mProject, mouse.x, mouse.y, mouseX, mouseY, true);
+            Element* selected = Project::ResolverId(mode, mSelectedElementId);
+            if (!selected || selected->bloqueado)
+            {
+                mCanvasDragMode = 0;
+                return;
+            }
+
+            float dx = mouseX - mCanvasDragMouseX;
+            float dy = mouseY - mCanvasDragMouseY;
+            const float minSize = 24.0f;
+            float left = mCanvasDragX;
+            float top = mCanvasDragY;
+            float right = mCanvasDragX + mCanvasDragW;
+            float bottom = mCanvasDragY + mCanvasDragH;
+
+            if (mCanvasDragMode == 1)
+            {
+                float minDx = -FLT_MAX, maxDx = FLT_MAX;
+                float minDy = -FLT_MAX, maxDy = FLT_MAX;
+                for (const CanvasTransformStart& start : mCanvasGroupStarts)
+                {
+                    minDx = std::max(minDx, -start.x);
+                    maxDx = std::min(maxDx, (float)mProject.telaBaseLargura - start.x - start.w);
+                    minDy = std::max(minDy, -start.y);
+                    maxDy = std::min(maxDy, (float)mProject.telaBaseAltura - start.y - start.h);
+                }
+                dx = std::max(minDx, std::min(maxDx, dx));
+                dy = std::max(minDy, std::min(maxDy, dy));
+                for (const CanvasTransformStart& start : mCanvasGroupStarts)
+                {
+                    if (Element* element = Project::ResolverId(mode, start.id))
+                    {
+                        element->transformacao["x"] = start.x + dx;
+                        element->transformacao["y"] = start.y + dy;
+                    }
+                }
+            }
+            else if (mCanvasDragMode >= 10 && mCanvasDragMode <= 13)
+            {
+                float cornerDelta = 0.0f;
+                if (mCanvasDragMode == 10) cornerDelta = (dx + dy) * 0.5f;
+                if (mCanvasDragMode == 11) cornerDelta = (-dx + dy) * 0.5f;
+                if (mCanvasDragMode == 12) cornerDelta = (-dx - dy) * 0.5f;
+                if (mCanvasDragMode == 13) cornerDelta = (dx - dy) * 0.5f;
+                const float maximum = std::max(0.0f,
+                    std::min(mCanvasDragW, mCanvasDragH) * 0.5f);
+                unsigned int activeMask = ImGui::GetIO().KeyCtrl
+                    ? 0x0Fu : mCanvasCornerDragMask;
+                if (activeMask == 0)
+                    activeMask = 1u << (mCanvasDragMode - 10);
+                if (ImGui::GetIO().KeyCtrl) mSelectedCornerMask = 0x0Fu;
+                for (int corner = 0; corner < 4; ++corner)
+                {
+                    if ((activeMask & (1u << corner)) == 0) continue;
+                    SetElementCornerRadius(*selected, 10 + corner,
+                        std::max(0.0f, std::min(maximum,
+                            mCanvasCornerRadiusStarts[corner] + cornerDelta)));
+                }
+            }
+            else
+            {
+                const bool resizeLeft = mCanvasDragMode == 2 || mCanvasDragMode == 6 ||
+                                        mCanvasDragMode == 8;
+                const bool resizeRight = mCanvasDragMode == 3 || mCanvasDragMode == 7 ||
+                                         mCanvasDragMode == 9;
+                const bool resizeTop = mCanvasDragMode == 4 || mCanvasDragMode == 6 ||
+                                       mCanvasDragMode == 7;
+                const bool resizeBottom = mCanvasDragMode == 5 || mCanvasDragMode == 8 ||
+                                          mCanvasDragMode == 9;
+                if (resizeLeft)
+                    left = std::max(0.0f, std::min(right - minSize, mCanvasDragX + dx));
+                if (resizeRight)
+                    right = std::min((float)mProject.telaBaseLargura,
+                                     std::max(left + minSize, mCanvasDragX + mCanvasDragW + dx));
+                if (resizeTop)
+                    top = std::max(0.0f, std::min(bottom - minSize, mCanvasDragY + dy));
+                if (resizeBottom)
+                    bottom = std::min((float)mProject.telaBaseAltura,
+                                      std::max(top + minSize, mCanvasDragY + mCanvasDragH + dy));
+                selected->transformacao["x"] = left;
+                selected->transformacao["y"] = top;
+                selected->transformacao["largura"] = right - left;
+                selected->transformacao["altura"] = bottom - top;
+                ClampElementCornerRadii(*selected);
+            }
+
+            mCanvasDragChanged = true;
+            mProjectDirty = true;
+            applyCursor(mCanvasDragMode);
+        }
+
+        if (mCanvasDragMode != 0 && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+        {
+            if (mCanvasDragChanged)
+            {
+                if (mCanvasDragMode == 1)
+                    mStatusMsg = std::to_string(mCanvasGroupStarts.size()) +
+                                 " elemento(s) movido(s)";
+                else if (mCanvasDragMode >= 10 && mCanvasDragMode <= 13)
+                    mStatusMsg = "Arredondamento da quina alterado";
+                else
+                    mStatusMsg = "Elemento redimensionado";
+                mStatusMsgUntil = GetTime() + 4.0;
+                TraceLog(LOG_INFO, "M05 selecao: transformacao alterada (%s)",
+                         mSelectedElementId.c_str());
+            }
+            mCanvasDragMode = 0;
+            mCanvasDragChanged = false;
+            mCanvasGroupStarts.clear();
+        }
+    }
     void App::DrawElementTree(Element& element)
     {
+        if (!ElementMatchesSearch(element, mHierarchySearch)) return;
+
+        if (mRenamingElementId == element.id && element.bloqueado)
+            mRenamingElementId.clear();
+
+        if (mRenamingElementId == element.id)
+        {
+            ImGui::PushID(element.id.c_str());
+            ImGui::SetNextItemWidth(-1.0f);
+            if (ImGui::InputText("##rename", mRenameBuffer, sizeof(mRenameBuffer),
+                                 ImGuiInputTextFlags_EnterReturnsTrue))
+            {
+                if (mRenameBuffer[0])
+                {
+                    element.nome = mRenameBuffer;
+                    mProjectDirty = true;
+                }
+                mRenamingElementId.clear();
+            }
+            if (ImGui::IsItemActive() && ImGui::IsKeyPressed(ImGuiKey_Escape))
+                mRenamingElementId.clear();
+            ImGui::PopID();
+            return;
+        }
+
         ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow |
                                    ImGuiTreeNodeFlags_SpanAvailWidth;
         if (element.filhos.empty()) flags |= ImGuiTreeNodeFlags_Leaf;
         if (element.id == mSelectedElementId) flags |= ImGuiTreeNodeFlags_Selected;
+        if (mHierarchySearch[0]) flags |= ImGuiTreeNodeFlags_DefaultOpen;
 
-        const std::string label = element.nome.empty()
-            ? element.id + "##" + element.id
-            : element.nome + "##" + element.id;
+        std::string visibleName = element.nome.empty() ? element.id : element.nome;
+        if (!element.visivel) visibleName += "  (oculto)";
+        if (element.bloqueado) visibleName += "  (bloqueado)";
+        const std::string label = visibleName + "##" + element.id;
 
+        if (!element.visivel) ImGui::PushStyleColor(ImGuiCol_Text, Theme::TextDisabled);
         const bool open = ImGui::TreeNodeEx(label.c_str(), flags);
-        if (ImGui::IsItemClicked())
-            mSelectedElementId = element.id;
+        if (!element.visivel) ImGui::PopStyleColor();
+        if (ImGui::IsItemClicked()) mSelectedElementId = element.id;
+
+        if (!element.bloqueado &&
+            ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
+        {
+            ImGui::SetDragDropPayload("SEEDUI_ELEMENT", element.id.c_str(), element.id.size() + 1);
+            ImGui::TextUnformatted(visibleName.c_str());
+            ImGui::TextColored(Theme::TextDisabled, "Mover na hierarquia");
+            ImGui::EndDragDropSource();
+        }
+        if (!element.bloqueado && ImGui::BeginDragDropTarget())
+        {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SEEDUI_ELEMENT"))
+            {
+                mPendingReparentElementId = (const char*)payload->Data;
+                mPendingReparentTargetId = element.id;
+            }
+            ImGui::EndDragDropTarget();
+        }
 
         if (ImGui::BeginPopupContextItem())
         {
+            if (ImGui::MenuItem("Renomear", "F2", false, !element.bloqueado))
+            {
+                mRenamingElementId = element.id;
+                const std::string current = element.nome.empty() ? element.id : element.nome;
+                strncpy(mRenameBuffer, current.c_str(), sizeof(mRenameBuffer) - 1);
+                mRenameBuffer[sizeof(mRenameBuffer) - 1] = 0;
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Mover para cima", nullptr, false, !element.bloqueado))
+            {
+                mPendingMoveElementId = element.id;
+                mPendingMoveDelta = -1;
+            }
+            if (ImGui::MenuItem("Mover para baixo", nullptr, false, !element.bloqueado))
+            {
+                mPendingMoveElementId = element.id;
+                mPendingMoveDelta = 1;
+            }
+            ImGui::Separator();
             if (ImGui::MenuItem(element.visivel ? "Ocultar" : "Mostrar"))
             {
                 element.visivel = !element.visivel;
@@ -474,18 +1141,20 @@ namespace seedui
                 element.bloqueado = !element.bloqueado;
                 mProjectDirty = true;
             }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Excluir", "Del", false, !element.bloqueado))
+                mPendingDeleteElementId = element.id;
             ImGui::EndPopup();
         }
 
         if (open)
         {
-            ImGui::TextColored(Theme::TextDisabled, "%s", element.id.c_str());
-            for (Element& child : element.filhos)
-                DrawElementTree(child);
+            ImGui::TextColored(Theme::TextDisabled, "id: %s · tipo: %s",
+                               element.id.c_str(), element.tipo.c_str());
+            for (Element& child : element.filhos) DrawElementTree(child);
             ImGui::TreePop();
         }
     }
-
     void App::DrawNovoProjetoDialog()
     {
         if (!mShowNovoProjeto) return;
@@ -555,14 +1224,26 @@ namespace seedui
             if (IsWindowMaximized()) RestoreWindow();
             else MaximizeWindow();
         }
-        if (!ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_A, false))
-            mCurrentTool = Tool::Annotate;
-        if (!ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_V, false))
+        if (!ImGui::GetIO().WantTextInput && !ImGui::GetIO().KeyCtrl &&
+            !ImGui::GetIO().KeyAlt && ImGui::IsKeyPressed(ImGuiKey_A, false))
+            AlternarModoAnotacao();
+        if (!ImGui::GetIO().WantTextInput && !ImGui::GetIO().KeyCtrl &&
+            !ImGui::GetIO().KeyAlt && ImGui::IsKeyPressed(ImGuiKey_V, false))
             mCurrentTool = Tool::Select;
         if (ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyShift &&
             ImGui::IsKeyPressed(ImGuiKey_C, false))
         {
             ImGui::SetClipboardText(AnnotationsToText(mAnnot, mGlobalDirectives).c_str());
+        }
+        if (!ImGui::GetIO().WantTextInput && ImGui::GetIO().KeyCtrl &&
+            !ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_C, false))
+        {
+            CopiarElementosSelecionados();
+        }
+        if (!ImGui::GetIO().WantTextInput && ImGui::GetIO().KeyCtrl &&
+            !ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_V, false))
+        {
+            ColarElementosCopiados();
         }
         if (ImGui::GetIO().KeyCtrl && !ImGui::GetIO().KeyShift &&
             ImGui::IsKeyPressed(ImGuiKey_S, false))
@@ -618,10 +1299,69 @@ namespace seedui
 
                 const float rightWidth = mRightPanelCollapsed ? kRightRailWidth : mRightPanelWidth;
                 ImGui::BeginChild("##canvas", ImVec2(-(rightWidth + 6.0f), availY), true);
-                if (mHasProject)
-                    CanvasDraw(&mProject, mTelaAtiva, mModoAtivo);
-                else
-                    CanvasDraw(nullptr);
+                const ImVec2 canvasSurface = ImGui::GetContentRegionAvail();
+                ImGui::InvisibleButton("##canvas_surface", canvasSurface);
+                const ImVec2 canvasDropMin = ImGui::GetItemRectMin();
+                const ImVec2 canvasDropMax = ImGui::GetItemRectMax();
+                const bool canvasHovered = ImGui::IsItemHovered(
+                    ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+                HandleCanvasInteraction(canvasHovered);
+                CanvasDraw(mHasProject ? &mProject : nullptr, mTelaAtiva, mModoAtivo,
+                           &mSelectedElementIds, mSelectedElementId.c_str(),
+                           mSelectedCornerMask);
+                if (mCanvasMarquee)
+                {
+                    float sx0 = 0.0f, sy0 = 0.0f, sx1 = 0.0f, sy1 = 0.0f, scale = 1.0f;
+                    CanvasProjectToScreen(&mProject, mCanvasMarqueeStartX, mCanvasMarqueeStartY,
+                                          sx0, sy0, scale);
+                    CanvasProjectToScreen(&mProject, mCanvasMarqueeEndX, mCanvasMarqueeEndY,
+                                          sx1, sy1, scale);
+                    const ImVec2 a(sx0, sy0), b(sx1, sy1);
+                    const ImU32 marqueeColor = ImGui::ColorConvertFloat4ToU32(Theme::AccentOrange);
+                    const ImU32 marqueeFill = ImGui::ColorConvertFloat4ToU32(
+                        Theme::Hex(0xf59e0b, 0.08f));
+                    ImGui::GetWindowDrawList()->AddRectFilled(
+                        ImVec2(std::min(a.x, b.x), std::min(a.y, b.y)),
+                        ImVec2(std::max(a.x, b.x), std::max(a.y, b.y)), marqueeFill);
+                    DrawDashedRect(ImGui::GetWindowDrawList(), a, b, marqueeColor);
+                }
+                if (PossuiModoAtivo() && ImGui::BeginDragDropTarget())
+                {
+                    const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(
+                        "SEEDUI_COMPONENT", ImGuiDragDropFlags_AcceptBeforeDelivery);
+                    if (payload && payload->Data)
+                    {
+                        const char* tipo = (const char*)payload->Data;
+                        if (strcmp(tipo, "painel") == 0)
+                        {
+                            const ImU32 dropColor = ImGui::ColorConvertFloat4ToU32(Theme::AccentBlue);
+                            ImGui::GetWindowDrawList()->AddRect(canvasDropMin, canvasDropMax,
+                                                                dropColor, 0.0f, 0, 3.0f);
+                            mStatusMsg = "Painel reconhecido · solte para fixar no canvas";
+                            mStatusMsgUntil = GetTime() + 0.5;
+
+                            if (payload->IsDelivery())
+                            {
+                                float projectX = 0.0f, projectY = 0.0f;
+                                const ImVec2 mouse = ImGui::GetMousePos();
+                                const bool mapped = CanvasScreenToProject(
+                                    &mProject, mouse.x, mouse.y, projectX, projectY, true);
+                                TraceLog(LOG_INFO,
+                                         "M04 DROP Painel: delivery=%d mapped=%d mouse=%.1f,%.1f project=%.1f,%.1f",
+                                         payload->IsDelivery() ? 1 : 0, mapped ? 1 : 0,
+                                         mouse.x, mouse.y, projectX, projectY);
+                                if (!mapped || !AdicionarComponente("painel", "Painel",
+                                                                    projectX, projectY))
+                                {
+                                    mStatusMsg = "Falha ao fixar Painel · consulte seedui.log";
+                                    mStatusMsgUntil = GetTime() + 8.0;
+                                    TraceLog(LOG_WARNING, "M04 DROP Painel: falha na criacao");
+                                }
+                            }
+                        }
+                    }
+                    ImGui::EndDragDropTarget();
+                }
                 ImGui::EndChild();
 
                 ImGui::SameLine();
@@ -649,7 +1389,10 @@ namespace seedui
 
                 // Entrada das anotações: cobre a janela INTEIRA (menus, ícones,
                 // painéis, canvas). O popup de edição fica acima da camada.
-                AnnotationsUpdate(mAnnot, mCurrentTool == Tool::Annotate, vp->Size);
+                AnnotationsUpdate(mAnnot,
+                    mCurrentTool == Tool::Annotate && !mSkipAnnotationInputThisFrame,
+                    vp->Size);
+                mSkipAnnotationInputThisFrame = false;
             }
             else
             {
@@ -715,8 +1458,14 @@ namespace seedui
             MenuItemSoon("Desfazer", "M05");
             MenuItemSoon("Refazer", "M05");
             ImGui::Separator();
-            MenuItemSoon("Copiar", "M05");
-            MenuItemSoon("Colar", "M05");
+            const bool canCopy = PossuiModoAtivo() && !mSelectedElementId.empty();
+            if (!canCopy) ImGui::BeginDisabled();
+            if (ImGui::MenuItem("Copiar", "Ctrl+C")) CopiarElementosSelecionados();
+            if (!canCopy) ImGui::EndDisabled();
+            const bool canPaste = PossuiModoAtivo() && !mElementClipboard.empty();
+            if (!canPaste) ImGui::BeginDisabled();
+            if (ImGui::MenuItem("Colar", "Ctrl+V")) ColarElementosCopiados();
+            if (!canPaste) ImGui::EndDisabled();
             MenuItemSoon("Duplicar", "M05");
             MenuItemSoon("Apagar", "M05");
             ImGui::Separator();
@@ -758,14 +1507,17 @@ namespace seedui
 
         if (ImGui::BeginMenu("Inserir"))
         {
-            if (!mHasProject) ImGui::BeginDisabled();
+            const bool canInsert = PossuiModoAtivo();
+            if (!canInsert) ImGui::BeginDisabled();
             if (ImGui::MenuItem("Painel")) AdicionarComponente("painel", "Painel");
-            if (ImGui::MenuItem("Janela")) AdicionarComponente("janela", "Janela");
-            if (ImGui::MenuItem("Texto")) AdicionarComponente("texto", "Texto");
-            if (ImGui::MenuItem("Botao")) AdicionarComponente("botao", "Botao");
-            if (ImGui::MenuItem("Campo numerico")) AdicionarComponente("campo_numerico", "Campo numerico");
-            if (ImGui::MenuItem("Slider")) AdicionarComponente("slider", "Slider");
-            if (!mHasProject) ImGui::EndDisabled();
+            if (!canInsert) ImGui::EndDisabled();
+            ImGui::BeginDisabled();
+            ImGui::MenuItem("Janela");
+            ImGui::MenuItem("Texto");
+            ImGui::MenuItem("Botao");
+            ImGui::MenuItem("Campo numerico");
+            ImGui::MenuItem("Slider");
+            ImGui::EndDisabled();
             ImGui::EndMenu();
         }
 
@@ -889,9 +1641,17 @@ namespace seedui
         IconButton(IconId::Redo, "Histórico · Refazer (M05)", button);
 
         separator();
-        IconButton(IconId::Copy, "Edição · Copiar (M05)", button);
+        const bool canCopy = PossuiModoAtivo() && !mSelectedElementId.empty();
+        if (!canCopy) ImGui::BeginDisabled();
+        if (IconButton(IconId::Copy, "Edição · Copiar seleção (Ctrl+C)", button))
+            CopiarElementosSelecionados();
+        if (!canCopy) ImGui::EndDisabled();
         ImGui::SameLine();
-        IconButton(IconId::Paste, "Edição · Colar (M05)", button);
+        const bool canPaste = PossuiModoAtivo() && !mElementClipboard.empty();
+        if (!canPaste) ImGui::BeginDisabled();
+        if (IconButton(IconId::Paste, "Edição · Colar (Ctrl+V)", button))
+            ColarElementosCopiados();
+        if (!canPaste) ImGui::EndDisabled();
         ImGui::SameLine();
         IconButton(IconId::Trash, "Edição · Apagar (M05)", button);
 
@@ -944,7 +1704,20 @@ namespace seedui
         ImGui::SetCursorPosX((kToolbarWidth - kToolButtonSize) * 0.5f);
         const bool active = (mCurrentTool == ToolFromIcon(id));
         if (active) ImGui::PushStyleColor(ImGuiCol_Button, Theme::Hex(0x4f8cff, 0.30f));
-        if (IconButton(id, tip, kToolButtonSize)) mCurrentTool = ToolFromIcon(id);
+        if (IconButton(id, tip, kToolButtonSize))
+        {
+            const Tool requested = ToolFromIcon(id);
+            if (requested == Tool::Annotate)
+            {
+                const bool wasActive = mCurrentTool == Tool::Annotate;
+                AlternarModoAnotacao();
+                if (!wasActive) mSkipAnnotationInputThisFrame = true;
+            }
+            else
+            {
+                mCurrentTool = requested;
+            }
+        }
         if (active) ImGui::PopStyleColor();
     }
 
@@ -974,38 +1747,48 @@ namespace seedui
 
         if (PanelBegin(IconId::List, "HIERARQUIA"))
         {
+            ImGui::SetNextItemWidth(-1.0f);
+            ImGui::InputTextWithHint("##hierarchy_search", "Pesquisar nome, ID ou tipo...",
+                                     mHierarchySearch, sizeof(mHierarchySearch));
+
+            Modo* activeMode = nullptr;
+            if (mHasProject && mTelaAtiva >= 0 && mTelaAtiva < (int)mProject.telas.size())
+            {
+                Tela& activeScreen = mProject.telas[mTelaAtiva];
+                if (mModoAtivo >= 0 && mModoAtivo < (int)activeScreen.modos.size())
+                    activeMode = &activeScreen.modos[mModoAtivo];
+            }
+
             if (!mHasProject)
             {
-                PanelHint("Nenhum projeto aberto. Crie um projeto (Arquivo → Novo) ou use um modelo (M09).");
+                PanelHint("Nenhum projeto aberto. Crie um projeto (Arquivo → Novo).");
+            }
+            else if (mProject.telas.empty())
+            {
+                PanelHint("Projeto sem telas.");
             }
             else
             {
-                if (mProject.telas.empty())
-                {
-                    PanelHint("Projeto sem telas. A primeira tela vem com o modo \"Padrão\".");
-                }
-                else for (int ti = 0; ti < (int)mProject.telas.size(); ++ti)
+                for (int ti = 0; ti < (int)mProject.telas.size(); ++ti)
                 {
                     Tela& t = mProject.telas[ti];
                     ImGui::PushID(ti);
                     const bool isAtiva = (ti == mTelaAtiva);
-                    if (isAtiva) ImGui::PushStyleColor(ImGuiCol_Header, Theme::Hex(0x4f8cff, 0.22f));
-                    if (ImGui::TreeNodeEx(t.nome.c_str(),
-                                          ImGuiTreeNodeFlags_DefaultOpen |
-                                              ImGuiTreeNodeFlags_OpenOnArrow))
+                    if (isAtiva) ImGui::PushStyleColor(ImGuiCol_Header,
+                                                       Theme::Hex(0x4f8cff, 0.22f));
+                    if (ImGui::TreeNodeEx(t.nome.c_str(), ImGuiTreeNodeFlags_DefaultOpen |
+                                                          ImGuiTreeNodeFlags_OpenOnArrow))
                     {
                         if (isAtiva)
-                        {
-                            ImGui::PushStyleColor(ImGuiCol_Text, Theme::TextPrimary);
-                            ImGui::TextColored(Theme::TextDisabled, "id: %s", t.id.c_str());
-                            ImGui::PopStyleColor();
-                        }
+                            ImGui::TextColored(Theme::TextDisabled, "tela · id: %s", t.id.c_str());
+
                         for (int mi = 0; mi < (int)t.modos.size(); ++mi)
                         {
                             Modo& mo = t.modos[mi];
                             const bool modoAtivo = (ti == mTelaAtiva && mi == mModoAtivo);
                             if (modoAtivo) ImGui::PushStyleColor(ImGuiCol_Text, Theme::AccentOrange);
-                            if (ImGui::Selectable(("  " + mo.nome).c_str(), modoAtivo))
+                            const std::string modeLabel = "  " + mo.nome + "##mode_" + std::to_string(mi);
+                            if (ImGui::Selectable(modeLabel.c_str(), modoAtivo))
                             {
                                 mTelaAtiva = ti;
                                 mModoAtivo = mi;
@@ -1015,18 +1798,23 @@ namespace seedui
 
                             if (modoAtivo)
                             {
+                                if (ImGui::BeginDragDropTarget())
+                                {
+                                    if (const ImGuiPayload* payload =
+                                            ImGui::AcceptDragDropPayload("SEEDUI_ELEMENT"))
+                                    {
+                                        mPendingReparentElementId = (const char*)payload->Data;
+                                        mPendingReparentTargetId.clear();
+                                    }
+                                    ImGui::EndDragDropTarget();
+                                }
+
+                                ImGui::Indent(14.0f);
                                 if (mo.raiz.empty())
-                                {
-                                    ImGui::TextColored(Theme::TextDisabled,
-                                                       "  Nenhum elemento neste modo.");
-                                }
+                                    ImGui::TextColored(Theme::TextDisabled, "Nenhum elemento neste modo.");
                                 else
-                                {
-                                    ImGui::Indent(14.0f);
-                                    for (Element& e : mo.raiz)
-                                        DrawElementTree(e);
-                                    ImGui::Unindent(14.0f);
-                                }
+                                    for (Element& e : mo.raiz) DrawElementTree(e);
+                                ImGui::Unindent(14.0f);
                             }
                         }
                         ImGui::TreePop();
@@ -1035,8 +1823,63 @@ namespace seedui
                     ImGui::PopID();
                 }
             }
-        }
 
+            if (activeMode)
+            {
+                if (!mSelectedElementId.empty() && !ImGui::GetIO().WantTextInput &&
+                    ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows))
+                {
+                    if (ImGui::IsKeyPressed(ImGuiKey_F2))
+                    {
+                        if (Element* selected = Project::ResolverId(*activeMode, mSelectedElementId))
+                        {
+                            if (!selected->bloqueado)
+                            {
+                                mRenamingElementId = selected->id;
+                                const std::string current = selected->nome.empty() ? selected->id : selected->nome;
+                                strncpy(mRenameBuffer, current.c_str(), sizeof(mRenameBuffer) - 1);
+                                mRenameBuffer[sizeof(mRenameBuffer) - 1] = 0;
+                            }
+                        }
+                    }
+                    if (ImGui::IsKeyPressed(ImGuiKey_Delete))
+                    {
+                        Element* selected = Project::ResolverId(*activeMode, mSelectedElementId);
+                        if (selected && !selected->bloqueado)
+                            mPendingDeleteElementId = mSelectedElementId;
+                    }
+                }
+
+                bool changed = false;
+                if (!mPendingDeleteElementId.empty())
+                {
+                    changed = Project::ExcluirElemento(*activeMode, mPendingDeleteElementId) || changed;
+                    if (changed && mSelectedElementId == mPendingDeleteElementId)
+                        mSelectedElementId.clear();
+                    mPendingDeleteElementId.clear();
+                }
+                if (!mPendingMoveElementId.empty())
+                {
+                    changed = Project::MoverElemento(*activeMode, mPendingMoveElementId,
+                                            mPendingMoveDelta) || changed;
+                    mPendingMoveElementId.clear();
+                    mPendingMoveDelta = 0;
+                }
+                if (!mPendingReparentElementId.empty())
+                {
+                    changed = Project::ReparentearElemento(*activeMode, mPendingReparentElementId,
+                                                mPendingReparentTargetId) || changed;
+                    mPendingReparentElementId.clear();
+                    mPendingReparentTargetId.clear();
+                }
+                if (changed)
+                {
+                    mProjectDirty = true;
+                    mStatusMsg = "Hierarquia atualizada";
+                    mStatusMsgUntil = GetTime() + 4.0;
+                }
+            }
+        }
         if (PanelBegin(IconId::Inspector, "INSPETOR"))
         {
             Element* selected = mSelectedElementId.empty()
@@ -1044,9 +1887,64 @@ namespace seedui
                 : Project::ResolverId(mProject, mSelectedElementId);
             if (selected)
             {
-                ImGui::TextWrapped("%s", selected->nome.empty() ? selected->id.c_str() : selected->nome.c_str());
-                ImGui::TextColored(Theme::TextDisabled, "id: %s", selected->id.c_str());
+                if (mInspectorBufferedElementId != selected->id)
+                {
+                    mInspectorBufferedElementId = selected->id;
+                    strncpy(mInspectorNameBuffer, selected->nome.c_str(),
+                            sizeof(mInspectorNameBuffer) - 1);
+                    mInspectorNameBuffer[sizeof(mInspectorNameBuffer) - 1] = 0;
+                    strncpy(mInspectorIdBuffer, selected->id.c_str(),
+                            sizeof(mInspectorIdBuffer) - 1);
+                    mInspectorIdBuffer[sizeof(mInspectorIdBuffer) - 1] = 0;
+                }
+
+                ImGui::TextColored(Theme::TextDisabled, "Identidade do elemento");
+                if (selected->bloqueado)
+                    ImGui::TextColored(Theme::AccentOrange,
+                                       "Bloqueado: desbloqueie para editar identidade");
+                if (selected->bloqueado) ImGui::BeginDisabled();
+                ImGui::TextUnformatted("Nome");
+                ImGui::SetNextItemWidth(-1.0f);
+                if (ImGui::InputText("##element_name", mInspectorNameBuffer,
+                                     sizeof(mInspectorNameBuffer)))
+                {
+                    selected->nome = mInspectorNameBuffer;
+                    mProjectDirty = true;
+                }
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Nome visual");
+
+                ImGui::TextUnformatted("ID");
+                ImGui::SetNextItemWidth(-1.0f);
+                if (ImGui::InputText("##element_id", mInspectorIdBuffer,
+                                     sizeof(mInspectorIdBuffer),
+                                     ImGuiInputTextFlags_EnterReturnsTrue))
+                {
+                    const std::string requested = mInspectorIdBuffer;
+                    Element* conflict = Project::ResolverId(mProject, requested);
+                    if (!requested.empty() && (!conflict || conflict == selected))
+                    {
+                        const std::string oldId = selected->id;
+                        selected->id = requested;
+                        mSelectedElementId = requested;
+                        mInspectorBufferedElementId = requested;
+                        mProjectDirty = true;
+                        mStatusMsg = "ID alterado: " + oldId + " → " + requested;
+                        mStatusMsgUntil = GetTime() + 5.0;
+                    }
+                    else
+                    {
+                        strncpy(mInspectorIdBuffer, selected->id.c_str(),
+                                sizeof(mInspectorIdBuffer) - 1);
+                        mInspectorIdBuffer[sizeof(mInspectorIdBuffer) - 1] = 0;
+                        mStatusMsg = requested.empty() ? "O ID não pode ficar vazio"
+                                                       : "Esse ID já existe no projeto";
+                        mStatusMsgUntil = GetTime() + 5.0;
+                    }
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("ID estável e único · Enter para confirmar");
                 ImGui::TextColored(Theme::TextDisabled, "tipo: %s", selected->tipo.c_str());
+                if (selected->bloqueado) ImGui::EndDisabled();
 
                 const bool beforeVisible = selected->visivel;
                 const bool beforeLocked = selected->bloqueado;
@@ -1057,7 +1955,7 @@ namespace seedui
                 ImGui::Separator();
             }
 
-            PanelHint("Selecione um elemento no canvas para editar posição, tamanho, cores e estados (M06).");
+            PanelHint("Selecione um elemento na Hierarquia. Edição visual de posição, tamanho, cores e estados chega no M06.");
         }
 
         if (PanelBegin(IconId::Plus, "BIBLIOTECA"))
@@ -1086,46 +1984,64 @@ namespace seedui
                 ImGui::GetWindowDrawList()->AddText(ImVec2(rowMin.x + 38.0f,
                                                            rowMin.y + 8.0f),
                                                     textColor, name);
+                if (enabled && ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Clique para inserir ou arraste para o canvas");
+                if (enabled && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
+                {
+                    ImGui::SetDragDropPayload("SEEDUI_COMPONENT", id, strlen(id) + 1);
+                    DrawIcon(icon, 18.0f);
+                    ImGui::SameLine();
+                    ImGui::Text("Criar %s no canvas", name);
+                    ImGui::EndDragDropSource();
+                }
                 if (!enabled) ImGui::EndDisabled();
                 ImGui::PopID();
                 return clicked && enabled;
             };
 
-            if (mHasProject)
+            if (PossuiModoAtivo())
             {
+                ImGui::TextColored(Theme::AccentOrange, "Validação atual · Painel");
                 for (const ComponentButton& c : kBasicComponents)
                 {
-                    if (componentRow(c.tipo, c.nome, c.icon, true))
+                    const bool validatingNow = strcmp(c.tipo, "painel") == 0;
+                    if (componentRow(c.tipo, c.nome, c.icon, validatingNow))
                         AdicionarComponente(c.tipo, c.nome);
                 }
+                ImGui::TextColored(Theme::TextDisabled,
+                                   "Clique para inserir ou arraste para o canvas.");
                 ImGui::Separator();
             }
-
-            ImGui::TextColored(Theme::TextSecondary, "Componentes planejados");
-            struct PlannedComponent { const char* nome; IconId icon; };
-            static const PlannedComponent kPlannedComponents[] = {
-                { "Caixa", IconId::Library }, { "Grupo", IconId::Hierarchy },
-                { "Título", IconId::Text }, { "Botão com ícone", IconId::Check },
-                { "Alternância", IconId::Redo }, { "Caixa de seleção", IconId::Check },
-                { "Campo de texto", IconId::Text }, { "Campo de senha", IconId::Lock },
-                { "Área de texto", IconId::Directives }, { "Lista", IconId::List },
-                { "Lista suspensa", IconId::CaretDown }, { "Slider com valor", IconId::Inspector },
-                { "Barra de progresso", IconId::History }, { "Indicador circular", IconId::Redo },
-                { "Seletor de cor", IconId::Palette }, { "Separador", IconId::List },
-                { "Barra de rolagem", IconId::Inspector }, { "Tooltip", IconId::Question },
-                { "Menu de contexto", IconId::List }, { "Janela modal", IconId::Model },
-                { "Diálogo", IconId::Directives }, { "Notificação", IconId::Warning },
-                { "Inspetor", IconId::Inspector }, { "Viewport", IconId::Image },
-            };
-            int plannedIndex = 0;
-            for (const PlannedComponent& c : kPlannedComponents)
+            else
             {
-                const std::string id = std::string("planned_") + std::to_string(plannedIndex++);
-                componentRow(id.c_str(), c.nome, c.icon, false);
+                PanelHint("Nenhuma tela/modo ativo. Crie um projeto em Arquivo → Novo para inserir componentes.");
             }
 
-            ImGui::TextColored(Theme::TextDisabled,
-                               "Clique para inserir. Arrastar para o canvas entra no M04.");
+            if (ImGui::CollapsingHeader("Próximos componentes · indisponíveis"))
+            {
+                PanelHint("Estes componentes pertencem a marcos futuros e ainda não são interativos.");
+                struct PlannedComponent { const char* nome; IconId icon; };
+                static const PlannedComponent kPlannedComponents[] = {
+                    { "Caixa", IconId::Library }, { "Grupo", IconId::Hierarchy },
+                    { "Título", IconId::Text }, { "Botão com ícone", IconId::Check },
+                    { "Alternância", IconId::Redo }, { "Caixa de seleção", IconId::Check },
+                    { "Campo de texto", IconId::Text }, { "Campo de senha", IconId::Lock },
+                    { "Área de texto", IconId::Directives }, { "Lista", IconId::List },
+                    { "Lista suspensa", IconId::CaretDown }, { "Slider com valor", IconId::Inspector },
+                    { "Barra de progresso", IconId::History }, { "Indicador circular", IconId::Redo },
+                    { "Seletor de cor", IconId::Palette }, { "Separador", IconId::List },
+                    { "Barra de rolagem", IconId::Inspector }, { "Tooltip", IconId::Question },
+                    { "Menu de contexto", IconId::List }, { "Janela modal", IconId::Model },
+                    { "Diálogo", IconId::Directives }, { "Notificação", IconId::Warning },
+                    { "Inspetor", IconId::Inspector }, { "Viewport", IconId::Image },
+                };
+                int plannedIndex = 0;
+                for (const PlannedComponent& c : kPlannedComponents)
+                {
+                    const std::string id = std::string("planned_") + std::to_string(plannedIndex++);
+                    componentRow(id.c_str(), c.nome, c.icon, false);
+                }
+            }
             ImGui::Spacing();
         }
         if (PanelBegin(IconId::Directives, "DIRETRIZES"))
@@ -1276,7 +2192,17 @@ namespace seedui
         if (ImGui::Button("Abrir Manual (F1)", ImVec2(bw, 36))) mShowManual = true;
 
         ImGui::SetCursorPosY(rowY - c.y + 42.0f + 14.0f + 36.0f + 10.0f);
-        if (ImGui::Button("Explorar o workspace (demo)", ImVec2(bw, 36))) mHasProject = true;
+        if (ImGui::Button("Explorar o workspace (demo)", ImVec2(bw, 36)))
+        {
+            mProject.CriarNovo("Projeto de demonstração", 1280, 720);
+            mHasProject = true;
+            mProjectDirty = false;
+            mTelaAtiva = 0;
+            mModoAtivo = 0;
+            mSelectedElementId.clear();
+            mStatusMsg = "Workspace de demonstração criado com Tela principal · modo Padrão";
+            mStatusMsgUntil = GetTime() + 8.0;
+        }
 
         // Linha de acento
         dl->AddLine(ImVec2(cx - 60.0f, c.y + 180.0f), ImVec2(cx + 60.0f, c.y + 180.0f), accent, 2.0f);

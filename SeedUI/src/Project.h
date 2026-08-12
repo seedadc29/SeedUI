@@ -84,6 +84,20 @@ namespace seedui
         static Element* ResolverId(Project& projeto, const std::string& id,
                                    Modo** modoEncontrado = nullptr);
 
+        // Operacoes estruturais usadas pela Hierarquia. Elementos bloqueados
+        // nao podem ser movidos, reparentados ou excluidos.
+        static Element* ResolverId(Modo& modo, const std::string& id);
+        static Element* ElementoNoPonto(Modo& modo, float x, float y);
+        static bool ExcluirElemento(Modo& modo, const std::string& id);
+        static bool MoverElemento(Modo& modo, const std::string& id, int delta);
+        static bool ReparentearElemento(Modo& modo, const std::string& id,
+                                        const std::string& novoPaiId);
+        static std::vector<Element> CopiarElementos(
+            const Modo& modo, const std::vector<std::string>& ids);
+        static std::vector<std::string> ColarElementos(
+            Project& projeto, Modo& modo, const std::vector<Element>& elementos,
+            float deslocamento);
+
         // Timestamp atual no formato do formato ("YYYY-MM-DD HH:MM:SS").
         static std::string StampAtual();
     };

@@ -7,7 +7,19 @@ namespace seedui
 {
     // Desenha o canvas (grade, réguas, moldura) e os elementos da tela/modo.
     // projeto nulo = apenas o visual demonstrativo.
-    void CanvasDraw(const Project* projeto = nullptr, int telaAtiva = 0, int modoAtivo = 0);
+    void CanvasDraw(const Project* projeto = nullptr, int telaAtiva = 0, int modoAtivo = 0,
+                    const std::vector<std::string>* elementosSelecionados = nullptr,
+                    const char* elementoPrincipalId = nullptr,
+                    unsigned int quinasSelecionadas = 0);
+
+    // Converte coordenadas da janela para coordenadas da tela base do projeto.
+    bool CanvasScreenToProject(const Project* projeto, float screenX, float screenY,
+                               float& projectX, float& projectY,
+                               bool limitarNaMoldura = false);
+
+    // Converte um ponto da tela-base para a janela e devolve a escala visual.
+    bool CanvasProjectToScreen(const Project* projeto, float projectX, float projectY,
+                               float& screenX, float& screenY, float& scale);
 }
 
 #endif // SEEDUI_CANVAS_H

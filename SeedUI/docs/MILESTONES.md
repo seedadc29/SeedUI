@@ -25,7 +25,7 @@
 | 01 | Fundação: documentação, formato, identidade visual | Em andamento |
 | 02 | Esqueleto executável do editor | Concluído |
 | 03 | Modelo de dados e salvamento (`projeto.ui.json`) | Concluído |
-| 04 | Hierarquia e biblioteca de componentes | Planejado |
+| 04 | Hierarquia e biblioteca de componentes | Em andamento |
 | 05 | Canvas interativo (seleção, transformação, undo/redo) | Planejado |
 | 06 | Inspetor e diretrizes | Planejado |
 | 07 | Texto e fontes | Planejado |
@@ -138,6 +138,27 @@ numérico, slider).
 **Critérios**: arrastar componente → aparece no canvas e na árvore; renomear
 ID; reordenar; salvar/recarregar mantém a estrutura.
 
+**Progresso implementado**:
+- Hierarquia pesquisável por nome, ID ou tipo.
+- Seleção, renomeação visual (F2), edição de ID único no Inspetor, excluir
+  (Delete), ocultar/mostrar, bloquear/desbloquear e mover acima/abaixo.
+- Drag-and-drop entre elementos para criar relações pai/filho; soltar no modo
+  ativo devolve o elemento à raiz, com proteção contra ciclos.
+- Biblioteca com componentes básicos clicáveis e arrastáveis; drop no canvas
+  converte a posição para coordenadas da tela base e cria o elemento no ponto.
+- Estrutura continua serializada pelo formato v1 (`filhos`, ordem, visibilidade,
+  bloqueio e transformação).
+
+**Validação atual**:
+- `SeedUI.exe --self-test-m04`: 23 verificações aprovadas, cobrindo ordem,
+  pai/filho, proteção contra ciclos, exclusão aninhada, bloqueio efetivo,
+  seleção por ponto e persistência JSON da estrutura e dos estados.
+- Builds Debug, Development e Release aprovados; autoteste passa nas três configurações e a captura automática abre/renderiza/fecha sem crash.
+- A seleção simples por clique no canvas foi antecipada do M05 para tornar a
+  Hierarquia e o Inspetor utilizáveis já no M04.
+- Ainda requer validação manual do gesto de drag-and-drop com o mouse (Biblioteca
+  → canvas e elemento → pai); o código compila e os efeitos de modelo estão
+  cobertos, mas isso não será declarado concluído sem testar o gesto real.
 ## Milestone 05 — Canvas interativo
 
 **Objetivo**: manipulação visual direta dos elementos.

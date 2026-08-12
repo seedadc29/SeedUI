@@ -1,11 +1,107 @@
 #include "Project.h"
 
+#include <algorithm>
 #include <ctime>
 
 namespace seedui
 {
     namespace
     {
+        struct ElementSlot
+        {
+            std::vector<Element>* container = nullptr;
+            size_t index = 0;
+        };
+
+        bool FindElementSlot(std::vector<Element>& elements, const std::string& id,
+                             ElementSlot& slot)
+        {
+            for (size_t i = 0; i < elements.size(); ++i)
+            {
+                if (elements[i].id == id)
+                {
+                    slot.container = &elements;
+                    slot.index = i;
+                    return true;
+                }
+                if (FindElementSlot(elements[i].filhos, id, slot)) return true;
+            }
+            return false;
+        }
+
+        bool ElementContains(const Element& root, const std::string& id)
+        {
+            if (root.id == id) return true;
+            for (const Element& child : root.filhos)
+                if (ElementContains(child, id)) return true;
+            return false;
+        }
+
+        void CollectCopies(const std::vector<Element>& elements,
+                           const std::vector<std::string>& selectedIds,
+                           std::vector<Element>& out)
+        {
+            for (const Element& element : elements)
+            {
+                const bool selected = std::find(selectedIds.begin(), selectedIds.end(),
+                                                element.id) != selectedIds.end();
+                if (selected)
+                    out.push_back(element);
+                else
+                    CollectCopies(element.filhos, selectedIds, out);
+            }
+        }
+
+        void AssignFreshIds(Element& element, Project& project,
+                            std::vector<std::string>& reservedIds)
+        {
+            const std::string base = element.tipo.empty() ? "elemento" : element.tipo;
+            for (int index = 1; index < 100000; ++index)
+            {
+                const std::string candidate = base + "_" + std::to_string(index);
+                const bool reserved = std::find(reservedIds.begin(), reservedIds.end(),
+                                                candidate) != reservedIds.end();
+                if (!reserved && !Project::ResolverId(project, candidate))
+                {
+                    element.id = candidate;
+                    reservedIds.push_back(candidate);
+                    break;
+                }
+            }
+            for (Element& child : element.filhos)
+                AssignFreshIds(child, project, reservedIds);
+        }
+
+        void OffsetElementTree(Element& element, float delta,
+                               float canvasWidth, float canvasHeight)
+        {
+            const float width = element.transformacao.value("largura", 160.0f);
+            const float height = element.transformacao.value("altura", 32.0f);
+            const float x = element.transformacao.value("x", 0.0f) + delta;
+            const float y = element.transformacao.value("y", 0.0f) + delta;
+            element.transformacao["x"] = std::max(0.0f,
+                std::min(std::max(0.0f, canvasWidth - width), x));
+            element.transformacao["y"] = std::max(0.0f,
+                std::min(std::max(0.0f, canvasHeight - height), y));
+            for (Element& child : element.filhos)
+                OffsetElementTree(child, delta, canvasWidth, canvasHeight);
+        }
+
+        Element* HitElement(Element& element, float x, float y)
+        {
+            if (!element.visivel) return nullptr;
+            for (auto it = element.filhos.rbegin(); it != element.filhos.rend(); ++it)
+                if (Element* hit = HitElement(*it, x, y)) return hit;
+
+            const float left = element.transformacao.value("x", 0.0f);
+            const float top = element.transformacao.value("y", 0.0f);
+            const float width = element.transformacao.value("largura", 160.0f);
+            const float height = element.transformacao.value("altura", 32.0f);
+            return x >= left && x <= left + width && y >= top && y <= top + height
+                ? &element
+                : nullptr;
+        }
+
         std::string NowStamp()
         {
             const time_t t = time(nullptr);
@@ -285,5 +381,94 @@ namespace seedui
             }
         }
         return nullptr;
+    }
+
+    Element* Project::ResolverId(Modo& modo, const std::string& id)
+    {
+        ElementSlot slot;
+        return FindElementSlot(modo.raiz, id, slot)
+            ? &(*slot.container)[slot.index]
+            : nullptr;
+    }
+
+    Element* Project::ElementoNoPonto(Modo& modo, float x, float y)
+    {
+        for (auto it = modo.raiz.rbegin(); it != modo.raiz.rend(); ++it)
+            if (Element* hit = HitElement(*it, x, y)) return hit;
+        return nullptr;
+    }
+
+    bool Project::ExcluirElemento(Modo& modo, const std::string& id)
+    {
+        ElementSlot slot;
+        if (!FindElementSlot(modo.raiz, id, slot)) return false;
+        if ((*slot.container)[slot.index].bloqueado) return false;
+        slot.container->erase(slot.container->begin() + slot.index);
+        return true;
+    }
+
+    bool Project::MoverElemento(Modo& modo, const std::string& id, int delta)
+    {
+        ElementSlot slot;
+        if (!FindElementSlot(modo.raiz, id, slot)) return false;
+        if ((*slot.container)[slot.index].bloqueado) return false;
+        const int from = (int)slot.index;
+        const int to = from + delta;
+        if (to < 0 || to >= (int)slot.container->size()) return false;
+        std::swap((*slot.container)[from], (*slot.container)[to]);
+        return true;
+    }
+
+    bool Project::ReparentearElemento(Modo& modo, const std::string& id,
+                                      const std::string& novoPaiId)
+    {
+        ElementSlot sourceSlot;
+        if (!FindElementSlot(modo.raiz, id, sourceSlot)) return false;
+        Element& source = (*sourceSlot.container)[sourceSlot.index];
+        if (source.bloqueado) return false;
+        if (novoPaiId == id || (!novoPaiId.empty() && ElementContains(source, novoPaiId)))
+            return false;
+
+        Element* newParent = novoPaiId.empty() ? nullptr : ResolverId(modo, novoPaiId);
+        if (!novoPaiId.empty() && (!newParent || newParent->bloqueado)) return false;
+
+        Element moved = std::move(source);
+        sourceSlot.container->erase(sourceSlot.container->begin() + sourceSlot.index);
+        if (novoPaiId.empty())
+        {
+            modo.raiz.push_back(std::move(moved));
+            return true;
+        }
+
+        newParent = ResolverId(modo, novoPaiId);
+        if (!newParent) return false;
+        newParent->filhos.push_back(std::move(moved));
+        return true;
+    }
+
+    std::vector<Element> Project::CopiarElementos(
+        const Modo& modo, const std::vector<std::string>& ids)
+    {
+        std::vector<Element> copies;
+        CollectCopies(modo.raiz, ids, copies);
+        return copies;
+    }
+
+    std::vector<std::string> Project::ColarElementos(
+        Project& projeto, Modo& modo, const std::vector<Element>& elementos,
+        float deslocamento)
+    {
+        std::vector<std::string> reservedIds;
+        std::vector<std::string> pastedRootIds;
+        for (const Element& source : elementos)
+        {
+            Element copy = source;
+            AssignFreshIds(copy, projeto, reservedIds);
+            OffsetElementTree(copy, deslocamento, (float)projeto.telaBaseLargura,
+                              (float)projeto.telaBaseAltura);
+            pastedRootIds.push_back(copy.id);
+            modo.raiz.push_back(std::move(copy));
+        }
+        return pastedRootIds;
     }
 }
