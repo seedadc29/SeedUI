@@ -72,6 +72,44 @@ namespace seedui
                 CollectRects(child, selectedIds, out);
         }
 
+        // Snap de uma GUIA arrastada da régua (estilo CorelDRAW): a guia
+        // gruda nas laterais/centros das formas visíveis e na moldura da
+        // tela-base — a régua vira ferramenta funcional de alinhamento, não
+        // só estética. `horizontal` = guia horizontal (eixo Y: topo/centro/
+        // base); senão guia vertical (eixo X: esquerda/centro/direita).
+        // Devolve a posição encaixada (a própria `value` quando nada dentro
+        // da tolerância) e `outSnapped` = true se houve encaixe.
+        inline float SnapGuideToShapes(float value, bool horizontal,
+                                       const Modo& mode,
+                                       float frameW, float frameH,
+                                       float tolerance, bool& outSnapped)
+        {
+            outSnapped = false;
+            std::vector<float> xs;
+            std::vector<float> ys;
+            const std::vector<std::string> noSelection;
+            for (const Element& e : mode.raiz)
+                CollectCandidates(e, noSelection, xs, ys);
+            const std::vector<float>& cands = horizontal ? ys : xs;
+            float best = value;
+            float bestDist = tolerance;
+            for (const float cand : cands)
+            {
+                const float d = fabsf(cand - value);
+                if (d < bestDist) { bestDist = d; best = cand; outSnapped = true; }
+            }
+            // Moldura da tela-base (0, centro, fim): snap forte, é o
+            // delimitador principal — vence as formas em caso de empate.
+            const float frameMax = horizontal ? frameH : frameW;
+            const float frameCands[3] = { 0.0f, frameMax * 0.5f, frameMax };
+            for (const float cand : frameCands)
+            {
+                const float d = fabsf(cand - value);
+                if (d <= bestDist) { bestDist = d; best = cand; outSnapped = true; }
+            }
+            return best;
+        }
+
         // Ajusta dx/dy para encaixar na candidata mais próxima (dentro da
         // tolerância, em unidades do projeto) e devolve a posição da guia.
         // A moldura da tela-base tem PRIORIDADE: tolerância ampliada (snap

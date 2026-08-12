@@ -22,6 +22,13 @@ namespace seedui
     {
         inline constexpr float kMaxCornerSegments = 12.0f;
 
+        // Passo ÚNICO do sistema de grade: usado tanto pelo DESENHO do grid
+        // (Canvas) quanto pelo SNAP (App) — uma única fonte matemática, para
+        // que o encaixe do snap coincida exatamente com os pontos visíveis
+        // da grade em qualquer zoom. Major = 5× o passo (40 unidades).
+        inline constexpr float kGridStep = 8.0f;
+        inline constexpr float kGridMajorMult = 5.0f;
+
         inline float DegToRad(float degrees)
         {
             return degrees * 0.017453292519943295f;

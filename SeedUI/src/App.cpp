@@ -64,6 +64,7 @@ namespace seedui
 
         constexpr float kToolbarWidth = 50.0f;
         constexpr float kActionBarHeight = 42.0f;
+        constexpr float kPropertyBarHeight = 30.0f; // barra contextual (CorelDRAW)
         constexpr float kStatusBarHeight = 34.0f;
         constexpr float kColorBarHeight = 34.0f; // paleta de cores inferior (CorelDRAW)
         constexpr float kToolButtonSize = 32.0f;
@@ -1336,6 +1337,10 @@ namespace seedui
 
     void App::HandleCanvasInteraction(bool canvasHovered)
     {
+        // Guia sendo arrastada/posicionada: a interação normal do canvas
+        // (selecionar, mover, marquee) fica suspensa até soltar.
+        if (mGuideDragKind != 0) return;
+
         // Ctrl pressionado = ferramenta de SELEÇÃO temporária: mesmo estando
         // em outra ferramenta (criar retângulo, zoom etc.), Ctrl + arrastar
         // seleciona/marquee — sem trocar a ferramenta ativa.
@@ -1437,6 +1442,19 @@ namespace seedui
             const float ey = element.transformacao.value("y", 0.0f);
             const float ew = element.transformacao.value("largura", 160.0f);
             const float eh = element.transformacao.value("altura", 32.0f);
+
+            // Ponto de ORIGEM (pivô): clicar e arrastar reposiciona o centro
+            // do resize espelhado (Shift) e da rotação. Prioridade sobre o
+            // mover — o pivô é a "mira" laranja no centro da forma.
+            if (element.tipo != "grupo")
+            {
+                float px = 0.0f, py = 0.0f;
+                Geo::ElementPivot(element, px, py);
+                const float pivotTol = 9.0f / std::max(0.25f, viewScale);
+                const float pdx = x - px;
+                const float pdy = y - py;
+                if (pdx * pdx + pdy * pdy <= pivotTol * pivotTol) return 15;
+            }
 
             // Alça de rotação: fora da caixa, no topo rotacionado (vale
             // também para grupos — o conjunto inteiro rotaciona junto).
@@ -1570,6 +1588,7 @@ namespace seedui
             else if (dragMode == 10 || dragMode == 12) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNWSE);
             else if (dragMode == 11 || dragMode == 13) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNESW);
             else if (dragMode == 14) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
+            else if (dragMode == 15) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
             else if (dragMode == 1) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
         };
 
@@ -1709,6 +1728,8 @@ namespace seedui
             mCanvasGroupStarts.clear();
             mGuideSnapX = -1.0f;
             mGuideSnapY = -1.0f;
+            mGuideFixedSnapX = -1.0f;
+            mGuideFixedSnapY = -1.0f;
             mGuideSpacingX1 = mGuideSpacingX2 = -1.0f;
             mGuideSpacingY1 = mGuideSpacingY2 = -1.0f;
             mShiftGuides.clear();
@@ -1963,7 +1984,7 @@ namespace seedui
             if (dragEngaged && mSnapEnabled &&
                 !(mCanvasDragMode >= 10 && mCanvasDragMode <= 13))
             {
-                constexpr float snapStep = 8.0f;
+                constexpr float snapStep = Geo::kGridStep;
                 if (mCanvasDragMode == 1)
                 {
                     // Snap assertivo estilo CorelDRAW: as guias inteligentes
@@ -2007,6 +2028,9 @@ namespace seedui
                                               mCanvasPrevDX, mCanvasPrevDY,
                                               mGuideSpacingX1, mGuideSpacingX2,
                                               mGuideSpacingY1, mGuideSpacingY2);
+                    // Snap às guias fixas (arrastadas das réguas) por último:
+                    // referência intencional do usuário, tem prioridade.
+                    SnapGuias(dx, dy, guideRects);
                     mCanvasPrevDX = dx;
                     mCanvasPrevDY = dy;
                 }
@@ -2042,6 +2066,16 @@ namespace seedui
                     {
                         element->transformacao["x"] = start.x + dx;
                         element->transformacao["y"] = start.y + dy;
+                        // O ponto de origem acompanha o movimento.
+                        if (element->transformacao.is_object() &&
+                            element->transformacao.contains("centro_rotacao") &&
+                            element->transformacao["centro_rotacao"].is_object())
+                        {
+                            element->transformacao["centro_rotacao"]["x"] =
+                                element->transformacao["centro_rotacao"].value("x", 0.0f) + dx;
+                            element->transformacao["centro_rotacao"]["y"] =
+                                element->transformacao["centro_rotacao"].value("y", 0.0f) + dy;
+                        }
                     }
                 }
             }
@@ -2107,6 +2141,51 @@ namespace seedui
                     }
                 }
             }
+            else if (mCanvasDragMode == 15)
+            {
+                // ARRASTAR O PONTO DE ORIGEM (pivô): o pivô segue o mouse com
+                // SNAP nos pontos-chave da própria forma (cantos, meios de
+                // aresta e centro) + grade de 8px. Ele é o centro do resize
+                // espelhado (Shift) e da rotação — reposicionar muda onde a
+                // forma "cresce" e em torno do que gira.
+                Element* element = Project::ResolverId(mode, mSelectedElementId);
+                if (element && !element->bloqueado)
+                {
+                    const float x = mCanvasDragX, y = mCanvasDragY;
+                    const float w = mCanvasDragW, h = mCanvasDragH;
+                    const float pivotTol = 9.0f / std::max(0.5f, mCanvasZoom);
+                    // Candidatos de snap: centro, 4 cantos, 4 meios de aresta.
+                    const float cands[9][2] = {
+                        { x + w * 0.5f, y + h * 0.5f },
+                        { x, y }, { x + w, y }, { x, y + h }, { x + w, y + h },
+                        { x + w * 0.5f, y }, { x + w * 0.5f, y + h },
+                        { x, y + h * 0.5f }, { x + w, y + h * 0.5f }
+                    };
+                    float px = mouseX, py = mouseY;
+                    float bestD = pivotTol;
+                    for (const auto& c : cands)
+                    {
+                        const float d = fabsf(c[0] - px) + fabsf(c[1] - py);
+                        if (d < bestD) { bestD = d; px = c[0]; py = c[1]; }
+                    }
+                    // Grade de 8px quando nenhum ponto da forma pegou.
+                    if (bestD >= pivotTol && mSnapEnabled)
+                    {
+                        const float snapStep = Geo::kGridStep;
+                        px = roundf(px / snapStep) * snapStep;
+                        py = roundf(py / snapStep) * snapStep;
+                    }
+                    // Centro da forma = estado padrão (remove o override).
+                    const float cx = x + w * 0.5f, cy = y + h * 0.5f;
+                    if (fabsf(px - cx) < 0.01f && fabsf(py - cy) < 0.01f)
+                        element->transformacao.erase("centro_rotacao");
+                    else
+                        element->transformacao["centro_rotacao"] =
+                            { { "x", px }, { "y", py } };
+                    mProjectDirty = true;
+                }
+                ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
+            }
             else
             {
                 const bool resizeLeft = mCanvasDragMode == 2 || mCanvasDragMode == 6 ||
@@ -2117,7 +2196,73 @@ namespace seedui
                                        mCanvasDragMode == 7;
                 const bool resizeBottom = mCanvasDragMode == 5 || mCanvasDragMode == 8 ||
                                           mCanvasDragMode == 9;
-                // Resize livre: sem clamps à moldura (espaço de trabalho aberto).
+
+                // Shift+Alt + alça de CANTO = redimensionamento PROPORCIONAL
+                // (uniforme): largura e altura escalam JUNTAS, preservando a
+                // proporção original (largura/altura = constante — ex.
+                // 200x100 -> 400x200). O canto OPOSTO à alça arrastada fica
+                // fixo como âncora, então o objeto não desloca durante a
+                // transformação.
+                // Shift isolado + qualquer alça = redimensionamento ESPELHADO
+                // a partir do PONTO DE ORIGEM (pivô, no centro por padrão):
+                // puxar uma aresta faz a OPOSTA espelhar o movimento para o
+                // lado contrário — a forma estica proporcionalmente para os
+                // dois lados (lateral e superior), estilo CorelDRAW.
+                // Sem Shift, o comportamento livre (deformar) permanece.
+                // Ao redimensionar, o ponto de origem acompanha a forma
+                // mantendo a posição relativa (o pivô "viaja" com o objeto).
+                auto RescalePivot = [](Element* el, float ol, float ot,
+                                       float ow, float oh,
+                                       float nl, float nt, float nw, float nh)
+                {
+                    if (!el || !el->transformacao.is_object() ||
+                        !el->transformacao.contains("centro_rotacao") ||
+                        !el->transformacao["centro_rotacao"].is_object())
+                        return;
+                    const float px = el->transformacao["centro_rotacao"].value("x", 0.0f);
+                    const float py = el->transformacao["centro_rotacao"].value("y", 0.0f);
+                    const float sx = (ow > 0.01f) ? (nw / ow) : 1.0f;
+                    const float sy = (oh > 0.01f) ? (nh / oh) : 1.0f;
+                    el->transformacao["centro_rotacao"] = {
+                        { "x", nl + (px - ol) * sx },
+                        { "y", nt + (py - ot) * sy }
+                    };
+                };
+                const bool proportional = ImGui::GetIO().KeyShift &&
+                                          ImGui::GetIO().KeyAlt &&
+                                          mCanvasDragMode >= 6 &&
+                                          mCanvasDragMode <= 9;
+                const bool mirrored = ImGui::GetIO().KeyShift &&
+                                      !ImGui::GetIO().KeyAlt &&
+                                      mCanvasDragMode >= 2 &&
+                                      mCanvasDragMode <= 9;
+                float propScale = 1.0f;
+                float anchorX = 0.0f, anchorY = 0.0f;
+                if (proportional)
+                {
+                    // Canto arrastado (posição do mouse) e âncora (oposto).
+                    const float x0 = mCanvasDragX, y0 = mCanvasDragY;
+                    const float x1 = mCanvasDragX + mCanvasDragW;
+                    const float y1 = mCanvasDragY + mCanvasDragH;
+                    float hx, hy, ax, ay;
+                    switch (mCanvasDragMode)
+                    {
+                        case 6: hx = x0 + dx; hy = y0 + dy; ax = x1; ay = y1; break; // TL
+                        case 7: hx = x1 + dx; hy = y0 + dy; ax = x0; ay = y1; break; // TR
+                        case 8: hx = x0 + dx; hy = y1 + dy; ax = x1; ay = y0; break; // BL
+                        default: hx = x1 + dx; hy = y1 + dy; ax = x0; ay = y0; break; // BR
+                    }
+                    const float origW = std::max(0.01f, mCanvasDragW);
+                    const float origH = std::max(0.01f, mCanvasDragH);
+                    propScale = std::max(fabsf(hx - ax) / origW,
+                                         fabsf(hy - ay) / origH);
+                    propScale = std::max(propScale,
+                                         minSize / std::max(origW, origH));
+                    anchorX = ax;
+                    anchorY = ay;
+                }
+
+                // Resize livre (sem Shift): sem clamps à moldura.
                 if (resizeLeft)
                     left = std::min(right - minSize, mCanvasDragX + dx);
                 if (resizeRight)
@@ -2126,6 +2271,50 @@ namespace seedui
                     top = std::min(bottom - minSize, mCanvasDragY + dy);
                 if (resizeBottom)
                     bottom = std::max(top + minSize, mCanvasDragY + mCanvasDragH + dy);
+
+                // Resize ESPELHADO (Shift isolado): a aresta oposta à alça
+                // espelha o movimento em torno do ponto de origem (pivô).
+                if (mirrored)
+                {
+                    const float px = mCanvasDragPivotX;
+                    const float py = mCanvasDragPivotY;
+                    const float origLeft = mCanvasDragX;
+                    const float origRight = mCanvasDragX + mCanvasDragW;
+                    const float origTop = mCanvasDragY;
+                    const float origBottom = mCanvasDragY + mCanvasDragH;
+                    if (resizeRight)
+                    {
+                        right = origRight + dx;
+                        left = 2.0f * px - origRight - dx;
+                    }
+                    else if (resizeLeft)
+                    {
+                        left = origLeft + dx;
+                        right = 2.0f * px - origLeft - dx;
+                    }
+                    if (resizeBottom)
+                    {
+                        bottom = origBottom + dy;
+                        top = 2.0f * py - origBottom - dy;
+                    }
+                    else if (resizeTop)
+                    {
+                        top = origTop + dy;
+                        bottom = 2.0f * py - origTop - dy;
+                    }
+                    if (right - left < minSize)
+                    {
+                        const float c = (right + left) * 0.5f;
+                        left = c - minSize * 0.5f;
+                        right = c + minSize * 0.5f;
+                    }
+                    if (bottom - top < minSize)
+                    {
+                        const float c = (bottom + top) * 0.5f;
+                        top = c - minSize * 0.5f;
+                        bottom = c + minSize * 0.5f;
+                    }
+                }
 
                 if (mCanvasGroupStarts.size() > 1)
                 {
@@ -2148,17 +2337,93 @@ namespace seedui
                     float newRight = groupRight;
                     float newTop = groupTop;
                     float newBottom = groupBottom;
-                    // Resize do conjunto: livre da moldura, escalando todos.
-                    if (resizeLeft)
-                        newLeft = std::min(newRight - minSize, groupLeft + dx);
-                    if (resizeRight)
-                        newRight = std::max(newLeft + minSize, groupRight + dx);
-                    if (resizeTop)
-                        newTop = std::min(newBottom - minSize, groupTop + dy);
-                    if (resizeBottom)
-                        newBottom = std::max(newTop + minSize, groupBottom + dy);
-                    const float scaleX = (newRight - newLeft) / groupW;
-                    const float scaleY = (newBottom - newTop) / groupH;
+                    float scaleX = 1.0f, scaleY = 1.0f;
+                    if (proportional)
+                    {
+                        // Caixa do grupo proporcional: âncora = canto oposto
+                        // da caixa CONJUNTA; escala uniforme nos dois eixos.
+                        const float gx0 = groupLeft, gy0 = groupTop;
+                        const float gx1 = groupRight, gy1 = groupBottom;
+                        float hx, hy, ax, ay;
+                        switch (mCanvasDragMode)
+                        {
+                            case 6: hx = gx0 + dx; hy = gy0 + dy; ax = gx1; ay = gy1; break;
+                            case 7: hx = gx1 + dx; hy = gy0 + dy; ax = gx0; ay = gy1; break;
+                            case 8: hx = gx0 + dx; hy = gy1 + dy; ax = gx1; ay = gy0; break;
+                            default: hx = gx1 + dx; hy = gy1 + dy; ax = gx0; ay = gy0; break;
+                        }
+                        const float s = std::max(fabsf(hx - ax) / groupW,
+                                                 fabsf(hy - ay) / groupH);
+                        const float nw = groupW * s, nh = groupH * s;
+                        switch (mCanvasDragMode)
+                        {
+                            case 6: newLeft = ax - nw; newRight = ax;
+                                    newTop = ay - nh; newBottom = ay; break;
+                            case 7: newLeft = ax; newRight = ax + nw;
+                                    newTop = ay - nh; newBottom = ay; break;
+                            case 8: newLeft = ax - nw; newRight = ax;
+                                    newTop = ay; newBottom = ay + nh; break;
+                            default: newLeft = ax; newRight = ax + nw;
+                                     newTop = ay; newBottom = ay + nh; break;
+                        }
+                        scaleX = scaleY = s;
+                    }
+                    else if (mirrored)
+                    {
+                        // Conjunto espelhado em torno do CENTRO da caixa
+                        // conjunta (Shift isolado): a aresta oposta à alça
+                        // espelha o movimento — cresce para os dois lados.
+                        const float px = groupLeft + groupW * 0.5f;
+                        const float py = groupTop + groupH * 0.5f;
+                        if (resizeRight)
+                        {
+                            newRight = groupRight + dx;
+                            newLeft = 2.0f * px - groupRight - dx;
+                        }
+                        else if (resizeLeft)
+                        {
+                            newLeft = groupLeft + dx;
+                            newRight = 2.0f * px - groupLeft - dx;
+                        }
+                        if (resizeBottom)
+                        {
+                            newBottom = groupBottom + dy;
+                            newTop = 2.0f * py - groupBottom - dy;
+                        }
+                        else if (resizeTop)
+                        {
+                            newTop = groupTop + dy;
+                            newBottom = 2.0f * py - groupTop - dy;
+                        }
+                        if (newRight - newLeft < minSize)
+                        {
+                            const float c = (newRight + newLeft) * 0.5f;
+                            newLeft = c - minSize * 0.5f;
+                            newRight = c + minSize * 0.5f;
+                        }
+                        if (newBottom - newTop < minSize)
+                        {
+                            const float c = (newBottom + newTop) * 0.5f;
+                            newTop = c - minSize * 0.5f;
+                            newBottom = c + minSize * 0.5f;
+                        }
+                        scaleX = (newRight - newLeft) / groupW;
+                        scaleY = (newBottom - newTop) / groupH;
+                    }
+                    else
+                    {
+                        // Resize do conjunto: livre da moldura, escalando todos.
+                        if (resizeLeft)
+                            newLeft = std::min(newRight - minSize, groupLeft + dx);
+                        if (resizeRight)
+                            newRight = std::max(newLeft + minSize, groupRight + dx);
+                        if (resizeTop)
+                            newTop = std::min(newBottom - minSize, groupTop + dy);
+                        if (resizeBottom)
+                            newBottom = std::max(newTop + minSize, groupBottom + dy);
+                        scaleX = (newRight - newLeft) / groupW;
+                        scaleY = (newBottom - newTop) / groupH;
+                    }
                     for (const CanvasTransformStart& start : mCanvasGroupStarts)
                     {
                         Element* element = Project::ResolverId(mode, start.id);
@@ -2174,6 +2439,44 @@ namespace seedui
                         ClampElementCornerRadii(*element);
                     }
                 }
+                else if (proportional)
+                {
+                    // Elemento único proporcional: caixa derivada da âncora.
+                    const float newW = mCanvasDragW * propScale;
+                    const float newH = mCanvasDragH * propScale;
+                    switch (mCanvasDragMode)
+                    {
+                        case 6: left = anchorX - newW; right = anchorX;
+                                top = anchorY - newH; bottom = anchorY; break;
+                        case 7: left = anchorX; right = anchorX + newW;
+                                top = anchorY - newH; bottom = anchorY; break;
+                        case 8: left = anchorX - newW; right = anchorX;
+                                top = anchorY; bottom = anchorY + newH; break;
+                        default: left = anchorX; right = anchorX + newW;
+                                 top = anchorY; bottom = anchorY + newH; break;
+                    }
+                    selected->transformacao["x"] = left;
+                    selected->transformacao["y"] = top;
+                    selected->transformacao["largura"] = right - left;
+                    selected->transformacao["altura"] = bottom - top;
+                    ClampElementCornerRadii(*selected);
+                    RescalePivot(selected, mCanvasDragX, mCanvasDragY,
+                                 mCanvasDragW, mCanvasDragH,
+                                 left, top, right - left, bottom - top);
+                }
+                else if (mirrored)
+                {
+                    // Elemento único espelhado (Shift isolado): left/right e
+                    // top/bottom já foram espelhados em torno do pivô acima.
+                    selected->transformacao["x"] = left;
+                    selected->transformacao["y"] = top;
+                    selected->transformacao["largura"] = right - left;
+                    selected->transformacao["altura"] = bottom - top;
+                    ClampElementCornerRadii(*selected);
+                    RescalePivot(selected, mCanvasDragX, mCanvasDragY,
+                                 mCanvasDragW, mCanvasDragH,
+                                 left, top, right - left, bottom - top);
+                }
                 else
                 {
                     selected->transformacao["x"] = left;
@@ -2181,6 +2484,9 @@ namespace seedui
                     selected->transformacao["largura"] = right - left;
                     selected->transformacao["altura"] = bottom - top;
                     ClampElementCornerRadii(*selected);
+                    RescalePivot(selected, mCanvasDragX, mCanvasDragY,
+                                 mCanvasDragW, mCanvasDragH,
+                                 left, top, right - left, bottom - top);
                 }
             }
 
@@ -2261,6 +2567,8 @@ namespace seedui
             mCanvasGroupStarts.clear();
             mGuideSnapX = -1.0f;
             mGuideSnapY = -1.0f;
+            mGuideFixedSnapX = -1.0f;
+            mGuideFixedSnapY = -1.0f;
             mGuideSpacingX1 = mGuideSpacingX2 = -1.0f;
             mGuideSpacingY1 = mGuideSpacingY2 = -1.0f;
             mShiftGuides.clear();
@@ -2577,7 +2885,19 @@ namespace seedui
                 ImGui::EndChild();
                 ImGui::PopStyleVar();
                 // ItemSize acrescenta ItemSpacing.y após o child. Removemos esse
-                // espaço para a barra terminar exatamente onde começa o workspace.
+                // espaço para a barra terminar exatamente onde começa a próxima.
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetStyle().ItemSpacing.y);
+
+                // Barra de propriedades contextual (estilo CorelDRAW): abaixo da
+                // toolbar principal, mostra X/Y/Largura/Altura/Rotação da seleção
+                // com entrada numérica direta, unidade, precisão e zoom. Compacta
+                // para não competir com o canvas.
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 3.0f));
+                ImGui::BeginChild("##propertybar", ImVec2(0, kPropertyBarHeight), false,
+                                  ImGuiWindowFlags_NoScrollbar);
+                DrawPropertyBar();
+                ImGui::EndChild();
+                ImGui::PopStyleVar();
                 ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetStyle().ItemSpacing.y);
 
                 const float availY = ImGui::GetContentRegionAvail().y -
@@ -2630,17 +2950,28 @@ namespace seedui
                         ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
                     }
                 }
+                // Guias das réguas ANTES da interação normal: ao arrastar uma
+                // guia, a seleção/movimento do canvas é suprimida (o guard em
+                // HandleCanvasInteraction devolve cedo quando mGuideDragKind).
+                HandleGuidesInteraction();
                 HandleCanvasInteraction(canvasHovered);
                 CanvasDraw(mHasProject ? &mProject : nullptr, mTelaAtiva, mModoAtivo,
                            &mSelectedElementIds, mSelectedElementId.c_str(),
-                           mSelectedCornerMask, mRulersVisible, mCanvasZoom,
-                           mCanvasPanX, mCanvasPanY);
+                           mSelectedCornerMask, mRulersVisible, mRulersLocked,
+                           mGridVisible,
+                           mCanvasZoom, mCanvasPanX, mCanvasPanY, UnitToPixels());
+                DesenharGuias();
                 // Guias inteligentes: linha magenta na posição encaixada
                 // (a janela child recorta o desenho à área do canvas).
-                if (mGuideSnapX >= 0.0f || mGuideSnapY >= 0.0f)
+                // Guias FIXAS engatadas (forma->guia): laranja, mesma lógica
+                // — feedback do encaixe na régua.
+                if (mGuideSnapX >= 0.0f || mGuideSnapY >= 0.0f ||
+                    mGuideFixedSnapX >= 0.0f || mGuideFixedSnapY >= 0.0f)
                 {
                     ImDrawList* dl = ImGui::GetWindowDrawList();
                     const ImU32 guideColor = ImGui::ColorConvertFloat4ToU32(Theme::SmartGuide);
+                    const ImU32 fixedColor = ImGui::ColorConvertFloat4ToU32(
+                        Theme::Hex(0xffb347, 1.0f));
                     float sx = 0.0f, sy = 0.0f, scale = 1.0f;
                     if (mGuideSnapX >= 0.0f)
                     {
@@ -2661,6 +2992,32 @@ namespace seedui
                                           mGuideSnapY, sx, sy, scale,
                                           mCanvasZoom, mCanvasPanX, mCanvasPanY);
                     dl->AddLine(ImVec2(leftX, sy), ImVec2(sx, sy), guideColor, 1.0f);
+                }
+                // Guias fixas engatadas: linha laranja na posição exata da
+                // guia da régua (feedback do snap forma->guia).
+                const float frameTop = 0.0f;
+                const float frameLeft = 0.0f;
+                const float frameRight = (float)mProject.telaBaseLargura;
+                const float frameBottom = (float)mProject.telaBaseAltura;
+                if (mGuideFixedSnapX >= 0.0f)
+                {
+                    CanvasProjectToScreen(&mProject, mGuideFixedSnapX, 0.0f, sx, sy,
+                                          scale, mCanvasZoom, mCanvasPanX, mCanvasPanY);
+                    const float ax = sx;
+                    CanvasProjectToScreen(&mProject, mGuideFixedSnapX,
+                                          frameBottom, sx, sy,
+                                          scale, mCanvasZoom, mCanvasPanX, mCanvasPanY);
+                    dl->AddLine(ImVec2(ax, sy), ImVec2(sx, sy), fixedColor, 1.5f);
+                }
+                if (mGuideFixedSnapY >= 0.0f)
+                {
+                    CanvasProjectToScreen(&mProject, 0.0f, mGuideFixedSnapY, sx, sy,
+                                          scale, mCanvasZoom, mCanvasPanX, mCanvasPanY);
+                    const float ay = sy;
+                    CanvasProjectToScreen(&mProject, frameRight, mGuideFixedSnapY,
+                                          sx, sy, scale,
+                                          mCanvasZoom, mCanvasPanX, mCanvasPanY);
+                    dl->AddLine(ImVec2(sx, ay), ImVec2(sx, sy), fixedColor, 1.5f);
                 }
             }
             // Preview de espaçamento com Shift (estilo CorelDRAW): traços nos
@@ -2924,6 +3281,10 @@ namespace seedui
             MenuItemSoon("Zoom 100%", "M05");
             if (ImGui::MenuItem("Réguas", nullptr, mRulersVisible))
                 mRulersVisible = !mRulersVisible;
+            if (ImGui::MenuItem("Bloquear réguas", nullptr, mRulersLocked))
+                mRulersLocked = !mRulersLocked;
+            if (ImGui::MenuItem("Grade", nullptr, mGridVisible))
+                mGridVisible = !mGridVisible;
             if (ImGui::MenuItem("Snap de 8 unidades", nullptr, mSnapEnabled))
                 mSnapEnabled = !mSnapEnabled;
             if (ImGui::MenuItem("Zoom no cursor", nullptr, mZoomToMouse))
@@ -2989,6 +3350,22 @@ namespace seedui
             }
             if (ImGui::MenuItem("Desagrupar", "Ctrl+Shift+G", false, canUngroup))
                 DesagruparElementosSelecionados();
+            ImGui::Separator();
+            const bool canResetPivot = !mSelectedElementId.empty() &&
+                                       PossuiModoAtivo();
+            if (ImGui::MenuItem("Redefinir ponto de origem", nullptr, false,
+                                canResetPivot))
+            {
+                if (Element* el = Project::ResolverId(
+                        mProject.telas[mTelaAtiva].modos[mModoAtivo],
+                        mSelectedElementId))
+                {
+                    el->transformacao.erase("centro_rotacao");
+                    mProjectDirty = true;
+                    mStatusMsg = "Ponto de origem voltou ao centro";
+                    mStatusMsgUntil = GetTime() + 4.0;
+                }
+            }
             ImGui::Separator();
             const bool canLayer = !mSelectedElementId.empty();
             if (ImGui::BeginMenu("Camada (CorelDRAW)", canLayer))
@@ -3257,6 +3634,26 @@ namespace seedui
                                                     : "Réguas ocultas · clique para mostrar", button))
             mRulersVisible = !mRulersVisible;
         if (rulersWereOn) ImGui::PopStyleColor();
+        ImGui::SameLine();
+        const bool rulersWereLocked = mRulersLocked;
+        if (rulersWereLocked) ImGui::PushStyleColor(ImGuiCol_Button, Theme::Hex(0xffb347, 0.35f));
+        if (IconButton(IconId::Lock, mRulersLocked
+                                         ? "Réguas bloqueadas · clique para desbloquear"
+                                         : "Réguas desbloqueadas · clique para bloquear",
+                       button))
+            mRulersLocked = !mRulersLocked;
+        if (rulersWereLocked) ImGui::PopStyleColor();
+        ImGui::SameLine();
+        // Grade visível/oculta: ocultar NÃO desliga o snap (continua
+        // encaixando nos pontos exatos da grade, mesmo sem vê-la).
+        const bool gridWasOn = mGridVisible;
+        if (gridWasOn) ImGui::PushStyleColor(ImGuiCol_Button, Theme::Hex(0x4f8cff, 0.30f));
+        if (IconButton(IconId::Grid, mGridVisible
+                                         ? "Grade visível · clique para ocultar (snap continua ativo)"
+                                         : "Grade oculta · clique para mostrar",
+                       button))
+            mGridVisible = !mGridVisible;
+        if (gridWasOn) ImGui::PopStyleColor();
 
         separator();
         IconButton(IconId::Model, "Projeto · Galeria de modelos (M09)", button);
@@ -3274,6 +3671,457 @@ namespace seedui
         ImGui::PopStyleColor(3);
         ImGui::PopStyleVar();
     }
+
+    float App::UnitToPixels() const
+    {
+        switch (mUnit)
+        {
+            case 1: return 3.779528f;  // milímetros (96 dpi)
+            case 2: return 37.79528f;  // centímetros
+            case 3: return 96.0f;      // polegadas
+            case 4: return 1.333333f;  // pontos
+            default: return 1.0f;      // pixels
+        }
+    }
+
+    float App::PixelsToUnit(float px) const
+    {
+        const float f = UnitToPixels();
+        return (f > 0.0f) ? px / f : px;
+    }
+
+    void App::DrawPropertyBar()
+    {
+        // Barra de propriedades contextual (estilo CorelDRAW): apresenta os
+        // valores do elemento selecionado com entrada numérica direta.
+        // Seleção única = edita o elemento; multi-seleção = caixa conjunta
+        // (somente leitura). Unidade + precisão afetam os campos.
+        constexpr float fieldW = 74.0f;
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(5, 0));
+        ImGui::AlignTextToFramePadding();
+
+        // Preset/perfil (indicador visual; galeria de modelos é M09).
+        ImGui::TextDisabled("Personalizado");
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Predefinições de ferramenta (M09)");
+
+        // Referência: elemento primário ou caixa conjunta da seleção.
+        Element* primary = nullptr;
+        Modo* mode = nullptr;
+        bool single = false;
+        float bx = 0.0f, by = 0.0f, bw = 0.0f, bh = 0.0f, rot = 0.0f;
+        if (PossuiModoAtivo() && !mSelectedElementIds.empty())
+        {
+            mode = &mProject.telas[mTelaAtiva].modos[mModoAtivo];
+            if (mSelectedElementIds.size() == 1)
+            {
+                primary = Project::ResolverId(*mode, mSelectedElementIds.front());
+                if (primary)
+                {
+                    single = true;
+                    bx = primary->transformacao.value("x", 0.0f);
+                    by = primary->transformacao.value("y", 0.0f);
+                    bw = primary->transformacao.value("largura", 160.0f);
+                    bh = primary->transformacao.value("altura", 32.0f);
+                    rot = Geo::ElementRotation(*primary);
+                }
+            }
+            else
+            {
+                float minX = FLT_MAX, minY = FLT_MAX;
+                float maxX = -FLT_MAX, maxY = -FLT_MAX;
+                for (const std::string& id : mSelectedElementIds)
+                {
+                    if (Element* el = Project::ResolverId(*mode, id))
+                    {
+                        const float ex = el->transformacao.value("x", 0.0f);
+                        const float ey = el->transformacao.value("y", 0.0f);
+                        const float ew = el->transformacao.value("largura", 160.0f);
+                        const float eh = el->transformacao.value("altura", 32.0f);
+                        minX = std::min(minX, ex);
+                        minY = std::min(minY, ey);
+                        maxX = std::max(maxX, ex + ew);
+                        maxY = std::max(maxY, ey + eh);
+                    }
+                }
+                if (minX <= maxX && minY <= maxY)
+                {
+                    bx = minX; by = minY;
+                    bw = maxX - minX; bh = maxY - minY;
+                }
+            }
+        }
+        const bool hasSel = (primary != nullptr) || (mode && mSelectedElementIds.size() > 1);
+
+        auto field = [&](const char* label, float* value, bool enabled)
+        {
+            if (!enabled) ImGui::BeginDisabled();
+            ImGui::SetNextItemWidth(fieldW);
+            const bool edited = ImGui::InputFloat(label, value, 0.0f, 0.0f, "%.2f");
+            if (!enabled) ImGui::EndDisabled();
+            return edited;
+        };
+
+        bool propertyEdited = false;
+        ImGui::SameLine(0, 14);
+        ImGui::TextDisabled("X:");
+        ImGui::SameLine();
+        float v = hasSel ? PixelsToUnit(bx) : 0.0f;
+        if (field("##px", &v, single) && primary)
+        {
+            primary->transformacao["x"] = v * UnitToPixels();
+            propertyEdited = true;
+        }
+
+        ImGui::SameLine();
+        ImGui::TextDisabled("Y:");
+        ImGui::SameLine();
+        v = hasSel ? PixelsToUnit(by) : 0.0f;
+        if (field("##py", &v, single) && primary)
+        {
+            primary->transformacao["y"] = v * UnitToPixels();
+            propertyEdited = true;
+        }
+
+        ImGui::SameLine();
+        ImGui::TextDisabled("L:");
+        ImGui::SameLine();
+        v = hasSel ? PixelsToUnit(bw) : 0.0f;
+        if (field("##pw", &v, single) && primary)
+        {
+            primary->transformacao["largura"] = std::max(1.0f, v * UnitToPixels());
+            propertyEdited = true;
+        }
+
+        ImGui::SameLine();
+        ImGui::TextDisabled("A:");
+        ImGui::SameLine();
+        v = hasSel ? PixelsToUnit(bh) : 0.0f;
+        if (field("##ph", &v, single) && primary)
+        {
+            primary->transformacao["altura"] = std::max(1.0f, v * UnitToPixels());
+            propertyEdited = true;
+        }
+
+        ImGui::SameLine();
+        ImGui::TextDisabled("Rot:");
+        ImGui::SameLine();
+        v = hasSel ? rot : 0.0f;
+        if (field("##prot", &v, single) && primary)
+        {
+            primary->transformacao["rotacao"] = fmodf(v, 360.0f);
+            propertyEdited = true;
+        }
+
+        if (propertyEdited) mProjectDirty = true;
+
+        // Separador
+        ImGui::SameLine(0, 12);
+        const ImVec2 sep = ImGui::GetCursorScreenPos();
+        ImGui::GetWindowDrawList()->AddLine(
+            ImVec2(sep.x, sep.y + 2.0f), ImVec2(sep.x, sep.y + kPropertyBarHeight - 8.0f),
+            ImGui::ColorConvertFloat4ToU32(Theme::BorderLight));
+        ImGui::Dummy(ImVec2(1.0f, 1.0f));
+
+        // Unidade
+        ImGui::SameLine(0, 10);
+        ImGui::TextDisabled("Unid:");
+        ImGui::SameLine();
+        static const char* kUnits[] = { "px", "mm", "cm", "in", "pt" };
+        ImGui::SetNextItemWidth(56.0f);
+        if (ImGui::BeginCombo("##unit", kUnits[mUnit]))
+        {
+            for (int i = 0; i < 5; ++i)
+            {
+                if (ImGui::Selectable(kUnits[i], mUnit == i))
+                {
+                    mUnit = i;
+                    // Precisão padrão por unidade (estilo CorelDRAW).
+                    const float kPreset[] = { 1.0f, 0.1f, 0.01f, 0.01f, 0.1f };
+                    mPrecision = kPreset[i];
+                }
+            }
+            ImGui::EndCombo();
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Unidade dos campos numéricos e réguas");
+
+        // Precisão (incremento)
+        ImGui::SameLine();
+        ImGui::TextDisabled("Prec:");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(52.0f);
+        ImGui::InputFloat("##prec", &mPrecision, 0.0f, 0.0f, "%.2f");
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Incremento/precisão dos ajustes");
+
+        // Zoom (à direita): campo editável + ajustar página.
+        const float zoomRight = ImGui::GetWindowContentRegionMax().x - 132.0f;
+        if (ImGui::GetCursorPosX() + 40.0f < zoomRight)
+            ImGui::SameLine(zoomRight);
+        else
+            ImGui::SameLine(0, 14);
+        ImGui::TextDisabled("Zoom:");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(58.0f);
+        float zoomPct = mCanvasZoom * 100.0f;
+        if (ImGui::InputFloat("##zoom_pct", &zoomPct, 0.0f, 0.0f, "%.0f%%"))
+            mCanvasZoom = std::max(0.1f, std::min(32.0f, zoomPct / 100.0f));
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Ajustar##fit"))
+        {
+            mCanvasZoom = 1.0f;
+            mCanvasPanX = 0.0f;
+            mCanvasPanY = 0.0f;
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Ajustar página ao canvas (zoom 100%)");
+
+        ImGui::PopStyleVar();
+    }
+
+    void App::DesenharGuias()
+    {
+        // Guias fixas (arrastadas das réguas): linha azul fina sobre o canvas.
+        if (!mHasProject || (mGuidesH.empty() && mGuidesV.empty())) return;
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const ImVec2 cmin = ImGui::GetWindowPos();
+        const ImVec2 cmax(cmin.x + ImGui::GetWindowWidth(),
+                          cmin.y + ImGui::GetWindowHeight());
+        const ImU32 color = ImGui::ColorConvertFloat4ToU32(Theme::Hex(0x4f8cff, 0.85f));
+        const ImU32 engaged = ImGui::ColorConvertFloat4ToU32(Theme::Hex(0xffb347, 1.0f));
+        float sx = 0.0f, sy = 0.0f, scale = 1.0f;
+        for (int i = 0; i < (int)mGuidesH.size(); ++i)
+        {
+            const bool isEngaged = mGuideSnapEngaged && mGuideDragKind == 3 &&
+                                   i == mGuideDragIndex;
+            CanvasProjectToScreen(&mProject, 0.0f, mGuidesH[i], sx, sy, scale,
+                                  mCanvasZoom, mCanvasPanX, mCanvasPanY);
+            dl->AddLine(ImVec2(cmin.x, sy), ImVec2(cmax.x, sy),
+                        isEngaged ? engaged : color, isEngaged ? 2.0f : 1.0f);
+        }
+        for (int i = 0; i < (int)mGuidesV.size(); ++i)
+        {
+            const bool isEngaged = mGuideSnapEngaged && mGuideDragKind == 4 &&
+                                   i == mGuideDragIndex;
+            CanvasProjectToScreen(&mProject, mGuidesV[i], 0.0f, sx, sy, scale,
+                                  mCanvasZoom, mCanvasPanX, mCanvasPanY);
+            dl->AddLine(ImVec2(sx, cmin.y), ImVec2(sx, cmax.y),
+                        isEngaged ? engaged : color, isEngaged ? 2.0f : 1.0f);
+        }
+    }
+
+    void App::HandleGuidesInteraction()
+    {
+        // Guias arrastáveis das réguas (estilo CorelDRAW): clique na régua
+        // cria; clique na linha arrasta; soltar na régua/fora remove.
+        // Régua BLOQUEADA: sem interação — as guias existentes continuam
+        // funcionando como referência de snap (bloquear ≠ desativar).
+        if (!mHasProject || !mRulersVisible || mRulersLocked) return;
+        if (mCurrentTool != Tool::Select && mCurrentTool != Tool::Move) return;
+        const ImVec2 wpos = ImGui::GetWindowPos();
+        const ImVec2 wsize = ImGui::GetWindowSize();
+        const float ruler = 24.0f;
+        const ImVec2 mouse = ImGui::GetMousePos();
+        const bool overTop = mouse.y >= wpos.y && mouse.y < wpos.y + ruler &&
+                             mouse.x >= wpos.x + ruler && mouse.x <= wpos.x + wsize.x;
+        const bool overLeft = mouse.x >= wpos.x && mouse.x < wpos.x + ruler &&
+                              mouse.y >= wpos.y + ruler && mouse.y <= wpos.y + wsize.y;
+
+        if (mGuideDragKind == 0)
+        {
+            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            {
+                float px = 0.0f, py = 0.0f;
+                CanvasScreenToProject(&mProject, mouse.x, mouse.y, px, py, false,
+                                      mCanvasZoom, mCanvasPanX, mCanvasPanY);
+                if (overTop)
+                {
+                    Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+                    bool snapped = false;
+                    mGuidesH.push_back(SmartGuides::SnapGuideToShapes(
+                        py, true, mode, (float)mProject.telaBaseLargura,
+                        (float)mProject.telaBaseAltura,
+                        10.0f / std::max(0.5f, mCanvasZoom), snapped));
+                    mGuideSnapEngaged = snapped;
+                    mGuideDragKind = 3;
+                    mGuideDragIndex = (int)mGuidesH.size() - 1;
+                }
+                else if (overLeft)
+                {
+                    Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+                    bool snapped = false;
+                    mGuidesV.push_back(SmartGuides::SnapGuideToShapes(
+                        px, false, mode, (float)mProject.telaBaseLargura,
+                        (float)mProject.telaBaseAltura,
+                        10.0f / std::max(0.5f, mCanvasZoom), snapped));
+                    mGuideSnapEngaged = snapped;
+                    mGuideDragKind = 4;
+                    mGuideDragIndex = (int)mGuidesV.size() - 1;
+                }
+                else
+                {
+                    // Clicar numa guia existente (dentro da área de edição).
+                    for (int i = 0; i < (int)mGuidesH.size(); ++i)
+                    {
+                        float sx, sy, sc;
+                        CanvasProjectToScreen(&mProject, 0.0f, mGuidesH[i], sx, sy, sc,
+                                              mCanvasZoom, mCanvasPanX, mCanvasPanY);
+                        if (fabsf(mouse.y - sy) <= 6.0f)
+                        {
+                            mGuideDragKind = 3;
+                            mGuideDragIndex = i;
+                            break;
+                        }
+                    }
+                    if (mGuideDragKind == 0)
+                    {
+                        for (int i = 0; i < (int)mGuidesV.size(); ++i)
+                        {
+                            float sx, sy, sc;
+                            CanvasProjectToScreen(&mProject, mGuidesV[i], 0.0f, sx, sy, sc,
+                                                  mCanvasZoom, mCanvasPanX, mCanvasPanY);
+                            if (fabsf(mouse.x - sx) <= 6.0f)
+                            {
+                                mGuideDragKind = 4;
+                                mGuideDragIndex = i;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
+            {
+                float px = 0.0f, py = 0.0f;
+                CanvasScreenToProject(&mProject, mouse.x, mouse.y, px, py, false,
+                                      mCanvasZoom, mCanvasPanX, mCanvasPanY);
+                if (mGuideDragKind == 3 && mGuideDragIndex >= 0 &&
+                    mGuideDragIndex < (int)mGuidesH.size())
+                {
+                    Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+                    bool snapped = false;
+                    mGuidesH[mGuideDragIndex] = SmartGuides::SnapGuideToShapes(
+                        py, true, mode, (float)mProject.telaBaseLargura,
+                        (float)mProject.telaBaseAltura,
+                        10.0f / std::max(0.5f, mCanvasZoom), snapped);
+                    mGuideSnapEngaged = snapped;
+                }
+                else if (mGuideDragKind == 4 && mGuideDragIndex >= 0 &&
+                         mGuideDragIndex < (int)mGuidesV.size())
+                {
+                    Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+                    bool snapped = false;
+                    mGuidesV[mGuideDragIndex] = SmartGuides::SnapGuideToShapes(
+                        px, false, mode, (float)mProject.telaBaseLargura,
+                        (float)mProject.telaBaseAltura,
+                        10.0f / std::max(0.5f, mCanvasZoom), snapped);
+                    mGuideSnapEngaged = snapped;
+                }
+                ImGui::SetMouseCursor(mGuideDragKind == 3
+                                          ? ImGuiMouseCursor_ResizeNS
+                                          : ImGuiMouseCursor_ResizeEW);
+            }
+            if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+            {
+                // Soltar na régua de origem ou fora do canvas remove a guia.
+                const bool onRuler = (mGuideDragKind == 3 && overTop) ||
+                                     (mGuideDragKind == 4 && overLeft);
+                const bool outside = mouse.x < wpos.x || mouse.x > wpos.x + wsize.x ||
+                                     mouse.y < wpos.y || mouse.y > wpos.y + wsize.y;
+                if (onRuler || outside)
+                {
+                    if (mGuideDragKind == 3 && mGuideDragIndex >= 0 &&
+                        mGuideDragIndex < (int)mGuidesH.size())
+                        mGuidesH.erase(mGuidesH.begin() + mGuideDragIndex);
+                    else if (mGuideDragKind == 4 && mGuideDragIndex >= 0 &&
+                             mGuideDragIndex < (int)mGuidesV.size())
+                        mGuidesV.erase(mGuidesV.begin() + mGuideDragIndex);
+                }
+                mGuideDragKind = 0;
+                mGuideDragIndex = -1;
+                mGuideSnapEngaged = false;
+            }
+        }
+        // Cursor de hover sobre guias existentes (sem arrasto).
+        if (mGuideDragKind == 0)
+        {
+            for (float gy : mGuidesH)
+            {
+                float sx, sy, sc;
+                CanvasProjectToScreen(&mProject, 0.0f, gy, sx, sy, sc,
+                                      mCanvasZoom, mCanvasPanX, mCanvasPanY);
+                if (fabsf(mouse.y - sy) <= 6.0f)
+                {
+                    ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
+                    break;
+                }
+            }
+            for (float gx : mGuidesV)
+            {
+                float sx, sy, sc;
+                CanvasProjectToScreen(&mProject, gx, 0.0f, sx, sy, sc,
+                                      mCanvasZoom, mCanvasPanX, mCanvasPanY);
+                if (fabsf(mouse.x - sx) <= 6.0f)
+                {
+                    ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+                    break;
+                }
+            }
+        }
+    }
+
+    void App::SnapGuias(float& dx, float& dy,
+                        const std::vector<SmartGuides::Rect>& starts)
+    {
+        // Snap às guias fixas (por último: referência intencional do usuário
+        // vence os demais snaps). Tolera 12px de tela.
+        if (starts.empty()) return;
+        float selLeft = starts[0].x + dx, selTop = starts[0].y + dy;
+        float selRight = starts[0].x + starts[0].w + dx;
+        float selBottom = starts[0].y + starts[0].h + dy;
+        for (const SmartGuides::Rect& s : starts)
+        {
+            selLeft = std::min(selLeft, s.x + dx);
+            selTop = std::min(selTop, s.y + dy);
+            selRight = std::max(selRight, s.x + s.w + dx);
+            selBottom = std::max(selBottom, s.y + s.h + dy);
+        }
+        const float tol = 12.0f / std::max(0.5f, mCanvasZoom);
+
+        mGuideFixedSnapX = -1.0f;
+        mGuideFixedSnapY = -1.0f;
+        float bestDx = 0.0f, bestDist = tol;
+        float engagedGx = -1.0f;
+        for (float gx : mGuidesV)
+        {
+            const float dl = gx - selLeft;
+            const float dc = gx - (selLeft + selRight) * 0.5f;
+            const float dr = gx - selRight;
+            if (fabsf(dl) < bestDist) { bestDist = fabsf(dl); bestDx = dl; engagedGx = gx; }
+            if (fabsf(dc) < bestDist) { bestDist = fabsf(dc); bestDx = dc; engagedGx = gx; }
+            if (fabsf(dr) < bestDist) { bestDist = fabsf(dr); bestDx = dr; engagedGx = gx; }
+        }
+        if (engagedGx >= 0.0f) { dx += bestDx; mGuideFixedSnapX = engagedGx; }
+
+        float bestDy = 0.0f;
+        bestDist = tol;
+        float engagedGy = -1.0f;
+        for (float gy : mGuidesH)
+        {
+            const float dt = gy - selTop;
+            const float dc = gy - (selTop + selBottom) * 0.5f;
+            const float db = gy - selBottom;
+            if (fabsf(dt) < bestDist) { bestDist = fabsf(dt); bestDy = dt; engagedGy = gy; }
+            if (fabsf(dc) < bestDist) { bestDist = fabsf(dc); bestDy = dc; engagedGy = gy; }
+            if (fabsf(db) < bestDist) { bestDist = fabsf(db); bestDy = db; engagedGy = gy; }
+        }
+        if (engagedGy >= 0.0f) { dy += bestDy; mGuideFixedSnapY = engagedGy; }
+    }
+
     void App::DrawToolbar()
     {
         // Somente ferramentas que atuam diretamente no canvas.
@@ -3863,17 +4711,41 @@ namespace seedui
         else
         {
             ImGui::AlignTextToFramePadding();
-            if (!mStatusMsg.empty() && GetTime() < mStatusMsgUntil)
+
+            // Detalhes do objeto (estilo CorelDRAW): quando há seleção, mostra
+            // tipo · dimensões · posição; senão, a mensagem de status.
+            Element* detailEl = nullptr;
+            if (PossuiModoAtivo() && !mSelectedElementIds.empty())
+                detailEl = Project::ResolverId(
+                    mProject.telas[mTelaAtiva].modos[mModoAtivo],
+                    mSelectedElementIds.front());
+            if (detailEl)
+            {
+                const float ex = detailEl->transformacao.value("x", 0.0f);
+                const float ey = detailEl->transformacao.value("y", 0.0f);
+                const float ew = detailEl->transformacao.value("largura", 160.0f);
+                const float eh = detailEl->transformacao.value("altura", 32.0f);
+                ImGui::TextColored(Theme::TextPrimary,
+                                   "Detalhes: %s · %.0f×%.0f · (%.0f, %.0f)",
+                                   detailEl->tipo.c_str(), ew, eh, ex, ey);
+            }
+            else if (!mStatusMsg.empty() && GetTime() < mStatusMsgUntil)
+            {
                 ImGui::TextColored(Theme::Success, "%.*s", 52, mStatusMsg.c_str());
+            }
             else
-                ImGui::TextColored(Theme::TextSecondary, "Pronto");
+            {
+                ImGui::TextColored(Theme::TextSecondary, "Nenhum objeto ativo");
+            }
 
             ImGui::SameLine(0, 16);
             ImGui::TextColored(Theme::TextSecondary, "● Modo Normal");
             ImGui::SameLine(0, 18);
             ImGui::TextColored(Theme::TextSecondary, "Zoom: %.0f%%", mCanvasZoom * 100.0f);
             ImGui::SameLine(0, 18);
-            ImGui::TextColored(Theme::TextSecondary, "1280×720");
+            ImGui::TextColored(Theme::TextSecondary, "%.0f×%.0f",
+                               (float)mProject.telaBaseLargura,
+                               (float)mProject.telaBaseAltura);
 
             const ImGuiIO& io = ImGui::GetIO();
             ImGui::SameLine(0, 18);
@@ -3882,6 +4754,47 @@ namespace seedui
             else
                 ImGui::TextColored(Theme::TextSecondary, "Mouse: (%.0f, %.0f)",
                                    io.MousePos.x, io.MousePos.y);
+
+            // Cor do preenchimento em CMYK + espessura do contorno (direita).
+            if (detailEl && detailEl->estilos.is_object())
+            {
+                const std::string hex = detailEl->estilos.value("cor_fundo", "ffffff");
+                unsigned int value = 0;
+                std::string h = hex;
+                if (!h.empty() && h[0] == '#') h = h.substr(1);
+                bool parsed = h.size() >= 6;
+                if (parsed)
+                {
+                    try { value = (unsigned int)std::stoul(h.substr(0, 6), nullptr, 16); }
+                    catch (...) { parsed = false; }
+                }
+                if (parsed)
+                {
+                    const float r = ((value >> 16) & 0xFF) / 255.0f;
+                    const float g = ((value >> 8) & 0xFF) / 255.0f;
+                    const float b = (value & 0xFF) / 255.0f;
+                    const float k = 1.0f - std::max(r, std::max(g, b));
+                    const float denom = (k < 0.999f) ? (1.0f - k) : 1.0f;
+                    const float c = (1.0f - r - k) / denom;
+                    const float m = (1.0f - g - k) / denom;
+                    const float y = (1.0f - b - k) / denom;
+                    const float borda = detailEl->estilos.value("espessura_borda", 0.0f);
+                    const std::string cmyk = "C:" + std::to_string((int)roundf(c * 100.0f)) +
+                                             " M:" + std::to_string((int)roundf(m * 100.0f)) +
+                                             " Y:" + std::to_string((int)roundf(y * 100.0f)) +
+                                             " K:" + std::to_string((int)roundf(k * 100.0f));
+                    const float needC = ImGui::CalcTextSize(cmyk.c_str()).x +
+                                        ImGui::CalcTextSize(" · 1.0px").x + 20.0f;
+                    const float rightBound = ImGui::GetWindowContentRegionMax().x - 170.0f;
+                    if (ImGui::GetCursorPosX() + needC < rightBound)
+                    {
+                        ImGui::SameLine(0, 20);
+                        ImGui::TextColored(Theme::TextSecondary, "%s", cmyk.c_str());
+                        ImGui::SameLine(0, 8);
+                        ImGui::TextColored(Theme::TextSecondary, "· %.1fpx", borda);
+                    }
+                }
+            }
         }
 
         const char* savedLabel = mProjectDirty ? "● Alterações não salvas"

@@ -270,6 +270,77 @@ namespace
                   "moldura tem snap forte (3x tolerancia) e vence os demais");
         }
 
+        // Snap de GUIA arrastada da régua (M05): a guia gruda nas laterais/
+        // centros das formas e na moldura — a régua vira ferramenta
+        // funcional de alinhamento, não só estética.
+        {
+            Modo guideSnapMode;
+            Element form = makeElement("forma", "painel");
+            form.transformacao = { { "x", 200.0f }, { "y", 150.0f },
+                                   { "largura", 120.0f }, { "altura", 60.0f } };
+            Element filho = makeElement("filho", "botao");
+            filho.transformacao = { { "x", 340.0f }, { "y", 250.0f },
+                                    { "largura", 40.0f }, { "altura", 20.0f } };
+            form.filhos.push_back(std::move(filho));
+            guideSnapMode.raiz.push_back(std::move(form));
+
+            // Guia vertical perto da lateral ESQUERDA da forma (202 -> 200).
+            bool snapped = false;
+            float v = SmartGuides::SnapGuideToShapes(
+                202.0f, false, guideSnapMode, 1280.0f, 720.0f, 10.0f, snapped);
+            check(snapped && v == 200.0f,
+                  "guia vertical gruda na lateral esquerda da forma");
+
+            // Guia vertical perto do CENTRO da forma (260 -> 260).
+            snapped = false;
+            v = SmartGuides::SnapGuideToShapes(
+                259.0f, false, guideSnapMode, 1280.0f, 720.0f, 10.0f, snapped);
+            check(snapped && v == 260.0f,
+                  "guia vertical gruda no centro da forma");
+
+            // Guia vertical perto da lateral DIREITA da forma (321 -> 320).
+            snapped = false;
+            v = SmartGuides::SnapGuideToShapes(
+                321.0f, false, guideSnapMode, 1280.0f, 720.0f, 10.0f, snapped);
+            check(snapped && v == 320.0f,
+                  "guia vertical gruda na lateral direita da forma");
+
+            // Guia HORIZONTAL perto do topo do FILHO (255 -> 250).
+            snapped = false;
+            v = SmartGuides::SnapGuideToShapes(
+                255.0f, true, guideSnapMode, 1280.0f, 720.0f, 10.0f, snapped);
+            check(snapped && v == 250.0f,
+                  "guia horizontal gruda no topo de um filho do grupo");
+
+            // Guia horizontal perto da BASE da forma (212 -> 210).
+            snapped = false;
+            v = SmartGuides::SnapGuideToShapes(
+                212.0f, true, guideSnapMode, 1280.0f, 720.0f, 10.0f, snapped);
+            check(snapped && v == 210.0f,
+                  "guia horizontal gruda na base da forma");
+
+            // Guia FORA da tolerância: permanece onde o usuário soltou.
+            snapped = false;
+            v = SmartGuides::SnapGuideToShapes(
+                50.0f, true, guideSnapMode, 1280.0f, 720.0f, 10.0f, snapped);
+            check(!snapped && v == 50.0f,
+                  "guia fora da tolerancia nao se move");
+
+            // Moldura: guia perto do CENTRO da tela (646 -> 640) vence.
+            snapped = false;
+            v = SmartGuides::SnapGuideToShapes(
+                646.0f, false, guideSnapMode, 1280.0f, 720.0f, 10.0f, snapped);
+            check(snapped && v == 640.0f,
+                  "guia gruda no centro da moldura da tela-base");
+
+            // Moldura: guia perto da borda esquerda (3 -> 0) gruda nela.
+            snapped = false;
+            v = SmartGuides::SnapGuideToShapes(
+                3.0f, false, guideSnapMode, 1280.0f, 720.0f, 10.0f, snapped);
+            check(snapped && v == 0.0f,
+                  "guia gruda na borda esquerda da moldura da tela-base");
+        }
+
         // Guias de espaçamento (M04): replicam espaços repetidos.
         {
             Modo spacingMode;

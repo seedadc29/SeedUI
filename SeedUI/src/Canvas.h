@@ -12,8 +12,11 @@ namespace seedui
                     const char* elementoPrincipalId = nullptr,
                     unsigned int quinasSelecionadas = 0,
                     bool exibirReguas = true,
+                    bool reguasBloqueadas = false,
+                    bool exibirGrade = true,
                     float zoom = 1.0f,
-                    float panX = 0.0f, float panY = 0.0f);
+                    float panX = 0.0f, float panY = 0.0f,
+                    float unidadeEmPixels = 1.0f);
 
     // Converte coordenadas da janela para coordenadas da tela base do projeto.
     bool CanvasScreenToProject(const Project* projeto, float screenX, float screenY,

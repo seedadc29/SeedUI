@@ -241,6 +241,55 @@ Atendendo às diretrizes de 12/08 12:14 (áreas 1, 3 e 5):
 - **Toolbar com rolagem fina**: ferramentas que não couberem ficam acessíveis
   pela barra de rolagem da coluna (estilo Blender); nenhum ícone cortado.
 
+### Barra de propriedades, guias e status — parte do M04 (2026-08-12, noite)
+
+Primeira leva da especificação "interface CorelDRAW" (commit 72b9701 antes):
+
+- **Barra de propriedades contextual** (`DrawPropertyBar`, 30px): X/Y/L/A/Rot
+  com entrada numérica direta (seleção única edita; multi mostra caixa
+  conjunta em leitura), seletor de **unidade** (px/mm/cm/in/pt), **precisão**
+  e **zoom** editável + botão Ajustar. `UnitToPixels()` converte exibição;
+  edição só marca `mProjectDirty` quando um campo muda.
+- **Guias arrastáveis das réguas** (`HandleGuidesInteraction`/`DesenharGuias`/
+  `SnapGuias`): cria da régua (H/V), arrasta a linha, remove soltando na
+  régua/fora; dados transitórios (não entram no projeto.ui.json); snap forte
+  por último na cadeia do mover (vence os demais).
+- **Snap bidirecional guia ⇄ formas**: `SnapGuideToShapes` (SmartGuides.h,
+  testável) faz a guia arrastada **grudar nas laterais/centros das formas**
+  e na moldura (borda/centro, snap forte vence empate); `SnapGuias` grava
+  `mGuideFixedSnapX/Y` e o engate ganha **destaque laranja** (guia mais
+  grossa) tanto ao arrastar a guia quanto ao mover a forma até a guia.
+  8 testes novos (84 PASS no total).
+- **Bloqueio da régua** (`mRulersLocked`): menu Exibir + cadeado na action
+  bar; guard em `HandleGuidesInteraction` impede criar/arrastar guias e o
+  cursor de hover, mas **as guias existentes continuam fazendo snap**
+  (bloquear ≠ desativar). Indicador discreto de **cadeado laranja no canto
+  das réguas** (`CanvasDraw(..., reguasBloqueadas)`).
+- **Réguas sincronizadas** (Canvas.cpp): coordenadas de PROJETO (seguem
+  zoom/pan), passos 1/2/5 ×10^n, números na régua vertical e conversão pela
+  unidade selecionada.
+- **Status bar**: Detalhes do objeto (tipo · dimensões · posição) + cor em
+  **CMYK** e espessura do contorno à direita.
+- **Resize com modificadores estilo CorelDRAW** (App.cpp, bloco do drag):
+  **Shift isolado** = espelhado a partir do PIVÔ (a aresta oposta espelha o
+  movimento; lateral e superior); **Shift+Alt** em alças de canto =
+  proporcional uniforme com canto oposto como âncora. Vale para elemento
+  único e grupos.
+- **Ponto de origem (pivô) arrastável**: marcador "mira" laranja no centro
+  (`Canvas.cpp`); arrasto = modo 15 com **snap nos pontos-chave da forma**
+  (centro/cantos/meios) + grade; grava `transformacao.centro_rotacao`
+  (removido ao voltar ao centro) — usado pelo resize espelhado e rotação;
+  acompanha mover/resize (`RescalePivot`) e **Objeto → Redefinir ponto de
+  origem** volta ao centro.
+- **Grade discreta + ocultável + passo único**: cores escurecidas (pontos
+  `#3f3f3f`/`#5c5c5c`); `mGridVisible` (Exibir → Grade / botão na action
+  bar) oculta a grade **sem desligar o snap**; `Geo::kGridStep` (8) é a
+  fonte única do desenho da grade E do snap (App usa `snapStep =
+  Geo::kGridStep`) — encaixe sempre exato nos pontos visíveis.
+- Abas de documentos NÃO implementadas: o projeto usa telas/modos com
+  seletores próprios (regra "não recriar o que existe"); telas sem UI de
+  criação ficam para M10.
+
 ## Milestone 05 — Canvas interativo
 
 **Objetivo**: manipulação visual direta dos elementos.

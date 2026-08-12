@@ -38,6 +38,7 @@ namespace seedui
         void DrawWorkspace();
         void DrawMenuBar();
         void DrawActionBar();
+        void DrawPropertyBar(); // barra contextual (CorelDRAW): X/Y/L/A, unidade, zoom
         void DrawToolbar();
         void DrawRightPanels();
         void DrawRightRail();
@@ -77,6 +78,12 @@ namespace seedui
         void Refazer();
         void DrawElementTree(Element& element);
         void HandleCanvasInteraction(bool canvasHovered);
+        void HandleGuidesInteraction(); // guias arrastadas das réguas
+        void DesenharGuias();           // linhas das guias sobre o canvas
+        void SnapGuias(float& dx, float& dy,
+                       const std::vector<SmartGuides::Rect>& starts);
+        float UnitToPixels() const;     // fator da unidade atual -> px
+        float PixelsToUnit(float px) const;
 
         Project mProject;      // projeto em memória (vazio = tela inicial)
         bool mHasProject = false;
@@ -84,6 +91,18 @@ namespace seedui
         int mTelaAtiva = 0;    // índice em mProject.telas
         int mModoAtivo = 0;    // índice em mProject.telas[mTelaAtiva].modos
         std::string mUltimoCaminho; // caminho do último salvar/abrir
+
+        // Barra de propriedades contextual (estilo CorelDRAW)
+        int mUnit = 0;        // 0 px, 1 mm, 2 cm, 3 in, 4 pt
+        float mPrecision = 1.0f; // incremento dos campos numéricos
+
+        // Guias fixas arrastadas das réguas (coordenadas de projeto; NÃO
+        // entram no projeto.ui.json — são auxílio de edição).
+        std::vector<float> mGuidesH; // guias horizontais (y)
+        std::vector<float> mGuidesV; // guias verticais (x)
+        int mGuideDragKind = 0;      // 0 nenhum; 1 cria H; 2 cria V; 3 arrasta H; 4 arrasta V
+        int mGuideDragIndex = -1;
+        bool mGuideSnapEngaged = false; // guia em arrasto encaixada (destaque visual)
 
         struct CanvasTransformStart
         {
@@ -124,6 +143,11 @@ namespace seedui
         // ativa durante o arraste (-1 = nenhuma). Desenhadas no canvas.
         float mGuideSnapX = -1.0f;
         float mGuideSnapY = -1.0f;
+        // Guias FIXAS (das réguas) em que a seleção ENGATOU durante o arrasto
+        // (-1 = nenhuma). Desenhadas em destaque para dar o feedback visual
+        // do encaixe forma->guia.
+        float mGuideFixedSnapX = -1.0f;
+        float mGuideFixedSnapY = -1.0f;
         // Guias de espaçamento (M04): duas linhas delimitando um espaço
         // repetido entre vizinhos (par de posições; -1 = nenhuma).
         float mGuideSpacingX1 = -1.0f;
@@ -156,6 +180,8 @@ namespace seedui
         float mVerticalSpacing = 16.0f;
         bool mSnapEnabled = true;
         bool mRulersVisible = true;
+        bool mRulersLocked = false; // bloqueio da régua (proteção contra edição)
+        bool mGridVisible = true;   // ocultar a grade NÃO desliga o snap
         bool mZoomToMouse = true; // zoom encaminha para o cursor (qualquer controle)
         bool mMarqueeContainOnly = true; // seleção exige cobertura TOTAL do elemento
         bool mColorPickerOpen = false; // janela do seletor de cor (3 modelos)

@@ -220,8 +220,18 @@ finais de cada elemento.
   menu há a opção **"Selecionar ao encostar"** para voltar ao
   comportamento antigo (qualquer contato seleciona).
 - **Snap forte**: bordas e centros encaixam com força (tolerância de 10px) e
-  a **grade do canvas acompanha o snap** (pontos a cada 8 unidades, maiores
-  a cada 40) — o elemento não "escapa" do encaixe.
+  a **grade do canvas acompanha o snap** — o elemento não "escapa" do
+  encaixe.
+- **Grade matemática e discreta**: a grade é **pontos pequenos escuros**
+  (baixo contraste, menos vibrante — o foco fica na tela-base e nas formas)
+  desenhados em **espaço de projeto** a cada **8 unidades**, maiores a cada
+  **40** — o **mesmo passo exato do snap** (`Geo::kGridStep` é a fonte
+  única): cada ponto visível da grade é um ponto **exato** de encaixe em
+  qualquer zoom (a grade nunca desalinha do snap, mesmo em escalas
+  fracionárias).
+- **Ocultar a grade mantém o snap**: menu **Exibir → Grade** ou o botão de
+  grade na barra de ações oculta a grade **sem desligar o snap** — os
+  objetos continuam encaixando nos pontos exatos da grade, mesmo sem vê-la.
 - **Espaço de trabalho livre e área de segurança**: os objetos **não ficam
   presos** à moldura — você pode mover/redimensionar/criar em qualquer ponto
   do canvas e a **grade pontilhada percorre o canvas inteiro** (sempre
@@ -229,6 +239,69 @@ finais de cada elemento.
   **contorno vermelho fino tracejado** contorna a moldura avisando que você
   saiu da área principal; basta arrastar de volta. Navegue com o **botão do
   meio** (arrastar = pan) e a **roda** (zoom que segue o mouse até o fim).
+
+### 3.6 Barra de propriedades, guias das réguas e status (estilo CorelDRAW)
+
+- **Barra de propriedades contextual**: abaixo da barra de ferramentas
+  principal existe uma barra compacta estilo CorelDRAW com **X, Y, Largura,
+  Altura e Rotação** da seleção com **entrada numérica direta** (digite e
+  confirme — o objeto atualiza na hora). Seleção única edita o elemento;
+  multi-seleção mostra a **caixa conjunta** (somente leitura). Inclui
+  seletor de **Unidade** (px, mm, cm, in, pt) — os campos e as réguas
+  passam a exibir na unidade escolhida — campo de **Precisão** (incremento)
+  e **Zoom** editável com botão **Ajustar** (volta a página ao canvas).
+- **Guias arrastáveis das réguas** (estilo CorelDRAW): clique na **régua
+  horizontal** e arraste para criar uma **guia horizontal azul**; clique na
+  **régua vertical** para uma guia vertical. As guias são independentes dos
+  objetos, **não entram no arquivo do projeto** (são auxílio de edição),
+  podem ser **arrastadas** para mudar de posição e **removidas** soltando
+  na régua de origem ou fora do canvas.
+- **Snap bidirecional guia ⇄ formas** (funcional, não só estético): ao
+  **arrastar uma guia**, ela **gruda nas laterais e centros das formas**
+  visíveis e na **moldura da tela-base** (bordas 0/fim e centro — snap
+  forte do delimitador principal vence as formas em empate) — a régua vira
+  ferramenta de alinhamento precisa. E, ao **mover uma forma**, ela
+  **encaixa nas guias** com snap forte (referência intencional do usuário
+  vence os demais snaps). Quando um encaixe acontece, a guia envolvida
+  fica **destacada em laranja** (linha mais grossa) — feedback visual
+  imediato do ponto exato de encaixe, nos dois sentidos.
+- **Bloqueio da régua** (proteção contra alterações acidentais): o menu
+  **Exibir → Bloquear réguas** (ou o **cadeado** na barra de ferramentas
+  principal) bloqueia/desbloqueia a régua. Bloqueada, a régua **continua
+  visível e funcional** como referência espacial — as marcações seguem
+  acompanhando zoom/pan/unidade e **as guias existentes continuam fazendo
+  snap** normalmente — mas **não é possível interagir** com ela: não se
+  cria nem se arrasta guia, e o cursor de hover some. Um **cadeado laranja
+  discreto** aparece no canto onde as réguas se cruzam. Regra central:
+  **régua bloqueada ≠ régua desativada** — o bloqueio impede a *edição* da
+  régua, nunca o uso das referências que ela já estabeleceu.
+- **Réguas sincronizadas**: as réguas horizontal e vertical agora mostram
+  **coordenadas de projeto** (acompanham zoom e pan) em vez de pixels da
+  janela, com ticks em passos "bonitos" (1/2/5 ×10^n) e números também na
+  régua vertical; a unidade selecionada é aplicada aos números.
+- **Status bar com detalhes**: quando há seleção, o rodapé mostra
+  **Detalhes do objeto** (tipo · dimensões · posição) no lugar da mensagem
+  e, à direita, a **cor do preenchimento em CMYK** (C/M/Y/K) com a
+  espessura do contorno — referência profissional para impressão.
+- **Redimensionamento com modificadores** (estilo CorelDRAW):
+  - **Shift isolado** em qualquer alça = **espelhado a partir do ponto de
+    origem** (pivô, no centro por padrão): puxar uma aresta faz a **oposta
+    espelhar o movimento** para o lado contrário — a forma estica
+    proporcionalmente para os dois lados (lateral e superior).
+  - **Shift+Alt** nas **alças de canto** = **proporcional (uniforme)**:
+    largura e altura escalam juntas preservando a proporção original
+    (largura/altura = constante — 200×100 → 400×200; um quadrado/círculo
+    100×100 → 200×200, nunca vira elipse). O **canto oposto à alça fica
+    fixo** como âncora — o objeto não desloca.
+  - **Sem modificador** = redimensionamento livre/deformação (intacto).
+- **Ponto de origem (pivô) arrastável**: a forma selecionada mostra uma
+  **"mira" laranja no centro** — clicar e arrastar reposiciona o ponto de
+  origem, com **snap nos pontos-chave da própria forma** (centro, 4 cantos
+  e 4 meios de aresta) + grade de 8px. O pivô é o centro do **resize
+  espelhado** (Shift) e da **rotação**: mover a mira muda onde a forma
+  "cresce" e em torno do que gira. Ele **acompanha o objeto** ao mover e
+  redimensionar (mantém a posição relativa), e **Objeto → Redefinir ponto
+  de origem** volta ao centro.
 
 ### 3.5 Seleção em conjunto, camadas e atalhos (M04)
 

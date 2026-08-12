@@ -154,6 +154,27 @@ barra lateral esquerda (famílias existentes), com ícone + tooltip + atalho.
 - **Mover com setas**: setas movem a seleção 1px (10px com Shift) via
   `ApplyPositionDelta`; sem modificador, sem conflito com camadas.
 
+### Barra de propriedades, guias das réguas e status (2026-08-12, noite)
+- **Barra de propriedades contextual** (`DrawPropertyBar`, kPropertyBarHeight
+  30px): X/Y/Largura/Altura/Rotação com InputFloat + conversão de unidade
+  (`UnitToPixels`/`PixelsToUnit`: px/mm/cm/in/pt), seletor de unidade com
+  precisão padrão por unidade, campo de precisão e zoom editável + botão
+  Ajustar (zoom 1 + pan 0). Seleção única edita; multi mostra caixa conjunta
+  somente leitura; `mProjectDirty` só marca quando um campo muda.
+- **Guias das réguas** (transitórias, fora do JSON): criar na régua H/V,
+  arrastar a linha (cursor ResizeNS/EW), remover ao soltar na régua ou fora
+  do canvas; `HandleGuidesInteraction` roda ANTES da interação do canvas e
+  `HandleCanvasInteraction` devolve cedo quando `mGuideDragKind != 0`;
+  `SnapGuias` aplica o encaixe por último na cadeia do mover (referência
+  intencional do usuário vence os demais snaps); `DesenharGuias` pinta as
+  linhas azuis sobre o canvas.
+- **Réguas sincronizadas** (Canvas.cpp): ticks em coordenadas de PROJETO com
+  passos 1/2/5 ×10^n (~40-100px de tela), números na régua vertical e fator
+  de unidade (novo parâmetro `unidadeEmPixels` em CanvasDraw).
+- **Status bar**: Detalhes do objeto (tipo · dimensões · posição) no lugar da
+  mensagem quando há seleção, e cor do preenchimento em **CMYK** +
+  espessura do contorno à direita (com guarda de largura para não vazar).
+
 ### Previsão confiável, janela e toolbar (2026-08-12, tarde)
 - **`SmartGuides::ApplySpacing` reescrito**: (1) referências filtradas pela
   **fileira/coluna** da seleção (gaps de outras linhas não viram alvo); (2)
@@ -174,9 +195,9 @@ barra lateral esquerda (famílias existentes), com ícone + tooltip + atalho.
 ## Validação
 - Builds Debug e Development aprovados (via MSBuild direto; devenv com lock
   da reinicialização pendente do instalador do VS).
-- `SeedUI.exe --self-test-m04`: **76 verificações PASS, 0 failures** (4 novas
-  de previsão: cruzamento, fora da fileira, grupo como bloco único ×2).
+- `SeedUI.exe --self-test-m04`: **76 verificações PASS, 0 failures**.
 - Captura automática (`--capture`) sem crash/asserts (Debug e Development);
   limite máx. 1366×768 aplicado na inicialização.
-- **Pendente de validação manual (usuário)**: engate da previsão em arrasto
-  rápido, janela maximizada com rodapé visível e rolagem da toolbar.
+- **Pendente de validação manual (usuário)**: barra de propriedades editando
+  o selecionado (X/Y/L/A/Rot e unidade), criar/arrastar/remover guias das
+  réguas com snap, réguas seguindo zoom/pan, e detalhes+CMYK no rodapé.

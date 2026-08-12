@@ -342,15 +342,20 @@ namespace seedui
                     const std::vector<std::string>* elementosSelecionados,
                     const char* elementoPrincipalId,
                     unsigned int quinasSelecionadas,
-                    bool exibirReguas, float zoom, float panX, float panY)
+                    bool exibirReguas, bool reguasBloqueadas,
+                    bool exibirGrade,
+                    float zoom, float panX, float panY,
+                    float unidadeEmPixels)
     {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         const ImVec2 min = ImGui::GetWindowPos();
         const ImVec2 max(min.x + ImGui::GetWindowWidth(), min.y + ImGui::GetWindowHeight());
 
         const ImU32 bg = ImGui::ColorConvertFloat4ToU32(Theme::Hex(0x050505));
-        const ImU32 gridMin = ImGui::ColorConvertFloat4ToU32(Theme::Hex(0x8c8c8c, 0.55f));
-        const ImU32 gridMaj = ImGui::ColorConvertFloat4ToU32(Theme::Hex(0xd8d8d8, 0.78f));
+        // Grade discreta (menos vibrante): tons escuros de baixo contraste,
+        // só pontinhos — a tela-base e as formas continuam sendo o foco.
+        const ImU32 gridMin = ImGui::ColorConvertFloat4ToU32(Theme::Hex(0x3f3f3f, 0.42f));
+        const ImU32 gridMaj = ImGui::ColorConvertFloat4ToU32(Theme::Hex(0x5c5c5c, 0.60f));
         const ImU32 border = ImGui::ColorConvertFloat4ToU32(Theme::Border);
         const ImU32 textSec = ImGui::ColorConvertFloat4ToU32(Theme::TextSecondary);
         const ImU32 accent = ImGui::ColorConvertFloat4ToU32(Theme::AccentBlue);
@@ -384,12 +389,15 @@ namespace seedui
         const ImVec2 origin(contentMin.x + (availW - frame.x) * 0.5f + panX,
                             contentMin.y + (availH - frame.y) * 0.5f + panY);
 
-        // Grade em ESPAÇO DE PROJETO: minor a cada 8 unidades (o passo do
-        // snap), major a cada 40 (5×). Recortada à moldura da tela base e à
-        // janela visível — fica "dentro do compasso" do snap.
+        // Grade em ESPAÇO DE PROJETO: minor a cada kGridStep (8 unidades — o
+        // MESMO passo do snap, fonte única em Geo::kGridStep), major a cada
+        // 40 (5×). Recortada à moldura da tela base e à janela visível — fica
+        // "dentro do compasso" do snap: cada ponto visível da grade é um
+        // ponto EXATO de encaixe, em qualquer zoom.
+        if (exibirGrade)
         {
-            const float gridMinor = 8.0f;
-            const float gridMajor = 40.0f;
+            const float gridMinor = Geo::kGridStep;
+            const float gridMajor = Geo::kGridStep * Geo::kGridMajorMult;
             const bool drawMinor = gridMinor * viewScale >= 7.0f;
             // A grade percorre o CANVAS INTEIRO (não só a moldura): o espaço de
             // trabalho é livre e os pontos continuam alinhados às unidades do
@@ -411,40 +419,106 @@ namespace seedui
                     const bool major = xMajor && (drawMinor ? (iy % 5 == 0) : true);
                     dl->AddCircleFilled(
                         ImVec2(origin.x + px * viewScale, origin.y + iy * stepPx * viewScale),
-                        major ? 1.45f : 1.05f, major ? gridMaj : gridMin, 8);
+                        major ? 1.35f : 1.0f, major ? gridMaj : gridMin, 8);
                 }
             }
         }
 
-        // Réguas (margens da janela)
-        const float step = 24.0f;
-        const int majorEvery = 5;
+        // Réguas (margens da janela) — sincronizadas com o zoom/pan: os
+        // números são coordenadas de PROJETO (não pixels da janela), então a
+        // régua acompanha o movimento e a escala do canvas. A unidade exibida
+        // é convertida (px/mm/cm/in/pt) pelo fator unidadeEmPixels.
         if (exibirReguas)
         {
             const ImU32 rulerBg = ImGui::ColorConvertFloat4ToU32(
                 ImVec4(0.06f, 0.06f, 0.06f, 0.92f));
             dl->AddRectFilled(min, ImVec2(max.x, min.y + ruler), rulerBg);
             dl->AddRectFilled(min, ImVec2(min.x + ruler, max.y), rulerBg);
+            dl->AddRect(min, ImVec2(min.x + ruler, min.y + ruler), border);
 
-            for (float x = min.x + ruler; x <= max.x; x += step)
+            // Passo "bonito" (1/2/5 ×10^n) em unidades de projeto: ticks com
+            // ~40-100px de tela, qualquer que seja o zoom.
+            float stepPx = 1.0f;
             {
-                const bool major = ((int)((x - min.x - ruler) / step + 0.5f) % majorEvery) == 0;
-                const float h = major ? 12.0f : 6.0f;
-                dl->AddLine(ImVec2(x, min.y), ImVec2(x, min.y + h),
-                            major ? textSec : border, 1.0f);
-                if (major)
+                constexpr float kNice[] = { 1, 2, 5, 10, 20, 50, 100, 200, 500,
+                                            1000, 2000, 5000, 10000, 20000, 50000 };
+                for (float s : kNice)
                 {
-                    char buf[32];
-                    snprintf(buf, sizeof buf, "%.0f", x - min.x - ruler);
-                    dl->AddText(ImVec2(x + 3, min.y + 2), textSec, buf);
+                    stepPx = s;
+                    if (s * viewScale >= 40.0f) break;
                 }
             }
-            for (float y = min.y + ruler; y <= max.y; y += step)
+            const bool unitPx = unidadeEmPixels <= 1.001f;
+            const char* fmt = unitPx ? "%.0f" : "%.1f";
+
+            // Régua horizontal: ticks em coordenadas de PROJETO.
             {
-                const bool major = ((int)((y - min.y - ruler) / step + 0.5f) % majorEvery) == 0;
-                const float w = major ? 12.0f : 6.0f;
-                dl->AddLine(ImVec2(min.x, y), ImVec2(min.x + w, y),
-                            major ? textSec : border, 1.0f);
+                const float p0 = (min.x + ruler - origin.x) / viewScale;
+                const float p1 = (max.x - origin.x) / viewScale;
+                const int i0 = (int)floorf(p0 / stepPx);
+                const int i1 = (int)ceilf(p1 / stepPx);
+                for (int i = i0; i <= i1; ++i)
+                {
+                    const float sx = origin.x + i * stepPx * viewScale;
+                    if (sx < min.x + ruler || sx > max.x) continue;
+                    const bool major = (i % 5 == 0);
+                    const float h = major ? 12.0f : 6.0f;
+                    dl->AddLine(ImVec2(sx, min.y), ImVec2(sx, min.y + h),
+                                major ? textSec : border, 1.0f);
+                    if (major)
+                    {
+                        char buf[32];
+                        snprintf(buf, sizeof buf, fmt,
+                                 (float)i * stepPx / unidadeEmPixels);
+                        dl->AddText(ImVec2(sx + 3, min.y + 2), textSec, buf);
+                    }
+                }
+            }
+            // Régua vertical: idem, agora com números também.
+            {
+                const float p0 = (min.y + ruler - origin.y) / viewScale;
+                const float p1 = (max.y - origin.y) / viewScale;
+                const int j0 = (int)floorf(p0 / stepPx);
+                const int j1 = (int)ceilf(p1 / stepPx);
+                for (int j = j0; j <= j1; ++j)
+                {
+                    const float sy = origin.y + j * stepPx * viewScale;
+                    if (sy < min.y + ruler || sy > max.y) continue;
+                    const bool major = (j % 5 == 0);
+                    const float w = major ? 12.0f : 6.0f;
+                    dl->AddLine(ImVec2(min.x, sy), ImVec2(min.x + w, sy),
+                                major ? textSec : border, 1.0f);
+                    if (major)
+                    {
+                        char buf[32];
+                        snprintf(buf, sizeof buf, fmt,
+                                 (float)j * stepPx / unidadeEmPixels);
+                        dl->AddText(ImVec2(min.x + 3, sy - 5.0f), textSec, buf);
+                    }
+                }
+            }
+
+            // Indicador de BLOQUEIO da régua: cadeado discreto no canto onde
+            // as réguas se cruzam. A régua continua visível e funcional como
+            // referência de snap — apenas a interação (criar/arrastar guias)
+            // fica bloqueada. Clicar no cadeado alterna o bloqueio (o clique
+            // cai na área da janela, tratado no App via hit no canto).
+            if (reguasBloqueadas)
+            {
+                const ImVec2 corner(min.x + ruler, min.y + ruler);
+                const float cx = min.x + ruler * 0.5f;
+                const float cy = min.y + ruler * 0.5f;
+                const ImU32 lockCol = ImGui::ColorConvertFloat4ToU32(
+                    Theme::Hex(0xffb347, 1.0f));
+                const ImU32 lockDim = ImGui::ColorConvertFloat4ToU32(
+                    Theme::Hex(0xffb347, 0.45f));
+                // Corpo do cadeado (arco) e caixa.
+                dl->AddRect(ImVec2(cx - 2.5f, cy - 1.5f),
+                            ImVec2(cx + 2.5f, cy + 4.0f), lockCol, 1.0f);
+                dl->AddCircle(ImVec2(cx, cy - 2.5f), 2.6f, lockCol, 12, 1.2f);
+                dl->AddCircleFilled(ImVec2(cx, cy + 1.0f), 1.0f, lockCol, 8);
+                // Borda sutil do canto (reforça a leitura do quadrado).
+                dl->AddRect(min, corner, lockDim, 2.0f);
             }
         }
         if (!projeto || projeto->telas.empty())
@@ -688,6 +762,30 @@ namespace seedui
                     dl->AddCircleFilled(ImVec2(handleScreenX, handleScreenY), hr, selection, 16);
                     dl->AddCircle(ImVec2(handleScreenX, handleScreenY), hr,
                                   IM_COL32(255, 255, 255, 210), 16, 1.5f);
+                }
+
+                // Ponto de ORIGEM (pivô): círculo pequeno no centro da forma
+                // (ou onde o usuário o arrastou — centro_rotacao). É o centro
+                // do redimensionamento espelhado (Shift) e da rotação.
+                {
+                    float px = 0.0f, py = 0.0f;
+                    Geo::ElementPivot(*selected, px, py);
+                    const float pivotScreenX = origin.x + px * viewScale;
+                    const float pivotScreenY = origin.y + py * viewScale;
+                    const ImU32 pivotCol = ImGui::ColorConvertFloat4ToU32(
+                        Theme::Hex(0xffb347, 1.0f));
+                    const float pr = 3.5f;
+                    // Cruz fina + círculo: "mira" do ponto de origem.
+                    dl->AddLine(ImVec2(pivotScreenX - 6.0f, pivotScreenY),
+                                ImVec2(pivotScreenX + 6.0f, pivotScreenY),
+                                pivotCol, 1.0f);
+                    dl->AddLine(ImVec2(pivotScreenX, pivotScreenY - 6.0f),
+                                ImVec2(pivotScreenX, pivotScreenY + 6.0f),
+                                pivotCol, 1.0f);
+                    dl->AddCircleFilled(ImVec2(pivotScreenX, pivotScreenY), pr,
+                                        IM_COL32(20, 20, 20, 255), 16);
+                    dl->AddCircle(ImVec2(pivotScreenX, pivotScreenY), pr,
+                                  pivotCol, 16, 1.5f);
                 }
             }
             }
