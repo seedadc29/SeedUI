@@ -85,11 +85,34 @@ namespace seedui
                              const CornerRadii& radii, ImU32 fill, ImU32 outline,
                              float outlineWidth = 1.0f)
         {
+            // Um PathStroke grosso produz juncoes em mitra (os "bicos" vistos
+            // nas quinas). Como num editor vetorial, construimos o contorno
+            // como duas formas preenchidas: silhueta externa e miolo interno.
+            // Assim a espessura fica uniforme, limpa e antialiasada.
+            if (outlineWidth <= 0.0f)
+            {
+                RoundedRectPath(dl, a, b, radii);
+                dl->PathFillConvex(fill);
+                return;
+            }
+
             RoundedRectPath(dl, a, b, radii);
+            dl->PathFillConvex(outline);
+
+            const float maximumInset = std::max(0.0f,
+                std::min(b.x - a.x, b.y - a.y) * 0.5f);
+            const float inset = std::min(outlineWidth, maximumInset);
+            const ImVec2 innerA(a.x + inset, a.y + inset);
+            const ImVec2 innerB(b.x - inset, b.y - inset);
+            if (innerB.x <= innerA.x || innerB.y <= innerA.y) return;
+
+            CornerRadii inner = radii;
+            inner.topLeft = std::max(0.0f, inner.topLeft - inset);
+            inner.topRight = std::max(0.0f, inner.topRight - inset);
+            inner.bottomRight = std::max(0.0f, inner.bottomRight - inset);
+            inner.bottomLeft = std::max(0.0f, inner.bottomLeft - inset);
+            RoundedRectPath(dl, innerA, innerB, inner);
             dl->PathFillConvex(fill);
-            RoundedRectPath(dl, a, b, radii);
-            if (outlineWidth > 0.0f)
-                dl->PathStroke(outline, ImDrawFlags_Closed, outlineWidth);
         }
 
         // Desenha um elemento e seus filhos recursivamente (versão simples do M03).
@@ -125,17 +148,29 @@ namespace seedui
                 {
                     const ImVec2 center((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
                     const ImVec2 radius((b.x - a.x) * 0.5f, (b.y - a.y) * 0.5f);
-                    dl->AddEllipseFilled(center, radius, fill, 0.0f, 48);
                     if (outlineWidth > 0.0f)
-                        dl->AddEllipse(center, radius, outline, 0.0f, 48, outlineWidth);
+                    {
+                        dl->AddEllipseFilled(center, radius, outline, 0.0f, 64);
+                        const ImVec2 innerRadius(
+                            std::max(0.0f, radius.x - outlineWidth),
+                            std::max(0.0f, radius.y - outlineWidth));
+                        if (innerRadius.x > 0.0f && innerRadius.y > 0.0f)
+                            dl->AddEllipseFilled(center, innerRadius, fill, 0.0f, 64);
+                    }
+                    else dl->AddEllipseFilled(center, radius, fill, 0.0f, 64);
                 }
                 else if (e.tipo == "poligono")
                 {
                     const ImVec2 center((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
                     const float radius = std::min(b.x - a.x, b.y - a.y) * 0.5f;
-                    dl->AddNgonFilled(center, radius, fill, 6);
                     if (outlineWidth > 0.0f)
-                        dl->AddNgon(center, radius, outline, 6, outlineWidth);
+                    {
+                        dl->AddNgonFilled(center, radius, outline, 6);
+                        const float innerRadius = std::max(0.0f, radius - outlineWidth);
+                        if (innerRadius > 0.0f)
+                            dl->AddNgonFilled(center, innerRadius, fill, 6);
+                    }
+                    else dl->AddNgonFilled(center, radius, fill, 6);
                 }
                 else
                 {
