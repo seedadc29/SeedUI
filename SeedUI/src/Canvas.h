@@ -10,7 +10,8 @@ namespace seedui
     void CanvasDraw(const Project* projeto = nullptr, int telaAtiva = 0, int modoAtivo = 0,
                     const std::vector<std::string>* elementosSelecionados = nullptr,
                     const char* elementoPrincipalId = nullptr,
-                    unsigned int quinasSelecionadas = 0);
+                    unsigned int quinasSelecionadas = 0,
+                    bool exibirReguas = true);
 
     // Converte coordenadas da janela para coordenadas da tela base do projeto.
     bool CanvasScreenToProject(const Project* projeto, float screenX, float screenY,

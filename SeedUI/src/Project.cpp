@@ -1,6 +1,7 @@
 #include "Project.h"
 
 #include <algorithm>
+#include <cfloat>
 #include <ctime>
 
 namespace seedui
@@ -90,16 +91,16 @@ namespace seedui
         Element* HitElement(Element& element, float x, float y)
         {
             if (!element.visivel) return nullptr;
-            for (auto it = element.filhos.rbegin(); it != element.filhos.rend(); ++it)
-                if (Element* hit = HitElement(*it, x, y)) return hit;
-
             const float left = element.transformacao.value("x", 0.0f);
             const float top = element.transformacao.value("y", 0.0f);
             const float width = element.transformacao.value("largura", 160.0f);
             const float height = element.transformacao.value("altura", 32.0f);
-            return x >= left && x <= left + width && y >= top && y <= top + height
-                ? &element
-                : nullptr;
+            const bool inside = x >= left && x <= left + width &&
+                                y >= top && y <= top + height;
+            if (element.tipo == "grupo" && inside) return &element;
+            for (auto it = element.filhos.rbegin(); it != element.filhos.rend(); ++it)
+                if (Element* hit = HitElement(*it, x, y)) return hit;
+            return inside ? &element : nullptr;
         }
 
         std::string NowStamp()
@@ -470,5 +471,59 @@ namespace seedui
             modo.raiz.push_back(std::move(copy));
         }
         return pastedRootIds;
+    }
+
+    std::string Project::AgruparElementos(
+        Modo& modo, const std::vector<std::string>& ids)
+    {
+        std::vector<size_t> indices;
+        for (size_t index = 0; index < modo.raiz.size(); ++index)
+        {
+            const Element& element = modo.raiz[index];
+            if (!element.bloqueado &&
+                std::find(ids.begin(), ids.end(), element.id) != ids.end())
+                indices.push_back(index);
+        }
+        if (indices.size() < 2) return std::string();
+
+        float left = FLT_MAX, top = FLT_MAX, right = -FLT_MAX, bottom = -FLT_MAX;
+        for (size_t index : indices)
+        {
+            const Element& element = modo.raiz[index];
+            const float x = element.transformacao.value("x", 0.0f);
+            const float y = element.transformacao.value("y", 0.0f);
+            const float w = element.transformacao.value("largura", 160.0f);
+            const float h = element.transformacao.value("altura", 32.0f);
+            left = std::min(left, x);
+            top = std::min(top, y);
+            right = std::max(right, x + w);
+            bottom = std::max(bottom, y + h);
+        }
+
+        std::string groupId;
+        for (int number = 1; number < 100000; ++number)
+        {
+            groupId = "grupo_" + std::to_string(number);
+            if (!ResolverId(modo, groupId)) break;
+        }
+
+        Element group;
+        group.id = groupId;
+        group.tipo = "grupo";
+        group.nome = "Grupo";
+        group.transformacao = {
+            { "x", left }, { "y", top },
+            { "largura", right - left }, { "altura", bottom - top }
+        };
+
+        const size_t insertAt = indices.front();
+        for (auto it = indices.rbegin(); it != indices.rend(); ++it)
+        {
+            group.filhos.insert(group.filhos.begin(), std::move(modo.raiz[*it]));
+            modo.raiz.erase(modo.raiz.begin() + *it);
+        }
+        modo.raiz.insert(modo.raiz.begin() + std::min(insertAt, modo.raiz.size()),
+                         std::move(group));
+        return groupId;
     }
 }

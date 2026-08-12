@@ -135,6 +135,26 @@ namespace
                   "superior_esquerda", 0.0f) == 24.0f,
               "colar preserva estilos e raios de quina");
 
+        Modo groupMode;
+        Element groupA = makeElement("painel_a", "painel");
+        groupA.transformacao = { { "x", 10.0f }, { "y", 20.0f },
+                                 { "largura", 100.0f }, { "altura", 80.0f } };
+        Element groupB = makeElement("painel_b", "painel");
+        groupB.transformacao = { { "x", 180.0f }, { "y", 140.0f },
+                                 { "largura", 120.0f }, { "altura", 60.0f } };
+        groupMode.raiz.push_back(std::move(groupA));
+        groupMode.raiz.push_back(std::move(groupB));
+        const std::string groupId = Project::AgruparElementos(
+            groupMode, { "painel_a", "painel_b" });
+        Element* grouped = Project::ResolverId(groupMode, groupId);
+        check(!groupId.empty() && grouped && grouped->filhos.size() == 2,
+              "Ctrl+G cria um grupo com os elementos selecionados");
+        check(grouped && grouped->transformacao.value("x", -1.0f) == 10.0f &&
+              grouped->transformacao.value("largura", 0.0f) == 290.0f,
+              "grupo calcula os limites visuais da selecao");
+        check(Project::ElementoNoPonto(groupMode, 30.0f, 40.0f) == grouped,
+              "clique dentro do grupo seleciona a unidade agrupada");
+
         const std::string json = Project::Serializar(project);
         Project loaded;
         const std::string error = Project::Desserializar(loaded, json);

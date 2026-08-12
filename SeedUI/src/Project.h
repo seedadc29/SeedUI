@@ -97,6 +97,8 @@ namespace seedui
         static std::vector<std::string> ColarElementos(
             Project& projeto, Modo& modo, const std::vector<Element>& elementos,
             float deslocamento);
+        static std::string AgruparElementos(Modo& modo,
+                                             const std::vector<std::string>& ids);
 
         // Timestamp atual no formato do formato ("YYYY-MM-DD HH:MM:SS").
         static std::string StampAtual();

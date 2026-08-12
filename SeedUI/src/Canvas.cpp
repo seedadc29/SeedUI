@@ -113,15 +113,18 @@ namespace seedui
             const ImU32 outline = ImGui::ColorConvertFloat4ToU32(Theme::Hex(0x5a5a5a, 0.82f));
             const ImU32 label = ImGui::ColorConvertFloat4ToU32(Theme::TextPrimary);
 
-            CornerRadii radii = GetCornerRadii(e, w, h);
-            radii.topLeft *= scale;
-            radii.topRight *= scale;
-            radii.bottomRight *= scale;
-            radii.bottomLeft *= scale;
-            DrawRoundedRect(dl, a, b, radii, fill, outline);
+            if (e.tipo != "grupo")
+            {
+                CornerRadii radii = GetCornerRadii(e, w, h);
+                radii.topLeft *= scale;
+                radii.topRight *= scale;
+                radii.bottomRight *= scale;
+                radii.bottomLeft *= scale;
+                DrawRoundedRect(dl, a, b, radii, fill, outline);
 
-            const char* text = e.nome.empty() ? e.id.c_str() : e.nome.c_str();
-            dl->AddText(ImVec2(a.x + 4, a.y + 4), label, text);
+                const char* text = e.nome.empty() ? e.id.c_str() : e.nome.c_str();
+                dl->AddText(ImVec2(a.x + 4, a.y + 4), label, text);
+            }
 
             for (const Element& f : e.filhos)
                 DrawElement(f, origin, scale, dl);
@@ -199,7 +202,8 @@ namespace seedui
     void CanvasDraw(const Project* projeto, int telaAtiva, int modoAtivo,
                     const std::vector<std::string>* elementosSelecionados,
                     const char* elementoPrincipalId,
-                    unsigned int quinasSelecionadas)
+                    unsigned int quinasSelecionadas,
+                    bool exibirReguas)
     {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         const ImVec2 min = ImGui::GetWindowPos();
@@ -232,27 +236,33 @@ namespace seedui
 
         // Réguas
         const float ruler = 24.0f;
-        const ImU32 rulerBg = ImGui::ColorConvertFloat4ToU32(ImVec4(0.06f, 0.06f, 0.06f, 0.92f));
-        dl->AddRectFilled(min, ImVec2(max.x, min.y + ruler), rulerBg);
-        dl->AddRectFilled(min, ImVec2(min.x + ruler, max.y), rulerBg);
+        if (exibirReguas)
+        {
+            const ImU32 rulerBg = ImGui::ColorConvertFloat4ToU32(
+                ImVec4(0.06f, 0.06f, 0.06f, 0.92f));
+            dl->AddRectFilled(min, ImVec2(max.x, min.y + ruler), rulerBg);
+            dl->AddRectFilled(min, ImVec2(min.x + ruler, max.y), rulerBg);
 
-        for (float x = min.x + ruler; x <= max.x; x += step)
-        {
-            const bool major = ((int)((x - min.x - ruler) / step + 0.5f) % majorEvery) == 0;
-            const float h = major ? 12.0f : 6.0f;
-            dl->AddLine(ImVec2(x, min.y), ImVec2(x, min.y + h), major ? textSec : border, 1.0f);
-            if (major)
+            for (float x = min.x + ruler; x <= max.x; x += step)
             {
-                char buf[32];
-                snprintf(buf, sizeof buf, "%.0f", x - min.x - ruler);
-                dl->AddText(ImVec2(x + 3, min.y + 2), textSec, buf);
+                const bool major = ((int)((x - min.x - ruler) / step + 0.5f) % majorEvery) == 0;
+                const float h = major ? 12.0f : 6.0f;
+                dl->AddLine(ImVec2(x, min.y), ImVec2(x, min.y + h),
+                            major ? textSec : border, 1.0f);
+                if (major)
+                {
+                    char buf[32];
+                    snprintf(buf, sizeof buf, "%.0f", x - min.x - ruler);
+                    dl->AddText(ImVec2(x + 3, min.y + 2), textSec, buf);
+                }
             }
-        }
-        for (float y = min.y + ruler; y <= max.y; y += step)
-        {
-            const bool major = ((int)((y - min.y - ruler) / step + 0.5f) % majorEvery) == 0;
-            const float w = major ? 12.0f : 6.0f;
-            dl->AddLine(ImVec2(min.x, y), ImVec2(min.x + w, y), major ? textSec : border, 1.0f);
+            for (float y = min.y + ruler; y <= max.y; y += step)
+            {
+                const bool major = ((int)((y - min.y - ruler) / step + 0.5f) % majorEvery) == 0;
+                const float w = major ? 12.0f : 6.0f;
+                dl->AddLine(ImVec2(min.x, y), ImVec2(min.x + w, y),
+                            major ? textSec : border, 1.0f);
+            }
         }
 
         // Moldura da tela base
@@ -333,6 +343,7 @@ namespace seedui
                 RoundedRectPath(dl, a, b, selectionRadii);
                 dl->PathStroke(selection, ImDrawFlags_Closed, primary ? 1.5f : 1.0f);
                 if (!primary || selected->bloqueado) continue;
+                if (selected->tipo == "grupo") continue;
 
                 const ImU32 handleFill = IM_COL32(245, 245, 245, 255);
                 const float hs = 4.0f;

@@ -217,6 +217,27 @@ namespace seedui
             }
         }
 
+        template<typename Start>
+        void CollectTransformStarts(Element& element, std::vector<Start>& out)
+        {
+            const bool exists = std::any_of(out.begin(), out.end(), [&](const auto& start)
+            {
+                return start.id == element.id;
+            });
+            if (!exists && !element.bloqueado)
+            {
+                Start start;
+                start.id = element.id;
+                start.x = element.transformacao.value("x", 0.0f);
+                start.y = element.transformacao.value("y", 0.0f);
+                start.w = element.transformacao.value("largura", 160.0f);
+                start.h = element.transformacao.value("altura", 32.0f);
+                out.push_back(start);
+            }
+            if (element.tipo == "grupo")
+                for (Element& child : element.filhos) CollectTransformStarts(child, out);
+        }
+
         const char* CornerKeyForDragMode(int dragMode)
         {
             switch (dragMode)
@@ -349,6 +370,9 @@ namespace seedui
             if (mCaptureAfterBoot && mFrameCount == 0) TraceLog(LOG_INFO, "CAPTURE: NewFrame ok");
 
             DrawWorkspace();
+            if (mHasProject && !ImGui::IsMouseDown(ImGuiMouseButton_Left) &&
+                !ImGui::IsAnyItemActive())
+                CapturarHistorico();
             if (mCaptureAfterBoot && mFrameCount == 0) TraceLog(LOG_INFO, "CAPTURE: DrawWorkspace ok");
 
             ImGui::Render();
@@ -370,6 +394,7 @@ namespace seedui
                     TakeScreenshot("seedui_capture_start.png");
                     mProject.CriarNovo("Captura automatica", 1280, 720);
                     mHasProject = true; // segunda captura mostra um workspace valido
+                    ResetarHistorico();
                     AdicionarComponente("painel", "Painel de validacao", 360.0f, 220.0f);
                     if (Element* panel = Project::ResolverId(mProject, mSelectedElementId))
                     {
@@ -502,6 +527,7 @@ namespace seedui
         mProject.caminhoArquivo = path;
         mUltimoCaminho = path;
         mHasProject = true;
+        ResetarHistorico();
         mProjectDirty = false;
         mTelaAtiva = 0;
         mModoAtivo = 0;
@@ -851,6 +877,97 @@ namespace seedui
         mStatusMsgUntil = GetTime() + 4.0;
     }
 
+    void App::AgruparElementosSelecionados()
+    {
+        if (!PossuiModoAtivo() || mSelectedElementIds.size() < 2)
+        {
+            mStatusMsg = "Selecione pelo menos dois elementos de nivel principal";
+            mStatusMsgUntil = GetTime() + 4.0;
+            return;
+        }
+        Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+        const std::string groupId = Project::AgruparElementos(mode, mSelectedElementIds);
+        if (groupId.empty())
+        {
+            mStatusMsg = "Agrupamento requer dois elementos desbloqueados no mesmo nivel";
+            mStatusMsgUntil = GetTime() + 5.0;
+            return;
+        }
+        mSelectedElementIds = { groupId };
+        mSelectedElementId = groupId;
+        mSelectedCornerMask = 0;
+        mProjectDirty = true;
+        mStatusMsg = "Elementos agrupados (Ctrl+G)";
+        mStatusMsgUntil = GetTime() + 4.0;
+    }
+
+    void App::ResetarHistorico()
+    {
+        mHistory.clear();
+        mHistoryIndex = -1;
+        if (!mHasProject) return;
+        mHistory.push_back(Project::Serializar(mProject));
+        mHistoryIndex = 0;
+    }
+
+    void App::CapturarHistorico()
+    {
+        if (!mHasProject) return;
+        const std::string snapshot = Project::Serializar(mProject);
+        if (mHistoryIndex < 0 || mHistory.empty())
+        {
+            mHistory = { snapshot };
+            mHistoryIndex = 0;
+            return;
+        }
+        if (mHistory[mHistoryIndex] == snapshot) return;
+        mHistory.erase(mHistory.begin() + mHistoryIndex + 1, mHistory.end());
+        mHistory.push_back(snapshot);
+        if (mHistory.size() > 100) mHistory.erase(mHistory.begin());
+        mHistoryIndex = (int)mHistory.size() - 1;
+    }
+
+    void App::Desfazer()
+    {
+        CapturarHistorico();
+        if (mHistoryIndex <= 0)
+        {
+            mStatusMsg = "Nada para desfazer";
+            mStatusMsgUntil = GetTime() + 3.0;
+            return;
+        }
+        const std::string path = mProject.caminhoArquivo;
+        Project restored;
+        if (!Project::Desserializar(restored, mHistory[--mHistoryIndex]).empty()) return;
+        restored.caminhoArquivo = path;
+        mProject = std::move(restored);
+        mSelectedElementId.clear();
+        mSelectedElementIds.clear();
+        mProjectDirty = true;
+        mStatusMsg = "Desfazer";
+        mStatusMsgUntil = GetTime() + 3.0;
+    }
+
+    void App::Refazer()
+    {
+        if (mHistoryIndex < 0 || mHistoryIndex + 1 >= (int)mHistory.size())
+        {
+            mStatusMsg = "Nada para refazer";
+            mStatusMsgUntil = GetTime() + 3.0;
+            return;
+        }
+        const std::string path = mProject.caminhoArquivo;
+        Project restored;
+        if (!Project::Desserializar(restored, mHistory[++mHistoryIndex]).empty()) return;
+        restored.caminhoArquivo = path;
+        mProject = std::move(restored);
+        mSelectedElementId.clear();
+        mSelectedElementIds.clear();
+        mProjectDirty = true;
+        mStatusMsg = "Refazer";
+        mStatusMsgUntil = GetTime() + 3.0;
+    }
+
     void App::HandleCanvasInteraction(bool canvasHovered)
     {
         const bool editTool = mCurrentTool == Tool::Select || mCurrentTool == Tool::Move;
@@ -903,6 +1020,8 @@ namespace seedui
             if (x < ex - tolerance || x > ex + ew + tolerance ||
                 y < ey - tolerance || y > ey + eh + tolerance)
                 return 0;
+            if (element.tipo == "grupo")
+                return x >= ex && x <= ex + ew && y >= ey && y <= ey + eh ? 1 : 0;
 
             const float minMarkerInset = 14.0f / std::max(0.25f, viewScale);
             const float maxMarkerInset = std::max(6.0f / std::max(0.25f, viewScale),
@@ -1066,13 +1185,7 @@ namespace seedui
                     {
                         Element* element = Project::ResolverId(mode, id);
                         if (!element || element->bloqueado) continue;
-                        CanvasTransformStart start;
-                        start.id = id;
-                        start.x = element->transformacao.value("x", 0.0f);
-                        start.y = element->transformacao.value("y", 0.0f);
-                        start.w = element->transformacao.value("largura", 160.0f);
-                        start.h = element->transformacao.value("altura", 32.0f);
-                        mCanvasGroupStarts.push_back(start);
+                        CollectTransformStarts(*element, mCanvasGroupStarts);
                     }
                 }
                 applyCursor(mCanvasDragMode);
@@ -1121,6 +1234,22 @@ namespace seedui
 
             float dx = mouseX - mCanvasDragMouseX;
             float dy = mouseY - mCanvasDragMouseY;
+            if (mSnapEnabled && !(mCanvasDragMode >= 10 && mCanvasDragMode <= 13))
+            {
+                constexpr float snapStep = 8.0f;
+                if (mCanvasDragMode == 1)
+                {
+                    dx = roundf((mCanvasDragX + dx) / snapStep) * snapStep - mCanvasDragX;
+                    dy = roundf((mCanvasDragY + dy) / snapStep) * snapStep - mCanvasDragY;
+                }
+                else
+                {
+                    const float snappedMouseX = roundf(mouseX / snapStep) * snapStep;
+                    const float snappedMouseY = roundf(mouseY / snapStep) * snapStep;
+                    dx = snappedMouseX - mCanvasDragMouseX;
+                    dy = snappedMouseY - mCanvasDragMouseY;
+                }
+            }
             const float minSize = 24.0f;
             float left = mCanvasDragX;
             float top = mCanvasDragY;
@@ -1373,6 +1502,7 @@ namespace seedui
             mProject.CriarNovo(nomeOk ? mNovoNome : "Novo projeto",
                                mNovoLargura, mNovoAltura);
             mHasProject = true;
+            ResetarHistorico();
             mProjectDirty = false;
             mTelaAtiva = 0;
             mModoAtivo = 0;
@@ -1398,6 +1528,15 @@ namespace seedui
             if (IsWindowMaximized()) RestoreWindow();
             else MaximizeWindow();
         }
+        if (!ImGui::GetIO().WantTextInput && ImGui::GetIO().KeyCtrl &&
+            ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z, false))
+            Refazer();
+        else if (!ImGui::GetIO().WantTextInput && ImGui::GetIO().KeyCtrl &&
+                 ImGui::IsKeyPressed(ImGuiKey_Z, false))
+            Desfazer();
+        if (!ImGui::GetIO().WantTextInput && ImGui::GetIO().KeyCtrl &&
+            !ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_G, false))
+            AgruparElementosSelecionados();
         if (!ImGui::GetIO().WantTextInput && !ImGui::GetIO().KeyCtrl &&
             !ImGui::GetIO().KeyAlt && ImGui::IsKeyPressed(ImGuiKey_A, false))
             AlternarModoAnotacao();
@@ -1482,7 +1621,7 @@ namespace seedui
                 HandleCanvasInteraction(canvasHovered);
                 CanvasDraw(mHasProject ? &mProject : nullptr, mTelaAtiva, mModoAtivo,
                            &mSelectedElementIds, mSelectedElementId.c_str(),
-                           mSelectedCornerMask);
+                           mSelectedCornerMask, mRulersVisible);
                 if (mCanvasMarquee)
                 {
                     float sx0 = 0.0f, sy0 = 0.0f, sx1 = 0.0f, sy1 = 0.0f, scale = 1.0f;
@@ -1629,8 +1768,9 @@ namespace seedui
 
         if (ImGui::BeginMenu("Editar"))
         {
-            MenuItemSoon("Desfazer", "M05");
-            MenuItemSoon("Refazer", "M05");
+            if (ImGui::MenuItem("Desfazer", "Ctrl+Z", false, mHistoryIndex > 0)) Desfazer();
+            const bool canRedo = mHistoryIndex >= 0 && mHistoryIndex + 1 < (int)mHistory.size();
+            if (ImGui::MenuItem("Refazer", "Ctrl+Shift+Z", false, canRedo)) Refazer();
             ImGui::Separator();
             const bool canCopy = PossuiModoAtivo() && !mSelectedElementId.empty();
             if (!canCopy) ImGui::BeginDisabled();
@@ -1671,7 +1811,10 @@ namespace seedui
             }
             ImGui::Separator();
             MenuItemSoon("Zoom 100%", "M05");
-            MenuItemSoon("Guias", "M05");
+            if (ImGui::MenuItem("Réguas", nullptr, mRulersVisible))
+                mRulersVisible = !mRulersVisible;
+            if (ImGui::MenuItem("Snap de 8 unidades", nullptr, mSnapEnabled))
+                mSnapEnabled = !mSnapEnabled;
             MenuItemSoon("Grade", "M05");
             ImGui::Separator();
             MenuItemSoon("Workspace", "M10");
@@ -1709,7 +1852,9 @@ namespace seedui
                 ImGui::EndMenu();
             }
             MenuItemSoon("Distribuir", "M05");
-            MenuItemSoon("Agrupar", "M04");
+            const bool canGroup = mSelectedElementIds.size() >= 2;
+            if (ImGui::MenuItem("Agrupar", "Ctrl+G", false, canGroup))
+                AgruparElementosSelecionados();
             MenuItemSoon("Bloquear", "M04");
             MenuItemSoon("Ocultar", "M04");
             ImGui::EndMenu();
@@ -1820,9 +1965,14 @@ namespace seedui
         if (!mHasProject) ImGui::EndDisabled();
 
         separator();
-        IconButton(IconId::Undo, "Histórico · Desfazer (M05)", button);
+        if (mHistoryIndex <= 0) ImGui::BeginDisabled();
+        if (IconButton(IconId::Undo, "Histórico · Desfazer (Ctrl+Z)", button)) Desfazer();
+        if (mHistoryIndex <= 0) ImGui::EndDisabled();
         ImGui::SameLine();
-        IconButton(IconId::Redo, "Histórico · Refazer (M05)", button);
+        const bool canRedo = mHistoryIndex >= 0 && mHistoryIndex + 1 < (int)mHistory.size();
+        if (!canRedo) ImGui::BeginDisabled();
+        if (IconButton(IconId::Redo, "Histórico · Refazer (Ctrl+Shift+Z)", button)) Refazer();
+        if (!canRedo) ImGui::EndDisabled();
 
         separator();
         const bool canCopy = PossuiModoAtivo() && !mSelectedElementId.empty();
@@ -1838,6 +1988,41 @@ namespace seedui
         if (!canPaste) ImGui::EndDisabled();
         ImGui::SameLine();
         IconButton(IconId::Trash, "Edição · Apagar (M05)", button);
+
+        separator();
+        const bool canAlign = mAlignTarget == 2
+            ? !mSelectedElementId.empty() : mSelectedElementIds.size() >= 2;
+        if (!canAlign) ImGui::BeginDisabled();
+        const char* alignTips[] = {
+            "Alinhar à esquerda", "Centralizar horizontalmente", "Alinhar à direita",
+            "Alinhar ao topo", "Centralizar verticalmente", "Alinhar à base"
+        };
+        for (int operation = 0; operation < 6; ++operation)
+        {
+            if (operation > 0) ImGui::SameLine();
+            if (AlignmentIconButton(operation, alignTips[operation]))
+                AlinharElementosSelecionados(operation);
+        }
+        if (!canAlign) ImGui::EndDisabled();
+
+        separator();
+        const bool canGroup = mSelectedElementIds.size() >= 2;
+        if (!canGroup) ImGui::BeginDisabled();
+        if (IconButton(IconId::Hierarchy, "Agrupar seleção (Ctrl+G)", button))
+            AgruparElementosSelecionados();
+        if (!canGroup) ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (mSnapEnabled) ImGui::PushStyleColor(ImGuiCol_Button, Theme::Hex(0x4f8cff, 0.30f));
+        if (IconButton(IconId::Grid, mSnapEnabled ? "Snap ativo · clique para desligar"
+                                                  : "Snap inativo · clique para ligar", button))
+            mSnapEnabled = !mSnapEnabled;
+        if (mSnapEnabled) ImGui::PopStyleColor();
+        ImGui::SameLine();
+        if (mRulersVisible) ImGui::PushStyleColor(ImGuiCol_Button, Theme::Hex(0x4f8cff, 0.30f));
+        if (IconButton(IconId::List, mRulersVisible ? "Réguas visíveis · clique para ocultar"
+                                                    : "Réguas ocultas · clique para mostrar", button))
+            mRulersVisible = !mRulersVisible;
+        if (mRulersVisible) ImGui::PopStyleColor();
 
         separator();
         IconButton(IconId::Model, "Projeto · Galeria de modelos (M09)", button);
@@ -2412,6 +2597,7 @@ namespace seedui
         {
             mProject.CriarNovo("Projeto de demonstração", 1280, 720);
             mHasProject = true;
+            ResetarHistorico();
             mProjectDirty = false;
             mTelaAtiva = 0;
             mModoAtivo = 0;

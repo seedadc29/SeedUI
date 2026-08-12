@@ -57,6 +57,11 @@ namespace seedui
         void ColarElementosCopiados();
         void AlternarModoAnotacao();
         void AlinharElementosSelecionados(int operacao);
+        void AgruparElementosSelecionados();
+        void ResetarHistorico();
+        void CapturarHistorico();
+        void Desfazer();
+        void Refazer();
         void DrawElementTree(Element& element);
         void HandleCanvasInteraction(bool canvasHovered);
 
@@ -96,6 +101,10 @@ namespace seedui
         std::vector<Element> mElementClipboard;
         int mElementPasteGeneration = 0;
         int mAlignTarget = 0; // 0 selecao, 1 elemento principal, 2 tela
+        bool mSnapEnabled = true;
+        bool mRulersVisible = true;
+        std::vector<std::string> mHistory;
+        int mHistoryIndex = -1;
         std::string mInspectorBufferedElementId;
         char mInspectorNameBuffer[128] = { 0 };
         char mInspectorIdBuffer[128] = { 0 };
