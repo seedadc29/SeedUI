@@ -131,6 +131,11 @@ namespace seedui
             dl->PathFillConvex(fill);
         }
 
+        bool GetDashStyle(const Element& e, float& dash, float& gap);
+        void DrawDashedClosedPolyline(ImDrawList* dl, const ImVec2* pts, int count,
+                                      ImU32 color, float width,
+                                      float dash, float gap);
+
         // Sombra suave barata (compatível com PC fraco): desenha camadas do
         // contorno tessellado, cada uma levemente expandida e mais transparente
         // que a anterior, todas deslocadas por (deslocamento_x/y). 4 camadas
@@ -226,10 +231,28 @@ namespace seedui
             const ImU32 label = ImGui::ColorConvertFloat4ToU32(Theme::TextPrimary);
             const float rotation = Geo::ElementRotation(e);
 
+            float dashLen = 0.0f, gapLen = 0.0f;
+            const bool dashed = GetDashStyle(e, dashLen, gapLen) &&
+                                outlineWidth > 0.0f;
+
             if (e.tipo != "grupo")
             {
                 DrawShadow(e, origin, scale, opacity, dl);
-                if (fabsf(rotation) > 0.01f)
+                if (dashed)
+                {
+                    // Contorno tracejado: usa o mesmo contorno tessellado
+                    // (funciona rotacionado, espelhado, com quinas).
+                    std::vector<ImVec2> pts;
+                    Geo::OutlineScreen(e, origin.x, origin.y, scale, pts, 64);
+                    if (pts.size() >= 3)
+                    {
+                        dl->AddConvexPolyFilled(pts.data(), (int)pts.size(), fill);
+                        DrawDashedClosedPolyline(dl, pts.data(), (int)pts.size(),
+                                                 outline, outlineWidth,
+                                                 dashLen, gapLen);
+                    }
+                }
+                else if (fabsf(rotation) > 0.01f)
                 {
                     // Elemento rotacionado: tessela o contorno no espaço local,
                     // aplica a rotação e desenha como polígono preenchido +
@@ -291,6 +314,56 @@ namespace seedui
 
             for (const Element& f : e.filhos)
                 DrawElement(f, origin, scale, dl);
+        }
+
+        // Estilo de traço do contorno: estilos.tracejado {largura_traco,
+        // largura_espaco}. Devolve false quando não configurado.
+        bool GetDashStyle(const Element& e, float& dash, float& gap)
+        {
+            if (!e.estilos.is_object() || !e.estilos.contains("tracejado") ||
+                !e.estilos["tracejado"].is_object())
+                return false;
+            const auto& t = e.estilos["tracejado"];
+            dash = std::max(0.5f, t.value("largura_traco", 6.0f));
+            gap = std::max(0.5f, t.value("largura_espaco", 4.0f));
+            return true;
+        }
+
+        // Contorno fechado tracejado: caminha pelos segmentos do polígono
+        // acumulando o comprimento, alternando traço/gap (estilo CorelDRAW).
+        void DrawDashedClosedPolyline(ImDrawList* dl, const ImVec2* pts, int count,
+                                      ImU32 color, float width,
+                                      float dash, float gap)
+        {
+            if (count < 2) return;
+            bool draw = true;
+            float segRemaining = dash;
+            for (int i = 0; i < count; ++i)
+            {
+                const ImVec2& a = pts[i];
+                const ImVec2& b = pts[(i + 1) % count];
+                const float dx = b.x - a.x, dy = b.y - a.y;
+                const float len = sqrtf(dx * dx + dy * dy);
+                if (len <= 0.0f) continue;
+                const float ux = dx / len, uy = dy / len;
+                float pos = 0.0f;
+                while (pos < len)
+                {
+                    const float step = std::min(len - pos, segRemaining);
+                    if (draw)
+                        dl->AddLine(ImVec2(a.x + ux * pos, a.y + uy * pos),
+                                    ImVec2(a.x + ux * (pos + step),
+                                           a.y + uy * (pos + step)),
+                                    color, width);
+                    pos += step;
+                    segRemaining -= step;
+                    if (segRemaining <= 0.001f)
+                    {
+                        draw = !draw;
+                        segRemaining = draw ? dash : gap;
+                    }
+                }
+            }
         }
 
         void DrawDashedLine(ImDrawList* dl, const ImVec2& a, const ImVec2& b, ImU32 color)

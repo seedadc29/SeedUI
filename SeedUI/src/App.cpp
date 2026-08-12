@@ -4913,6 +4913,37 @@ namespace seedui
                         mProjectDirty = true;
                     }
                 }
+
+                // Contorno tracejado (estilo CorelDRAW): traço + espaço.
+                ImGui::Spacing();
+                ImGui::TextColored(Theme::TextSecondary, "Contorno tracejado");
+                bool dashedOn = selected->estilos.contains("tracejado");
+                if (ImGui::Checkbox("Ativar tracejado", &dashedOn))
+                {
+                    if (dashedOn)
+                        selected->estilos["tracejado"] = nlohmann::json{
+                            { "largura_traco", 6.0 }, { "largura_espaco", 4.0 }
+                        };
+                    else
+                        selected->estilos.erase("tracejado");
+                    mProjectDirty = true;
+                }
+                if (dashedOn)
+                {
+                    auto& tracejado = selected->estilos["tracejado"];
+                    float dashLen = tracejado.value("largura_traco", 6.0f);
+                    float gapLen = tracejado.value("largura_espaco", 4.0f);
+                    if (ImGui::SliderFloat("Traço", &dashLen, 0.5f, 40.0f))
+                    {
+                        tracejado["largura_traco"] = dashLen;
+                        mProjectDirty = true;
+                    }
+                    if (ImGui::SliderFloat("Espaço", &gapLen, 0.5f, 40.0f))
+                    {
+                        tracejado["largura_espaco"] = gapLen;
+                        mProjectDirty = true;
+                    }
+                }
                 ImGui::Separator();
 
                 ImGui::TextUnformatted("Alinhar");
