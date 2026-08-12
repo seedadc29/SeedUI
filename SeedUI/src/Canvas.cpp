@@ -49,27 +49,35 @@ namespace seedui
         void RoundedRectPath(ImDrawList* dl, const ImVec2& a, const ImVec2& b,
                              const CornerRadii& radii)
         {
-            constexpr float pi = 3.14159265358979323846f;
+            constexpr float kappa = 0.5522847498f;
             dl->PathLineTo(ImVec2(a.x + radii.topLeft, a.y));
             dl->PathLineTo(ImVec2(b.x - radii.topRight, a.y));
             if (radii.topRight > 0.0f)
-                dl->PathArcTo(ImVec2(b.x - radii.topRight, a.y + radii.topRight),
-                              radii.topRight, -pi * 0.5f, 0.0f);
+                dl->PathBezierCubicCurveTo(
+                    ImVec2(b.x - radii.topRight * (1.0f - kappa), a.y),
+                    ImVec2(b.x, a.y + radii.topRight * (1.0f - kappa)),
+                    ImVec2(b.x, a.y + radii.topRight));
             else dl->PathLineTo(ImVec2(b.x, a.y));
             dl->PathLineTo(ImVec2(b.x, b.y - radii.bottomRight));
             if (radii.bottomRight > 0.0f)
-                dl->PathArcTo(ImVec2(b.x - radii.bottomRight, b.y - radii.bottomRight),
-                              radii.bottomRight, 0.0f, pi * 0.5f);
+                dl->PathBezierCubicCurveTo(
+                    ImVec2(b.x, b.y - radii.bottomRight * (1.0f - kappa)),
+                    ImVec2(b.x - radii.bottomRight * (1.0f - kappa), b.y),
+                    ImVec2(b.x - radii.bottomRight, b.y));
             else dl->PathLineTo(b);
             dl->PathLineTo(ImVec2(a.x + radii.bottomLeft, b.y));
             if (radii.bottomLeft > 0.0f)
-                dl->PathArcTo(ImVec2(a.x + radii.bottomLeft, b.y - radii.bottomLeft),
-                              radii.bottomLeft, pi * 0.5f, pi);
+                dl->PathBezierCubicCurveTo(
+                    ImVec2(a.x + radii.bottomLeft * (1.0f - kappa), b.y),
+                    ImVec2(a.x, b.y - radii.bottomLeft * (1.0f - kappa)),
+                    ImVec2(a.x, b.y - radii.bottomLeft));
             else dl->PathLineTo(ImVec2(a.x, b.y));
             dl->PathLineTo(ImVec2(a.x, a.y + radii.topLeft));
             if (radii.topLeft > 0.0f)
-                dl->PathArcTo(ImVec2(a.x + radii.topLeft, a.y + radii.topLeft),
-                              radii.topLeft, pi, pi * 1.5f);
+                dl->PathBezierCubicCurveTo(
+                    ImVec2(a.x, a.y + radii.topLeft * (1.0f - kappa)),
+                    ImVec2(a.x + radii.topLeft * (1.0f - kappa), a.y),
+                    ImVec2(a.x + radii.topLeft, a.y));
             else dl->PathLineTo(a);
         }
 
@@ -100,7 +108,9 @@ namespace seedui
             const ImVec2 b(origin.x + (x + w) * scale, origin.y + (y + h) * scale);
 
             const ImU32 fill = ImGui::ColorConvertFloat4ToU32(Theme::Hex(0x2b2b2b));
-            const ImU32 outline = ImGui::ColorConvertFloat4ToU32(Theme::Hex(0x4f8cff, 0.7f));
+            // Elementos não selecionados usam uma borda neutra e discreta.
+            // Azul/laranja ficam reservados exclusivamente para a seleção.
+            const ImU32 outline = ImGui::ColorConvertFloat4ToU32(Theme::Hex(0x5a5a5a, 0.82f));
             const ImU32 label = ImGui::ColorConvertFloat4ToU32(Theme::TextPrimary);
 
             CornerRadii radii = GetCornerRadii(e, w, h);
