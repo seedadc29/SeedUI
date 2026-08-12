@@ -69,6 +69,10 @@ namespace seedui
             { IconId::Magnifier, "magnifying-glass" },
             { IconId::List,      "list" },
             { IconId::Annotate,  "chat-circle-dots" },
+            { IconId::Rectangle, "rectangle" },
+            { IconId::Ellipse,   "ellipse" },
+            { IconId::Polygon,   "polygon" },
+            { IconId::Transparency, "transparency" },
         };
 
         const char* kIconDirs[] = {

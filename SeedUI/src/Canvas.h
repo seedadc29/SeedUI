@@ -11,16 +11,19 @@ namespace seedui
                     const std::vector<std::string>* elementosSelecionados = nullptr,
                     const char* elementoPrincipalId = nullptr,
                     unsigned int quinasSelecionadas = 0,
-                    bool exibirReguas = true);
+                    bool exibirReguas = true,
+                    float zoom = 1.0f);
 
     // Converte coordenadas da janela para coordenadas da tela base do projeto.
     bool CanvasScreenToProject(const Project* projeto, float screenX, float screenY,
                                float& projectX, float& projectY,
-                               bool limitarNaMoldura = false);
+                               bool limitarNaMoldura = false,
+                               float zoom = 1.0f);
 
     // Converte um ponto da tela-base para a janela e devolve a escala visual.
     bool CanvasProjectToScreen(const Project* projeto, float projectX, float projectY,
-                               float& screenX, float& screenY, float& scale);
+                               float& screenX, float& screenY, float& scale,
+                               float zoom = 1.0f);
 }
 
 #endif // SEEDUI_CANVAS_H

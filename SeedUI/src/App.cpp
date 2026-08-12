@@ -174,6 +174,9 @@ namespace seedui
             case IconId::Text:   return Tool::Text;
             case IconId::ZoomIn: return Tool::Zoom;
             case IconId::Pan:    return Tool::Pan;
+            case IconId::Rectangle: return Tool::Rectangle;
+            case IconId::Ellipse: return Tool::Ellipse;
+            case IconId::Polygon: return Tool::Polygon;
             case IconId::Color:  return Tool::Color;
             case IconId::Grid:   return Tool::Grid;
             case IconId::Annotate: return Tool::Annotate;
@@ -772,9 +775,15 @@ namespace seedui
             if (Element* element = Project::ResolverId(mode, mSelectedElementId))
                 if (element->visivel) selected.push_back(element);
 
-        if (selected.empty() || (mAlignTarget != 2 && selected.size() < 2))
+        const bool singleGroupToScreen = selected.size() == 1 &&
+                                         selected.front()->tipo == "grupo";
+        const int alignTarget = singleGroupToScreen ? 2 : mAlignTarget;
+
+        if (selected.empty() ||
+            (alignTarget == 0 && selected.size() < 2) ||
+            (alignTarget == 1 && selected.size() < 2))
         {
-            mStatusMsg = mAlignTarget == 2
+            mStatusMsg = alignTarget == 2
                 ? "Selecione um elemento para alinhar a tela"
                 : "Selecione pelo menos dois elementos para alinhar";
             mStatusMsgUntil = GetTime() + 4.0;
@@ -795,7 +804,7 @@ namespace seedui
         }
 
         Element* primary = Project::ResolverId(mode, mSelectedElementId);
-        if (mAlignTarget == 1 && (!primary || !primary->visivel))
+        if (alignTarget == 1 && (!primary || !primary->visivel))
         {
             mStatusMsg = "O elemento principal da selecao nao esta disponivel";
             mStatusMsgUntil = GetTime() + 4.0;
@@ -803,7 +812,7 @@ namespace seedui
         }
 
         float target = 0.0f;
-        if (mAlignTarget == 2)
+        if (alignTarget == 2)
         {
             if (operation == 0 || operation == 3) target = 0.0f;
             else if (operation == 1) target = mProject.telaBaseLargura * 0.5f;
@@ -811,7 +820,7 @@ namespace seedui
             else if (operation == 4) target = mProject.telaBaseAltura * 0.5f;
             else target = (float)mProject.telaBaseAltura;
         }
-        else if (mAlignTarget == 1)
+        else if (alignTarget == 1)
         {
             const float x = primary->transformacao.value("x", 0.0f);
             const float y = primary->transformacao.value("y", 0.0f);
@@ -837,7 +846,7 @@ namespace seedui
         bool changed = false;
         for (Element* element : selected)
         {
-            if (element->bloqueado || (mAlignTarget == 1 && element == primary)) continue;
+            if (element->bloqueado || (alignTarget == 1 && element == primary)) continue;
             const float w = element->transformacao.value("largura", 160.0f);
             const float h = element->transformacao.value("altura", 32.0f);
             if (operation <= 2)
@@ -874,6 +883,42 @@ namespace seedui
         {
             mStatusMsg = "Os elementos ja estao alinhados";
         }
+        mStatusMsgUntil = GetTime() + 4.0;
+    }
+
+    void App::DistribuirElementosSelecionados(bool horizontal)
+    {
+        if (!PossuiModoAtivo()) return;
+        Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+        std::vector<Element*> elements;
+        for (const std::string& id : mSelectedElementIds)
+            if (Element* element = Project::ResolverId(mode, id))
+                if (element->visivel && !element->bloqueado) elements.push_back(element);
+        if (elements.size() < 2)
+        {
+            mStatusMsg = "Selecione pelo menos dois elementos para espacamento";
+            mStatusMsgUntil = GetTime() + 4.0;
+            return;
+        }
+
+        std::sort(elements.begin(), elements.end(), [&](const Element* a, const Element* b)
+        {
+            const char* key = horizontal ? "x" : "y";
+            return a->transformacao.value(key, 0.0f) < b->transformacao.value(key, 0.0f);
+        });
+        const float spacing = std::max(0.0f,
+            horizontal ? mHorizontalSpacing : mVerticalSpacing);
+        float cursor = elements.front()->transformacao.value(horizontal ? "x" : "y", 0.0f);
+        for (Element* element : elements)
+        {
+            const float size = element->transformacao.value(
+                horizontal ? "largura" : "altura", horizontal ? 160.0f : 32.0f);
+            element->transformacao[horizontal ? "x" : "y"] = cursor;
+            cursor += size + spacing;
+        }
+        mProjectDirty = true;
+        mStatusMsg = horizontal ? "Espacamento horizontal aplicado"
+                                : "Espacamento vertical aplicado";
         mStatusMsgUntil = GetTime() + 4.0;
     }
 
@@ -970,6 +1015,54 @@ namespace seedui
 
     void App::HandleCanvasInteraction(bool canvasHovered)
     {
+        const bool shapeTool = mCurrentTool == Tool::Rectangle ||
+                               mCurrentTool == Tool::Ellipse ||
+                               mCurrentTool == Tool::Polygon;
+        if (PossuiModoAtivo() && shapeTool)
+        {
+            const ImVec2 mouse = ImGui::GetMousePos();
+            float projectX = 0.0f, projectY = 0.0f;
+            const bool inside = CanvasScreenToProject(&mProject, mouse.x, mouse.y,
+                projectX, projectY, false, mCanvasZoom);
+            if (canvasHovered && inside && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            {
+                mShapeCreating = true;
+                mShapeStartX = mShapeEndX = projectX;
+                mShapeStartY = mShapeEndY = projectY;
+            }
+            if (mShapeCreating && ImGui::IsMouseDown(ImGuiMouseButton_Left))
+            {
+                CanvasScreenToProject(&mProject, mouse.x, mouse.y,
+                    mShapeEndX, mShapeEndY, true, mCanvasZoom);
+                ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
+            }
+            if (mShapeCreating && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+            {
+                const float x = std::min(mShapeStartX, mShapeEndX);
+                const float y = std::min(mShapeStartY, mShapeEndY);
+                const float w = std::max(8.0f, fabsf(mShapeEndX - mShapeStartX));
+                const float h = std::max(8.0f, fabsf(mShapeEndY - mShapeStartY));
+                const char* type = mCurrentTool == Tool::Rectangle ? "retangulo" :
+                                   mCurrentTool == Tool::Ellipse ? "elipse" : "poligono";
+                const char* name = mCurrentTool == Tool::Rectangle ? "Retangulo" :
+                                   mCurrentTool == Tool::Ellipse ? "Elipse" : "Poligono";
+                if (AdicionarComponente(type, name, x, y))
+                {
+                    Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+                    if (Element* created = Project::ResolverId(mode, mSelectedElementId))
+                    {
+                        created->transformacao["largura"] = w;
+                        created->transformacao["altura"] = h;
+                        created->estilos["opacidade"] = 1.0f;
+                    }
+                    mStatusMsg = std::string(name) + " criado";
+                    mStatusMsgUntil = GetTime() + 4.0;
+                }
+                mShapeCreating = false;
+            }
+            return;
+        }
+
         const bool editTool = mCurrentTool == Tool::Select || mCurrentTool == Tool::Move;
         if (!PossuiModoAtivo() || !editTool)
         {
@@ -1006,9 +1099,10 @@ namespace seedui
         const ImVec2 mouse = ImGui::GetMousePos();
         float mouseX = 0.0f, mouseY = 0.0f;
         const bool mouseOnFrame = CanvasScreenToProject(&mProject, mouse.x, mouse.y,
-                                                         mouseX, mouseY, false);
+                                                         mouseX, mouseY, false, mCanvasZoom);
         float unusedX = 0.0f, unusedY = 0.0f, viewScale = 1.0f;
-        CanvasProjectToScreen(&mProject, 0.0f, 0.0f, unusedX, unusedY, viewScale);
+        CanvasProjectToScreen(&mProject, 0.0f, 0.0f, unusedX, unusedY, viewScale,
+                              mCanvasZoom);
         const float tolerance = 8.0f / std::max(0.25f, viewScale);
 
         auto dragModeAt = [&](const Element& element, float x, float y)
@@ -1023,6 +1117,8 @@ namespace seedui
             if (element.tipo == "grupo")
                 return x >= ex && x <= ex + ew && y >= ey && y <= ey + eh ? 1 : 0;
 
+            const bool supportsCorners = element.tipo != "elipse" &&
+                                         element.tipo != "poligono";
             const float minMarkerInset = 14.0f / std::max(0.25f, viewScale);
             const float maxMarkerInset = std::max(6.0f / std::max(0.25f, viewScale),
                 std::min(ew, eh) * 0.5f - 6.0f / std::max(0.25f, viewScale));
@@ -1044,7 +1140,7 @@ namespace seedui
                 ey + insets[0], ey + insets[1],
                 ey + eh - insets[2], ey + eh - insets[3]
             };
-            for (int index = 0; index < 4; ++index)
+            for (int index = 0; supportsCorners && index < 4; ++index)
             {
                 const float dx = x - cornerX[index];
                 const float dy = y - cornerY[index];
@@ -1194,7 +1290,8 @@ namespace seedui
 
         if (mCanvasMarquee && ImGui::IsMouseDown(ImGuiMouseButton_Left))
         {
-            CanvasScreenToProject(&mProject, mouse.x, mouse.y, mouseX, mouseY, true);
+            CanvasScreenToProject(&mProject, mouse.x, mouse.y, mouseX, mouseY, true,
+                                  mCanvasZoom);
             mCanvasMarqueeEndX = mouseX;
             mCanvasMarqueeEndY = mouseY;
         }
@@ -1224,7 +1321,8 @@ namespace seedui
 
         if (mCanvasDragMode != 0 && ImGui::IsMouseDown(ImGuiMouseButton_Left))
         {
-            CanvasScreenToProject(&mProject, mouse.x, mouse.y, mouseX, mouseY, true);
+            CanvasScreenToProject(&mProject, mouse.x, mouse.y, mouseX, mouseY, true,
+                                  mCanvasZoom);
             Element* selected = Project::ResolverId(mode, mSelectedElementId);
             if (!selected || selected->bloqueado)
             {
@@ -1538,6 +1636,17 @@ namespace seedui
             !ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_G, false))
             AgruparElementosSelecionados();
         if (!ImGui::GetIO().WantTextInput && !ImGui::GetIO().KeyCtrl &&
+            !ImGui::GetIO().KeyAlt)
+        {
+            if (ImGui::IsKeyPressed(ImGuiKey_Q, false)) AlinharElementosSelecionados(0);
+            if (ImGui::IsKeyPressed(ImGuiKey_W, false)) AlinharElementosSelecionados(1);
+            if (ImGui::IsKeyPressed(ImGuiKey_E, false)) AlinharElementosSelecionados(2);
+            if (ImGui::IsKeyPressed(ImGuiKey_2, false)) AlinharElementosSelecionados(3);
+            if (ImGui::IsKeyPressed(ImGuiKey_D, false)) AlinharElementosSelecionados(4);
+            if (ImGui::IsKeyPressed(ImGuiKey_S, false)) AlinharElementosSelecionados(5);
+            if (ImGui::IsKeyPressed(ImGuiKey_Z, false)) mCurrentTool = Tool::Zoom;
+        }
+        if (!ImGui::GetIO().WantTextInput && !ImGui::GetIO().KeyCtrl &&
             !ImGui::GetIO().KeyAlt && ImGui::IsKeyPressed(ImGuiKey_A, false))
             AlternarModoAnotacao();
         if (!ImGui::GetIO().WantTextInput && !ImGui::GetIO().KeyCtrl &&
@@ -1618,17 +1727,40 @@ namespace seedui
                 const ImVec2 canvasDropMax = ImGui::GetItemRectMax();
                 const bool canvasHovered = ImGui::IsItemHovered(
                     ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+                if (canvasHovered && mCurrentTool == Tool::Zoom)
+                {
+                    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+                        mCanvasZoom = std::min(4.0f, mCanvasZoom * 1.25f);
+                    if (ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+                        mCanvasZoom = std::max(0.25f, mCanvasZoom / 1.25f);
+                    const float wheel = ImGui::GetIO().MouseWheel;
+                    if (wheel > 0.0f) mCanvasZoom = std::min(4.0f, mCanvasZoom * 1.1f);
+                    if (wheel < 0.0f) mCanvasZoom = std::max(0.25f, mCanvasZoom / 1.1f);
+                    ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+                }
                 HandleCanvasInteraction(canvasHovered);
                 CanvasDraw(mHasProject ? &mProject : nullptr, mTelaAtiva, mModoAtivo,
                            &mSelectedElementIds, mSelectedElementId.c_str(),
-                           mSelectedCornerMask, mRulersVisible);
+                           mSelectedCornerMask, mRulersVisible, mCanvasZoom);
+                if (mShapeCreating)
+                {
+                    float sx0 = 0.0f, sy0 = 0.0f, sx1 = 0.0f, sy1 = 0.0f, scale = 1.0f;
+                    CanvasProjectToScreen(&mProject, mShapeStartX, mShapeStartY,
+                                          sx0, sy0, scale, mCanvasZoom);
+                    CanvasProjectToScreen(&mProject, mShapeEndX, mShapeEndY,
+                                          sx1, sy1, scale, mCanvasZoom);
+                    ImGui::GetWindowDrawList()->AddRect(
+                        ImVec2(std::min(sx0, sx1), std::min(sy0, sy1)),
+                        ImVec2(std::max(sx0, sx1), std::max(sy0, sy1)),
+                        ImGui::ColorConvertFloat4ToU32(Theme::AccentBlue), 0.0f, 0, 1.5f);
+                }
                 if (mCanvasMarquee)
                 {
                     float sx0 = 0.0f, sy0 = 0.0f, sx1 = 0.0f, sy1 = 0.0f, scale = 1.0f;
                     CanvasProjectToScreen(&mProject, mCanvasMarqueeStartX, mCanvasMarqueeStartY,
-                                          sx0, sy0, scale);
+                                          sx0, sy0, scale, mCanvasZoom);
                     CanvasProjectToScreen(&mProject, mCanvasMarqueeEndX, mCanvasMarqueeEndY,
-                                          sx1, sy1, scale);
+                                          sx1, sy1, scale, mCanvasZoom);
                     const ImVec2 a(sx0, sy0), b(sx1, sy1);
                     const ImU32 marqueeColor = ImGui::ColorConvertFloat4ToU32(Theme::AccentOrange);
                     const ImU32 marqueeFill = ImGui::ColorConvertFloat4ToU32(
@@ -1658,7 +1790,8 @@ namespace seedui
                                 float projectX = 0.0f, projectY = 0.0f;
                                 const ImVec2 mouse = ImGui::GetMousePos();
                                 const bool mapped = CanvasScreenToProject(
-                                    &mProject, mouse.x, mouse.y, projectX, projectY, true);
+                                    &mProject, mouse.x, mouse.y, projectX, projectY, true,
+                                    mCanvasZoom);
                                 TraceLog(LOG_INFO,
                                          "M04 DROP Painel: delivery=%d mapped=%d mouse=%.1f,%.1f project=%.1f,%.1f",
                                          payload->IsDelivery() ? 1 : 0, mapped ? 1 : 0,
@@ -1851,7 +1984,14 @@ namespace seedui
                 if (ImGui::MenuItem("Base")) AlinharElementosSelecionados(5);
                 ImGui::EndMenu();
             }
-            MenuItemSoon("Distribuir", "M05");
+            if (ImGui::BeginMenu("Distribuir"))
+            {
+                if (ImGui::MenuItem("Espacamento horizontal"))
+                    DistribuirElementosSelecionados(true);
+                if (ImGui::MenuItem("Espacamento vertical"))
+                    DistribuirElementosSelecionados(false);
+                ImGui::EndMenu();
+            }
             const bool canGroup = mSelectedElementIds.size() >= 2;
             if (ImGui::MenuItem("Agrupar", "Ctrl+G", false, canGroup))
                 AgruparElementosSelecionados();
@@ -1990,12 +2130,17 @@ namespace seedui
         IconButton(IconId::Trash, "Edição · Apagar (M05)", button);
 
         separator();
-        const bool canAlign = mAlignTarget == 2
-            ? !mSelectedElementId.empty() : mSelectedElementIds.size() >= 2;
+        bool isolatedGroup = false;
+        if (PossuiModoAtivo() && mSelectedElementIds.size() == 1)
+            if (Element* element = Project::ResolverId(
+                    mProject.telas[mTelaAtiva].modos[mModoAtivo], mSelectedElementIds.front()))
+                isolatedGroup = element->tipo == "grupo";
+        const bool canAlign = isolatedGroup || (mAlignTarget == 2
+            ? !mSelectedElementId.empty() : mSelectedElementIds.size() >= 2);
         if (!canAlign) ImGui::BeginDisabled();
         const char* alignTips[] = {
-            "Alinhar à esquerda", "Centralizar horizontalmente", "Alinhar à direita",
-            "Alinhar ao topo", "Centralizar verticalmente", "Alinhar à base"
+            "Alinhar à esquerda (Q)", "Centralizar horizontalmente (W)", "Alinhar à direita (E)",
+            "Alinhar ao topo (2)", "Centralizar verticalmente (D)", "Alinhar à base (S)"
         };
         for (int operation = 0; operation < 6; ++operation)
         {
@@ -2004,6 +2149,22 @@ namespace seedui
                 AlinharElementosSelecionados(operation);
         }
         if (!canAlign) ImGui::EndDisabled();
+        ImGui::SameLine(0.0f, 8.0f);
+        ImGui::SetNextItemWidth(54.0f);
+        ImGui::InputFloat("##space_h", &mHorizontalSpacing, 0.0f, 0.0f, "H %.0f");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Espaçamento horizontal");
+        ImGui::SameLine();
+        if (ImGui::Button("↔##distribute_h", ImVec2(28.0f, button)))
+            DistribuirElementosSelecionados(true);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Aplicar espaçamento horizontal");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(54.0f);
+        ImGui::InputFloat("##space_v", &mVerticalSpacing, 0.0f, 0.0f, "V %.0f");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Espaçamento vertical");
+        ImGui::SameLine();
+        if (ImGui::Button("↕##distribute_v", ImVec2(28.0f, button)))
+            DistribuirElementosSelecionados(false);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Aplicar espaçamento vertical");
 
         separator();
         const bool canGroup = mSelectedElementIds.size() >= 2;
@@ -2052,11 +2213,54 @@ namespace seedui
         ImGui::Separator();
         ImGui::Spacing();
         ToolButton(IconId::Text, "Criação · Texto (T)");
+        ToolButton(IconId::Rectangle, "Criar retângulo · arraste no canvas");
+        ToolButton(IconId::Ellipse, "Criar elipse · arraste no canvas");
+        ToolButton(IconId::Polygon, "Criar polígono · arraste no canvas");
         ToolButton(IconId::Color, "Aparência · Conta-gotas (I)");
+        ImGui::SetCursorPosX((kToolbarWidth - kToolButtonSize) * 0.5f);
+        if (IconButton(IconId::Transparency, "Transparência do elemento selecionado",
+                       kToolButtonSize))
+            ImGui::OpenPopup("##transparency_tool");
+        if (ImGui::BeginPopup("##transparency_tool"))
+        {
+            Element* selected = nullptr;
+            if (PossuiModoAtivo() && !mSelectedElementId.empty())
+                selected = Project::ResolverId(
+                    mProject.telas[mTelaAtiva].modos[mModoAtivo], mSelectedElementId);
+            if (!selected)
+                ImGui::TextDisabled("Selecione um elemento");
+            else
+            {
+                float transparency = 100.0f * (1.0f -
+                    selected->estilos.value("opacidade", 1.0f));
+                ImGui::SetNextItemWidth(180.0f);
+                if (ImGui::SliderFloat("Transparência", &transparency,
+                                       0.0f, 100.0f, "%.0f%%"))
+                {
+                    selected->estilos["opacidade"] = 1.0f - transparency / 100.0f;
+                    mProjectDirty = true;
+                }
+            }
+            ImGui::EndPopup();
+        }
 
         ImGui::Separator();
         ImGui::Spacing();
-        ToolButton(IconId::ZoomIn, "Navegação · Zoom (+)");
+        ImGui::SetCursorPosX((kToolbarWidth - kToolButtonSize) * 0.5f);
+        if (mCurrentTool == Tool::Zoom)
+            ImGui::PushStyleColor(ImGuiCol_Button, Theme::Hex(0x4f8cff, 0.30f));
+        if (IconButton(IconId::ZoomIn, "Zoom In - clique ou use Z no canvas", kToolButtonSize))
+        {
+            mCurrentTool = Tool::Zoom;
+            mCanvasZoom = std::min(4.0f, mCanvasZoom * 1.25f);
+        }
+        if (mCurrentTool == Tool::Zoom) ImGui::PopStyleColor();
+        ImGui::SetCursorPosX((kToolbarWidth - kToolButtonSize) * 0.5f);
+        if (IconButton(IconId::ZoomOut, "Zoom Out - botao direito com Z", kToolButtonSize))
+        {
+            mCurrentTool = Tool::Zoom;
+            mCanvasZoom = std::max(0.25f, mCanvasZoom / 1.25f);
+        }
         ToolButton(IconId::Pan, "Navegação · Mão (H)");
         ToolButton(IconId::Grid, "Visualização · Grade (G)");
 
@@ -2321,6 +2525,14 @@ namespace seedui
                 ImGui::Checkbox("Bloqueado", &selected->bloqueado);
                 if (beforeVisible != selected->visivel || beforeLocked != selected->bloqueado)
                     mProjectDirty = true;
+                float transparency = 100.0f * (1.0f -
+                    selected->estilos.value("opacidade", 1.0f));
+                if (ImGui::SliderFloat("Transparencia", &transparency,
+                                       0.0f, 100.0f, "%.0f%%"))
+                {
+                    selected->estilos["opacidade"] = 1.0f - transparency / 100.0f;
+                    mProjectDirty = true;
+                }
                 ImGui::Separator();
 
                 ImGui::TextUnformatted("Alinhar");
@@ -2329,9 +2541,9 @@ namespace seedui
                     "Alinhar bordas direitas", "Alinhar bordas superiores",
                     "Alinhar centros verticais", "Alinhar bordas inferiores"
                 };
-                const bool alignEnabled = mAlignTarget == 2
-                    ? !mSelectedElementId.empty()
-                    : mSelectedElementIds.size() >= 2;
+                const bool alignEnabled = selected->tipo == "grupo" ||
+                    (mAlignTarget == 2 ? !mSelectedElementId.empty()
+                                       : mSelectedElementIds.size() >= 2);
                 if (!alignEnabled) ImGui::BeginDisabled();
                 for (int operation = 0; operation < 6; ++operation)
                 {
@@ -2517,7 +2729,7 @@ namespace seedui
             ImGui::SameLine(0, 16);
             ImGui::TextColored(Theme::TextSecondary, "● Modo Normal");
             ImGui::SameLine(0, 18);
-            ImGui::TextColored(Theme::TextSecondary, "Zoom: 100%%");
+            ImGui::TextColored(Theme::TextSecondary, "Zoom: %.0f%%", mCanvasZoom * 100.0f);
             ImGui::SameLine(0, 18);
             ImGui::TextColored(Theme::TextSecondary, "1280×720");
 

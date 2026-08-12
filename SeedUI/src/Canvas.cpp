@@ -107,7 +107,9 @@ namespace seedui
             const ImVec2 a(origin.x + x * scale, origin.y + y * scale);
             const ImVec2 b(origin.x + (x + w) * scale, origin.y + (y + h) * scale);
 
-            const ImU32 fill = ImGui::ColorConvertFloat4ToU32(Theme::Hex(0x2b2b2b));
+            const float opacity = std::max(0.0f, std::min(1.0f,
+                e.estilos.value("opacidade", 1.0f)));
+            const ImU32 fill = ImGui::ColorConvertFloat4ToU32(Theme::Hex(0x2b2b2b, opacity));
             // Elementos não selecionados usam uma borda neutra e discreta.
             // Azul/laranja ficam reservados exclusivamente para a seleção.
             const ImU32 outline = ImGui::ColorConvertFloat4ToU32(Theme::Hex(0x5a5a5a, 0.82f));
@@ -115,15 +117,35 @@ namespace seedui
 
             if (e.tipo != "grupo")
             {
-                CornerRadii radii = GetCornerRadii(e, w, h);
-                radii.topLeft *= scale;
-                radii.topRight *= scale;
-                radii.bottomRight *= scale;
-                radii.bottomLeft *= scale;
-                DrawRoundedRect(dl, a, b, radii, fill, outline);
+                if (e.tipo == "elipse")
+                {
+                    const ImVec2 center((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
+                    const ImVec2 radius((b.x - a.x) * 0.5f, (b.y - a.y) * 0.5f);
+                    dl->AddEllipseFilled(center, radius, fill, 0.0f, 48);
+                    dl->AddEllipse(center, radius, outline, 0.0f, 48, 1.0f);
+                }
+                else if (e.tipo == "poligono")
+                {
+                    const ImVec2 center((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
+                    const float radius = std::min(b.x - a.x, b.y - a.y) * 0.5f;
+                    dl->AddNgonFilled(center, radius, fill, 6);
+                    dl->AddNgon(center, radius, outline, 6, 1.0f);
+                }
+                else
+                {
+                    CornerRadii radii = GetCornerRadii(e, w, h);
+                    radii.topLeft *= scale;
+                    radii.topRight *= scale;
+                    radii.bottomRight *= scale;
+                    radii.bottomLeft *= scale;
+                    DrawRoundedRect(dl, a, b, radii, fill, outline);
+                }
 
-                const char* text = e.nome.empty() ? e.id.c_str() : e.nome.c_str();
-                dl->AddText(ImVec2(a.x + 4, a.y + 4), label, text);
+                if (e.tipo != "retangulo" && e.tipo != "elipse" && e.tipo != "poligono")
+                {
+                    const char* text = e.nome.empty() ? e.id.c_str() : e.nome.c_str();
+                    dl->AddText(ImVec2(a.x + 4, a.y + 4), label, text);
+                }
             }
 
             for (const Element& f : e.filhos)
@@ -144,7 +166,7 @@ namespace seedui
 
     bool CanvasScreenToProject(const Project* projeto, float screenX, float screenY,
                                float& projectX, float& projectY,
-                               bool limitarNaMoldura)
+                               bool limitarNaMoldura, float zoom)
     {
         if (!projeto) return false;
         const ImVec2 min = ImGui::GetWindowPos();
@@ -162,6 +184,7 @@ namespace seedui
         const float availH = contentMax.y - contentMin.y;
         float scale = std::min(availW / baseW, availH / baseH);
         scale = std::max(0.25f, std::min(1.0f, scale));
+        scale *= std::max(0.25f, std::min(4.0f, zoom));
         const ImVec2 frame(baseW * scale, baseH * scale);
         const ImVec2 origin(contentMin.x + (availW - frame.x) * 0.5f,
                             contentMin.y + (availH - frame.y) * 0.5f);
@@ -175,7 +198,7 @@ namespace seedui
     }
 
     bool CanvasProjectToScreen(const Project* projeto, float projectX, float projectY,
-                               float& screenX, float& screenY, float& scale)
+                               float& screenX, float& screenY, float& scale, float zoom)
     {
         if (!projeto || projeto->telaBaseLargura <= 0 || projeto->telaBaseAltura <= 0)
             return false;
@@ -191,6 +214,7 @@ namespace seedui
         const float availW = contentMax.x - contentMin.x;
         const float availH = contentMax.y - contentMin.y;
         scale = std::max(0.25f, std::min(1.0f, std::min(availW / baseW, availH / baseH)));
+        scale *= std::max(0.25f, std::min(4.0f, zoom));
         const ImVec2 frame(baseW * scale, baseH * scale);
         const ImVec2 origin(contentMin.x + (availW - frame.x) * 0.5f,
                             contentMin.y + (availH - frame.y) * 0.5f);
@@ -203,7 +227,7 @@ namespace seedui
                     const std::vector<std::string>* elementosSelecionados,
                     const char* elementoPrincipalId,
                     unsigned int quinasSelecionadas,
-                    bool exibirReguas)
+                    bool exibirReguas, float zoom)
     {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         const ImVec2 min = ImGui::GetWindowPos();
@@ -281,6 +305,7 @@ namespace seedui
             viewScale = scaleX < scaleY ? scaleX : scaleY;
             if (viewScale > 1.0f) viewScale = 1.0f;
             if (viewScale < 0.25f) viewScale = 0.25f;
+            viewScale *= std::max(0.25f, std::min(4.0f, zoom));
         }
 
         const ImVec2 frame(baseW * viewScale, baseH * viewScale);
@@ -359,6 +384,9 @@ namespace seedui
                     dl->AddRect(ImVec2(point.x - hs, point.y - hs),
                                 ImVec2(point.x + hs, point.y + hs), selection);
                 }
+
+                if (selected->tipo == "elipse" || selected->tipo == "poligono")
+                    continue;
 
                 // Cada circulo controla somente a quina onde aparece.
                 const CornerRadii projectRadii = GetCornerRadii(*selected, w, h);

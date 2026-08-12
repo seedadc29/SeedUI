@@ -47,6 +47,10 @@ namespace seedui
         Magnifier,
         List,
         Annotate,
+        Rectangle,
+        Ellipse,
+        Polygon,
+        Transparency,
         Count,
     };
 

@@ -16,6 +16,9 @@ namespace seedui
         Pan,
         Color,
         Grid,
+        Rectangle,
+        Ellipse,
+        Polygon,
         Annotate,
     };
 
@@ -57,6 +60,7 @@ namespace seedui
         void ColarElementosCopiados();
         void AlternarModoAnotacao();
         void AlinharElementosSelecionados(int operacao);
+        void DistribuirElementosSelecionados(bool horizontal);
         void AgruparElementosSelecionados();
         void ResetarHistorico();
         void CapturarHistorico();
@@ -101,8 +105,16 @@ namespace seedui
         std::vector<Element> mElementClipboard;
         int mElementPasteGeneration = 0;
         int mAlignTarget = 0; // 0 selecao, 1 elemento principal, 2 tela
+        float mHorizontalSpacing = 16.0f;
+        float mVerticalSpacing = 16.0f;
         bool mSnapEnabled = true;
         bool mRulersVisible = true;
+        float mCanvasZoom = 1.0f;
+        bool mShapeCreating = false;
+        float mShapeStartX = 0.0f;
+        float mShapeStartY = 0.0f;
+        float mShapeEndX = 0.0f;
+        float mShapeEndY = 0.0f;
         std::vector<std::string> mHistory;
         int mHistoryIndex = -1;
         std::string mInspectorBufferedElementId;
