@@ -26,6 +26,7 @@ namespace seedui
         Redo,
         Copy,
         Paste,
+        Duplicate,
         Trash,
         Gear,
         Question,

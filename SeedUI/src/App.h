@@ -66,6 +66,7 @@ namespace seedui
                                  float projectX = -1.0f, float projectY = -1.0f);
         void CopiarElementosSelecionados();
         void ColarElementosCopiados();
+        void DuplicarSelecao();
         void ApagarElementosSelecionados();
         void AlternarModoAnotacao();
         void AlinharElementosSelecionados(int operacao);
@@ -182,6 +183,8 @@ namespace seedui
         bool mCanvasDragPastThreshold = false;
         std::vector<Element> mElementClipboard;
         int mElementPasteGeneration = 0;
+        float mDuplicateDX = 16.0f; // deslocamento do Ctrl+D (repete o último)
+        float mDuplicateDY = 16.0f;
         int mAlignTarget = 0; // 0 selecao, 1 elemento principal, 2 tela
         float mHorizontalSpacing = 16.0f;
         float mVerticalSpacing = 16.0f;

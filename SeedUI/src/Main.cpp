@@ -137,6 +137,23 @@ namespace
                   "superior_esquerda", 0.0f) == 24.0f,
               "colar preserva estilos e raios de quina");
 
+        // Duplicar (Ctrl+D): deslocamento independente X/Y com repetição do
+        // último passo (estilo CorelDRAW).
+        const std::vector<std::string> dup1 = Project::ColarElementosOffset(
+            clipboardProject, clipboardMode, clipboard, 16.0f, 24.0f);
+        Element* dup1Panel = dup1.empty()
+            ? nullptr : Project::ResolverId(clipboardMode, dup1[0]);
+        check(dup1Panel && dup1Panel->transformacao.value("x", 0.0f) == 26.0f &&
+              dup1Panel->transformacao.value("y", 0.0f) == 44.0f,
+              "colar com offset X/Y independente desloca nos dois eixos");
+        const std::vector<std::string> dup2 = Project::ColarElementosOffset(
+            clipboardProject, clipboardMode, clipboard, 26.0f, 44.0f);
+        Element* dup2Panel = dup2.empty()
+            ? nullptr : Project::ResolverId(clipboardMode, dup2[0]);
+        check(dup2Panel && dup2Panel->transformacao.value("x", 0.0f) == 36.0f &&
+              dup2Panel->transformacao.value("y", 0.0f) == 64.0f,
+              "repetir o ultimo deslocamento acumula o passo (Ctrl+D x2)");
+
         Modo groupMode;
         Element groupA = makeElement("painel_a", "painel");
         groupA.transformacao = { { "x", 10.0f }, { "y", 20.0f },

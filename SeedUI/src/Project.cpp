@@ -75,19 +75,25 @@ namespace seedui
                 AssignFreshIds(child, project, reservedIds);
         }
 
-        void OffsetElementTree(Element& element, float delta,
-                               float canvasWidth, float canvasHeight)
+        void OffsetElementTreeXY(Element& element, float dx, float dy,
+                                 float canvasWidth, float canvasHeight)
         {
             const float width = element.transformacao.value("largura", 160.0f);
             const float height = element.transformacao.value("altura", 32.0f);
-            const float x = element.transformacao.value("x", 0.0f) + delta;
-            const float y = element.transformacao.value("y", 0.0f) + delta;
+            const float x = element.transformacao.value("x", 0.0f) + dx;
+            const float y = element.transformacao.value("y", 0.0f) + dy;
             element.transformacao["x"] = std::max(0.0f,
                 std::min(std::max(0.0f, canvasWidth - width), x));
             element.transformacao["y"] = std::max(0.0f,
                 std::min(std::max(0.0f, canvasHeight - height), y));
             for (Element& child : element.filhos)
-                OffsetElementTree(child, delta, canvasWidth, canvasHeight);
+                OffsetElementTreeXY(child, dx, dy, canvasWidth, canvasHeight);
+        }
+
+        void OffsetElementTree(Element& element, float delta,
+                               float canvasWidth, float canvasHeight)
+        {
+            OffsetElementTreeXY(element, delta, delta, canvasWidth, canvasHeight);
         }
 
         Element* HitElement(Element& element, float x, float y)
@@ -471,14 +477,22 @@ namespace seedui
         Project& projeto, Modo& modo, const std::vector<Element>& elementos,
         float deslocamento)
     {
+        return ColarElementosOffset(projeto, modo, elementos,
+                                    deslocamento, deslocamento);
+    }
+
+    std::vector<std::string> Project::ColarElementosOffset(
+        Project& projeto, Modo& modo, const std::vector<Element>& elementos,
+        float dx, float dy)
+    {
         std::vector<std::string> reservedIds;
         std::vector<std::string> pastedRootIds;
         for (const Element& source : elementos)
         {
             Element copy = source;
             AssignFreshIds(copy, projeto, reservedIds);
-            OffsetElementTree(copy, deslocamento, (float)projeto.telaBaseLargura,
-                              (float)projeto.telaBaseAltura);
+            OffsetElementTreeXY(copy, dx, dy, (float)projeto.telaBaseLargura,
+                                (float)projeto.telaBaseAltura);
             pastedRootIds.push_back(copy.id);
             modo.raiz.push_back(std::move(copy));
         }

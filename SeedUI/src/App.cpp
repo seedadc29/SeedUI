@@ -863,6 +863,58 @@ namespace seedui
         mStatusMsgUntil = GetTime() + 4.0;
     }
 
+    void App::DuplicarSelecao()
+    {
+        if (!PossuiModoAtivo())
+        {
+            mStatusMsg = "Nenhum modo ativo para duplicar";
+            mStatusMsgUntil = GetTime() + 4.0;
+            return;
+        }
+
+        std::vector<std::string> ids = mSelectedElementIds;
+        if (!mSelectedElementId.empty() &&
+            std::find(ids.begin(), ids.end(), mSelectedElementId) == ids.end())
+            ids.push_back(mSelectedElementId);
+        if (ids.empty())
+        {
+            mStatusMsg = "Selecione um elemento para duplicar";
+            mStatusMsgUntil = GetTime() + 4.0;
+            return;
+        }
+
+        Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+        Element* first = Project::ResolverId(mode, ids.front());
+        if (!first) return;
+        const float srcX = first->transformacao.value("x", 0.0f);
+        const float srcY = first->transformacao.value("y", 0.0f);
+
+        const std::vector<Element> copies = Project::CopiarElementos(mode, ids);
+        if (copies.empty()) return;
+
+        ++mElementPasteGeneration;
+        // Ctrl+D repete o ÚLTIMO deslocamento aplicado (estilo CorelDRAW):
+        // a primeira duplicação usa 16px, as seguintes usam o mesmo passo.
+        const std::vector<std::string> pastedRootIds = Project::ColarElementosOffset(
+            mProject, mode, copies, mDuplicateDX, mDuplicateDY);
+
+        Element* pasted = pastedRootIds.empty()
+            ? nullptr : Project::ResolverId(mode, pastedRootIds.front());
+        if (pasted)
+        {
+            mDuplicateDX = pasted->transformacao.value("x", 0.0f) - srcX;
+            mDuplicateDY = pasted->transformacao.value("y", 0.0f) - srcY;
+        }
+
+        mSelectedElementIds = pastedRootIds;
+        mSelectedElementId = pastedRootIds.empty() ? std::string() : pastedRootIds.back();
+        mProjectDirty = true;
+        CapturarHistorico();
+        mStatusMsg = std::to_string(pastedRootIds.size()) +
+                     " elemento(s) duplicado(s)";
+        mStatusMsgUntil = GetTime() + 4.0;
+    }
+
     void App::ApagarElementosSelecionados()
     {
         if (!PossuiModoAtivo()) return;
@@ -2925,6 +2977,11 @@ namespace seedui
         {
             ColarElementosCopiados();
         }
+        if (!ImGui::GetIO().WantTextInput && ImGui::GetIO().KeyCtrl &&
+            !ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_D, false))
+        {
+            DuplicarSelecao();
+        }
         if (ImGui::GetIO().KeyCtrl && !ImGui::GetIO().KeyShift &&
             ImGui::IsKeyPressed(ImGuiKey_S, false))
         {
@@ -3329,7 +3386,11 @@ namespace seedui
             if (!canPaste) ImGui::BeginDisabled();
             if (ImGui::MenuItem("Colar", "Ctrl+V")) ColarElementosCopiados();
             if (!canPaste) ImGui::EndDisabled();
-            MenuItemSoon("Duplicar", "M05");
+            const bool hasSel = !mSelectedElementId.empty() ||
+                                !mSelectedElementIds.empty();
+            if (!PossuiModoAtivo() || !hasSel) ImGui::BeginDisabled();
+            if (ImGui::MenuItem("Duplicar", "Ctrl+D")) DuplicarSelecao();
+            if (!PossuiModoAtivo() || !hasSel) ImGui::EndDisabled();
             MenuItemSoon("Apagar", "M05");
             ImGui::Separator();
             if (ImGui::MenuItem("Copiar anotações para a IA", "Ctrl+Shift+C"))
@@ -3640,6 +3701,13 @@ namespace seedui
         if (IconButton(IconId::Paste, "Edição · Colar (Ctrl+V)", button))
             ColarElementosCopiados();
         if (!canPaste) ImGui::EndDisabled();
+        ImGui::SameLine();
+        const bool canDup = PossuiModoAtivo() &&
+                            (!mSelectedElementId.empty() || !mSelectedElementIds.empty());
+        if (!canDup) ImGui::BeginDisabled();
+        if (IconButton(IconId::Duplicate, "Edição · Duplicar (Ctrl+D)", button))
+            DuplicarSelecao();
+        if (!canDup) ImGui::EndDisabled();
         ImGui::SameLine();
         const bool canDelete = !mSelectedElementId.empty() || !mSelectedElementIds.empty();
         if (!canDelete) ImGui::BeginDisabled();

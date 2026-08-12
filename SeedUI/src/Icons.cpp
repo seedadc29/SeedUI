@@ -43,6 +43,7 @@ namespace seedui
             { IconId::Redo,      "arrows-clockwise" },
             { IconId::Copy,      "copy" },
             { IconId::Paste,     "clipboard-text" },
+            { IconId::Duplicate, "copy-plus" },
             { IconId::Trash,     "trash" },
             { IconId::Gear,      "gear" },
             { IconId::Question,  "question" },

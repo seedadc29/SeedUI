@@ -97,6 +97,11 @@ namespace seedui
         static std::vector<std::string> ColarElementos(
             Project& projeto, Modo& modo, const std::vector<Element>& elementos,
             float deslocamento);
+        // Cola com deslocamento independente em X e Y (usado pelo Duplicar
+        // Ctrl+D, que repete o último deslocamento aplicado).
+        static std::vector<std::string> ColarElementosOffset(
+            Project& projeto, Modo& modo, const std::vector<Element>& elementos,
+            float dx, float dy);
         static std::string AgruparElementos(Modo& modo,
                                              const std::vector<std::string>& ids);
         // Desagrupa: filhos sobem para o nível do grupo preservando posição.
