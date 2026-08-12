@@ -3645,12 +3645,14 @@ namespace seedui
         if (rulersWereLocked) ImGui::PopStyleColor();
         ImGui::SameLine();
         // Grade visível/oculta: ocultar NÃO desliga o snap (continua
-        // encaixando nos pontos exatos da grade, mesmo sem vê-la).
+        // encaixando nos pontos exatos da grade, mesmo sem vê-la). Usa o
+        // ícone de OLHO — o ID do IconButton é o do ícone (PushID(ícone)),
+        // então um segundo botão com IconId::Grid colidiria com o do snap.
         const bool gridWasOn = mGridVisible;
         if (gridWasOn) ImGui::PushStyleColor(ImGuiCol_Button, Theme::Hex(0x4f8cff, 0.30f));
-        if (IconButton(IconId::Grid, mGridVisible
-                                         ? "Grade visível · clique para ocultar (snap continua ativo)"
-                                         : "Grade oculta · clique para mostrar",
+        if (IconButton(IconId::Eye, mGridVisible
+                                        ? "Grade visível · clique para ocultar (snap continua ativo)"
+                                        : "Grade oculta · clique para mostrar",
                        button))
             mGridVisible = !mGridVisible;
         if (gridWasOn) ImGui::PopStyleColor();
