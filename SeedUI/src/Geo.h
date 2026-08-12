@@ -148,6 +148,21 @@ namespace seedui
             return ShapeKind::Rect;
         }
 
+        // Aplica os flags de espelhamento (transformacao.espelhado_h/v) aos
+        // pontos locais. Chamado ao final de OutlineLocal.
+        inline void ApplyMirror(const Element& e, float w, float h,
+                                std::vector<ImVec2>& out)
+        {
+            const bool mh = e.transformacao.value("espelhado_h", 0.0f) > 0.5f;
+            const bool mv = e.transformacao.value("espelhado_v", 0.0f) > 0.5f;
+            if (!mh && !mv) return;
+            for (ImVec2& p : out)
+            {
+                if (mh) p.x = w - p.x;
+                if (mv) p.y = h - p.y;
+            }
+        }
+
         // Amostra o contorno do elemento na forma local (0..w, 0..h), sem
         // translação/rotação/escala. Pontos em sentido anti-horário.
         inline void OutlineLocal(const Element& e, std::vector<ImVec2>& out,
@@ -167,6 +182,7 @@ namespace seedui
                                     (float)segments;
                     out.push_back(ImVec2(rx + rx * cosf(a), ry + ry * sinf(a)));
                 }
+                ApplyMirror(e, w, h, out);
                 return;
             }
             if (kind == ShapeKind::Polygon)
@@ -180,6 +196,7 @@ namespace seedui
                     out.push_back(ImVec2(w * 0.5f + rx * cosf(a),
                                          h * 0.5f + rx * sinf(a)));
                 }
+                ApplyMirror(e, w, h, out);
                 return;
             }
 
@@ -215,6 +232,11 @@ namespace seedui
                                          centers[corner][1] + r * sinf(rad)));
                 }
             }
+
+            // Espelhamento H/V (flip estilo CorelDRAW): inverte a geometria
+            // local. O retângulo/elipse são simétricos (não muda visualmente),
+            // mas polígonos/estrelas/linhas realmente espelham.
+            ApplyMirror(e, w, h, out);
         }
 
         // Contorno em coordenadas de projeto (translação + rotação aplicada).

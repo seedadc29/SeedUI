@@ -154,6 +154,35 @@ namespace
               dup2Panel->transformacao.value("y", 0.0f) == 64.0f,
               "repetir o ultimo deslocamento acumula o passo (Ctrl+D x2)");
 
+        // Espelhar (flip CorelDRAW): inverte a posição em torno do centro da
+        // caixa conjunta e alterna o flag de geometria das formas vetoriais.
+        Modo mirrorMode;
+        Element mirrorA = makeElement("mirror_a", "poligono");
+        mirrorA.transformacao = { { "x", 100.0f }, { "y", 100.0f },
+                                  { "largura", 100.0f }, { "altura", 100.0f } };
+        Element mirrorB = makeElement("mirror_b", "retangulo");
+        mirrorB.transformacao = { { "x", 300.0f }, { "y", 100.0f },
+                                  { "largura", 100.0f }, { "altura", 100.0f } };
+        mirrorMode.raiz.push_back(std::move(mirrorA));
+        mirrorMode.raiz.push_back(std::move(mirrorB));
+        Project::EspelharElementos(mirrorMode, { "mirror_a", "mirror_b" }, true);
+        Element* mA = Project::ResolverId(mirrorMode, "mirror_a");
+        Element* mB = Project::ResolverId(mirrorMode, "mirror_b");
+        // Centro X do conjunto = 250; A (100..200) vai para 300..400;
+        // B (300..400) vai para 100..200.
+        check(mA && mA->transformacao.value("x", 0.0f) == 300.0f &&
+              mA->transformacao.value("espelhado_h", 0.0f) == 1.0f,
+              "espelhar H inverte posicao em torno do centro do grupo");
+        check(mB && mB->transformacao.value("x", 0.0f) == 100.0f,
+              "espelhar H espelha todos os selecionados");
+        check(mA && mA->transformacao.value("espelhado_v", 0.0f) == 0.0f,
+              "espelhar H nao altera o flag vertical");
+        Project::EspelharElementos(mirrorMode, { "mirror_a" }, false);
+        Element* mA2 = Project::ResolverId(mirrorMode, "mirror_a");
+        check(mA2 && mA2->transformacao.value("y", 0.0f) == 100.0f &&
+              mA2->transformacao.value("espelhado_v", 0.0f) == 1.0f,
+              "espelhar elemento unico mantem posicao (espelha no lugar)");
+
         Modo groupMode;
         Element groupA = makeElement("painel_a", "painel");
         groupA.transformacao = { { "x", 10.0f }, { "y", 20.0f },

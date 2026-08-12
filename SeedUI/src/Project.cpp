@@ -499,6 +499,67 @@ namespace seedui
         return pastedRootIds;
     }
 
+    namespace
+    {
+        // Inverte a posição do elemento (e de toda a subárvore) em torno do
+        // eixo central, alternando o flag de espelhamento das formas.
+        void FlipElementTree(Element& element, float center, bool horizontal)
+        {
+            const float x = element.transformacao.value("x", 0.0f);
+            const float y = element.transformacao.value("y", 0.0f);
+            const float w = element.transformacao.value("largura", 160.0f);
+            const float h = element.transformacao.value("altura", 32.0f);
+            if (horizontal)
+                element.transformacao["x"] = 2.0f * center - (x + w);
+            else
+                element.transformacao["y"] = 2.0f * center - (y + h);
+            if (element.tipo == "retangulo" || element.tipo == "painel" ||
+                element.tipo == "elipse" || element.tipo == "poligono" ||
+                element.tipo == "linha")
+            {
+                const char* key = horizontal ? "espelhado_h" : "espelhado_v";
+                element.transformacao[key] =
+                    element.transformacao.value(key, 0.0f) > 0.5f ? 0.0f : 1.0f;
+            }
+            for (Element& child : element.filhos)
+                FlipElementTree(child, center, horizontal);
+        }
+    }
+
+    void Project::EspelharElementos(Modo& modo,
+                                    const std::vector<std::string>& ids,
+                                    bool horizontal)
+    {
+        // Centro da caixa conjunta da seleção (eixo de espelhamento).
+        float left = FLT_MAX, top = FLT_MAX, right = -FLT_MAX, bottom = -FLT_MAX;
+        bool found = false;
+        for (Element& element : modo.raiz)
+        {
+            if (std::find(ids.begin(), ids.end(), element.id) == ids.end())
+                continue;
+            const float x = element.transformacao.value("x", 0.0f);
+            const float y = element.transformacao.value("y", 0.0f);
+            const float w = element.transformacao.value("largura", 160.0f);
+            const float h = element.transformacao.value("altura", 32.0f);
+            left = std::min(left, x);
+            top = std::min(top, y);
+            right = std::max(right, x + w);
+            bottom = std::max(bottom, y + h);
+            found = true;
+        }
+        if (!found) return;
+        const float center = horizontal ? (left + right) * 0.5f
+                                        : (top + bottom) * 0.5f;
+
+        // Aplica recursivamente: inverte a posição em torno do centro e
+        // alterna o flag de geometria nas formas vetoriais.
+        for (Element& element : modo.raiz)
+        {
+            if (std::find(ids.begin(), ids.end(), element.id) != ids.end())
+                FlipElementTree(element, center, horizontal);
+        }
+    }
+
     std::string Project::AgruparElementos(
         Modo& modo, const std::vector<std::string>& ids)
     {

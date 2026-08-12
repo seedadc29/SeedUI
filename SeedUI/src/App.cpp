@@ -915,6 +915,33 @@ namespace seedui
         mStatusMsgUntil = GetTime() + 4.0;
     }
 
+    void App::EspelharSelecao(bool horizontal)
+    {
+        if (!PossuiModoAtivo())
+        {
+            mStatusMsg = "Nenhum modo ativo para espelhar";
+            mStatusMsgUntil = GetTime() + 4.0;
+            return;
+        }
+        std::vector<std::string> ids = mSelectedElementIds;
+        if (!mSelectedElementId.empty() &&
+            std::find(ids.begin(), ids.end(), mSelectedElementId) == ids.end())
+            ids.push_back(mSelectedElementId);
+        if (ids.empty())
+        {
+            mStatusMsg = "Selecione um elemento para espelhar";
+            mStatusMsgUntil = GetTime() + 4.0;
+            return;
+        }
+        Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+        Project::EspelharElementos(mode, ids, horizontal);
+        mProjectDirty = true;
+        CapturarHistorico();
+        mStatusMsg = horizontal ? "Espelhado horizontalmente"
+                                : "Espelhado verticalmente";
+        mStatusMsgUntil = GetTime() + 4.0;
+    }
+
     void App::ApagarElementosSelecionados()
     {
         if (!PossuiModoAtivo()) return;
@@ -3504,6 +3531,18 @@ namespace seedui
             if (ImGui::MenuItem("Desagrupar", "Ctrl+Shift+G", false, canUngroup))
                 DesagruparElementosSelecionados();
             ImGui::Separator();
+            const bool canMirror = PossuiModoAtivo() &&
+                                   (!mSelectedElementId.empty() ||
+                                    !mSelectedElementIds.empty());
+            if (ImGui::BeginMenu("Espelhar", canMirror))
+            {
+                if (ImGui::MenuItem("Horizontalmente"))
+                    EspelharSelecao(true);
+                if (ImGui::MenuItem("Verticalmente"))
+                    EspelharSelecao(false);
+                ImGui::EndMenu();
+            }
+            ImGui::Separator();
             const bool canResetPivot = !mSelectedElementId.empty() &&
                                        PossuiModoAtivo();
             if (ImGui::MenuItem("Redefinir ponto de origem", nullptr, false,
@@ -3737,6 +3776,16 @@ namespace seedui
                 AlinharElementosSelecionados(operation);
         }
         if (!canAlign) ImGui::EndDisabled();
+
+        separator();
+        const bool canMirror = canDelete;
+        if (!canMirror) ImGui::BeginDisabled();
+        if (IconButton(IconId::FlipH, "Objeto · Espelhar horizontalmente", button))
+            EspelharSelecao(true);
+        ImGui::SameLine();
+        if (IconButton(IconId::FlipV, "Objeto · Espelhar verticalmente", button))
+            EspelharSelecao(false);
+        if (!canMirror) ImGui::EndDisabled();
         ImGui::SameLine(0.0f, 8.0f);
         centerRow(ImGui::GetFrameHeight());
         ImGui::SetNextItemWidth(54.0f);

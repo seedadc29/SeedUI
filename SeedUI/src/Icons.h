@@ -58,6 +58,8 @@ namespace seedui
         Ellipse,
         Polygon,
         Contour,
+        FlipH,
+        FlipV,
         Transparency,
         CornersOut,
         Count,

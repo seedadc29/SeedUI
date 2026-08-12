@@ -104,6 +104,11 @@ namespace seedui
             float dx, float dy);
         static std::string AgruparElementos(Modo& modo,
                                              const std::vector<std::string>& ids);
+        // Espelha a seleção (horizontal ou vertical) em torno do centro da
+        // caixa conjunta, alternando o flag de geometria (espelhado_h/v).
+        static void EspelharElementos(Modo& modo,
+                                      const std::vector<std::string>& ids,
+                                      bool horizontal);
         // Desagrupa: filhos sobem para o nível do grupo preservando posição.
         static bool DesagruparElementos(Modo& modo, const std::string& groupId);
         // Clona um elemento (com descendentes) com IDs novos, logo após o

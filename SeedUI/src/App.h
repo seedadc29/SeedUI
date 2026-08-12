@@ -67,6 +67,7 @@ namespace seedui
         void CopiarElementosSelecionados();
         void ColarElementosCopiados();
         void DuplicarSelecao();
+        void EspelharSelecao(bool horizontal);
         void ApagarElementosSelecionados();
         void AlternarModoAnotacao();
         void AlinharElementosSelecionados(int operacao);
