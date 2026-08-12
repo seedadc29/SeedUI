@@ -1995,8 +1995,8 @@ namespace seedui
                     guideRects.reserve(mCanvasGroupStarts.size());
                     for (const CanvasTransformStart& s : mCanvasGroupStarts)
                         guideRects.push_back({ s.x, s.y, s.w, s.h });
-                    const float guideTol = 10.0f / mCanvasZoom;
-                    const float spacingTol = 12.0f / std::max(0.5f, mCanvasZoom);
+                    const float guideTol = SnapTol(10.0f);
+                    const float spacingTol = SnapTol(12.0f);
                     SmartGuides::Apply(mode, guideRects, mSelectedElementIds,
                                        dx, dy, (float)mProject.telaBaseLargura,
                                        (float)mProject.telaBaseAltura,
@@ -2340,7 +2340,7 @@ namespace seedui
                         left, right, top, bottom,
                         resizeLeft, resizeRight, resizeTop, resizeBottom,
                         mGuidesV, mGuidesH,
-                        12.0f / std::max(0.5f, mCanvasZoom), mirrored,
+                        SnapTol(12.0f), mirrored,
                         mCanvasDragPivotX, mCanvasDragPivotY,
                         mGuideFixedSnapX, mGuideFixedSnapY);
                     // Moldura primeiro de tudo no ajuste (roda por último
@@ -2350,7 +2350,7 @@ namespace seedui
                         resizeLeft, resizeRight, resizeTop, resizeBottom,
                         (float)mProject.telaBaseLargura,
                         (float)mProject.telaBaseAltura,
-                        8.0f * 12.0f / std::max(0.5f, mCanvasZoom), mirrored,
+                        8.0f * SnapTol(12.0f), mirrored,
                         mCanvasDragPivotX, mCanvasDragPivotY,
                         mGuideSnapX, mGuideSnapY);
                 }
@@ -2475,7 +2475,7 @@ namespace seedui
                             newLeft, newRight, newTop, newBottom,
                             resizeLeft, resizeRight, resizeTop, resizeBottom,
                             mGuidesV, mGuidesH,
-                            12.0f / std::max(0.5f, mCanvasZoom), mirrored,
+                            SnapTol(12.0f), mirrored,
                             groupLeft + groupW * 0.5f,
                             groupTop + groupH * 0.5f,
                             mGuideFixedSnapX, mGuideFixedSnapY);
@@ -2484,7 +2484,7 @@ namespace seedui
                             resizeLeft, resizeRight, resizeTop, resizeBottom,
                             (float)mProject.telaBaseLargura,
                             (float)mProject.telaBaseAltura,
-                            8.0f * 12.0f / std::max(0.5f, mCanvasZoom),
+                            8.0f * SnapTol(12.0f),
                             mirrored,
                             groupLeft + groupW * 0.5f,
                             groupTop + groupH * 0.5f,
@@ -2532,7 +2532,7 @@ namespace seedui
                             left, right, top, bottom,
                             resizeLeft, resizeRight, resizeTop, resizeBottom,
                             mGuidesV, mGuidesH,
-                            12.0f / std::max(0.5f, mCanvasZoom), false,
+                            SnapTol(12.0f), false,
                             0.0f, 0.0f,
                             mGuideFixedSnapX, mGuideFixedSnapY);
                     }
@@ -3368,6 +3368,21 @@ namespace seedui
                 mGridVisible = !mGridVisible;
             if (ImGui::MenuItem("Snap de 8 unidades", nullptr, mSnapEnabled))
                 mSnapEnabled = !mSnapEnabled;
+            if (ImGui::BeginMenu("Força do snap"))
+            {
+                ImGui::TextUnformatted("Ímã de encaixe");
+                float value = mSnapStrength;
+                if (ImGui::SliderFloat("##snap_str_menu", &value, 0.25f, 3.0f, "%.2fx"))
+                    mSnapStrength = value;
+                ImGui::TextUnformatted(mSnapStrength < 0.75f
+                    ? "Fino · só gruda bem pertinho"
+                    : (mSnapStrength > 1.5f
+                        ? "Forte · gruda de longe"
+                        : "Médio · equilíbrio padrão"));
+                if (ImGui::MenuItem("Restaurar padrão (1x)"))
+                    mSnapStrength = 1.0f;
+                ImGui::EndMenu();
+            }
             if (ImGui::MenuItem("Zoom no cursor", nullptr, mZoomToMouse))
                 mZoomToMouse = !mZoomToMouse;
             ImGui::Separator();
@@ -3709,6 +3724,16 @@ namespace seedui
             mSnapEnabled = !mSnapEnabled;
         if (snapWasOn) ImGui::PopStyleColor();
         ImGui::SameLine();
+        // Força do snap (ímã): abre o popup de controle. Ícone Magnifier
+        // (lupa) sem colisão de ID (PushID por ícone).
+        if (IconButton(IconId::Magnifier,
+                       mSnapStrength < 0.75f ? "Força do snap: FINO · clique para ajustar"
+                       : (mSnapStrength > 1.5f ? "Força do snap: FORTE · clique para ajustar"
+                                               : "Força do snap: MÉDIO · clique para ajustar"),
+                       button))
+            ImGui::OpenPopup("##snap_strength");
+        DrawSnapStrengthPopup();
+        ImGui::SameLine();
         const bool rulersWereOn = mRulersVisible;
         if (rulersWereOn) ImGui::PushStyleColor(ImGuiCol_Button, Theme::Hex(0x4f8cff, 0.30f));
         if (IconButton(IconId::List, mRulersVisible ? "Réguas visíveis · clique para ocultar"
@@ -4025,7 +4050,7 @@ namespace seedui
                     mGuidesH.push_back(SmartGuides::SnapGuideToShapes(
                         py, true, mode, (float)mProject.telaBaseLargura,
                         (float)mProject.telaBaseAltura,
-                        10.0f / std::max(0.5f, mCanvasZoom), snapped));
+                        SnapTol(10.0f), snapped));
                     mGuideSnapEngaged = snapped;
                     mGuideDragKind = 3;
                     mGuideDragIndex = (int)mGuidesH.size() - 1;
@@ -4037,7 +4062,7 @@ namespace seedui
                     mGuidesV.push_back(SmartGuides::SnapGuideToShapes(
                         px, false, mode, (float)mProject.telaBaseLargura,
                         (float)mProject.telaBaseAltura,
-                        10.0f / std::max(0.5f, mCanvasZoom), snapped));
+                        SnapTol(10.0f), snapped));
                     mGuideSnapEngaged = snapped;
                     mGuideDragKind = 4;
                     mGuideDragIndex = (int)mGuidesV.size() - 1;
@@ -4090,7 +4115,7 @@ namespace seedui
                     mGuidesH[mGuideDragIndex] = SmartGuides::SnapGuideToShapes(
                         py, true, mode, (float)mProject.telaBaseLargura,
                         (float)mProject.telaBaseAltura,
-                        10.0f / std::max(0.5f, mCanvasZoom), snapped);
+                        SnapTol(10.0f), snapped);
                     mGuideSnapEngaged = snapped;
                 }
                 else if (mGuideDragKind == 4 && mGuideDragIndex >= 0 &&
@@ -4101,7 +4126,7 @@ namespace seedui
                     mGuidesV[mGuideDragIndex] = SmartGuides::SnapGuideToShapes(
                         px, false, mode, (float)mProject.telaBaseLargura,
                         (float)mProject.telaBaseAltura,
-                        10.0f / std::max(0.5f, mCanvasZoom), snapped);
+                        SnapTol(10.0f), snapped);
                     mGuideSnapEngaged = snapped;
                 }
                 ImGui::SetMouseCursor(mGuideDragKind == 3
@@ -4157,6 +4182,39 @@ namespace seedui
         }
     }
 
+    float App::SnapTol(float basePx) const
+    {
+        // Tolerância de snap em unidades do projeto: `basePx` (px de tela no
+        // zoom 1) × a FORÇA configurada (mSnapStrength), normalizada pelo
+        // zoom — o encaixe ocupa sempre a mesma área de tela, qualquer que
+        // seja o zoom. Força 1.0 = comportamento padrão; <1 = mais difícil
+        // de engatar (preciso); >1 = ímã mais forte (gruda de longe).
+        return basePx * mSnapStrength / std::max(0.5f, mCanvasZoom);
+    }
+
+    void App::DrawSnapStrengthPopup()
+    {
+        // Popup de controle da FORÇA do snap: um ímã mais forte faz os
+        // objetos grudarem de mais longe; mais fraco exige precisão.
+        if (ImGui::BeginPopup("##snap_strength"))
+        {
+            ImGui::TextUnformatted("Força do snap (ímã)");
+            ImGui::SetNextItemWidth(220.0f);
+            float value = mSnapStrength;
+            if (ImGui::SliderFloat("##snap_str", &value, 0.25f, 3.0f, "%.2fx"))
+                mSnapStrength = value;
+            ImGui::TextUnformatted(mSnapStrength < 0.75f
+                ? "Fino · só gruda bem pertinho"
+                : (mSnapStrength > 1.5f
+                    ? "Forte · gruda de longe"
+                    : "Médio · equilíbrio padrão"));
+            ImGui::Separator();
+            if (ImGui::MenuItem("Restaurar padrão (1x)"))
+                mSnapStrength = 1.0f;
+            ImGui::EndPopup();
+        }
+    }
+
     void App::SnapGuias(float& dx, float& dy,
                         const std::vector<SmartGuides::Rect>& starts)
     {
@@ -4173,7 +4231,7 @@ namespace seedui
             selRight = std::max(selRight, s.x + s.w + dx);
             selBottom = std::max(selBottom, s.y + s.h + dy);
         }
-        const float tol = 12.0f / std::max(0.5f, mCanvasZoom);
+        const float tol = SnapTol(12.0f);
 
         mGuideFixedSnapX = -1.0f;
         mGuideFixedSnapY = -1.0f;

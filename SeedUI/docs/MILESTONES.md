@@ -300,6 +300,11 @@ Primeira leva da especificação "interface CorelDRAW" (commit 72b9701 antes):
   bordas/centro da tela-base com força 8x (mesma do mover), vencendo as
   guias fixas em empate; vale para espelhado (Shift) e caixa conjunta de
   grupos, com linha magenta de feedback. 5 testes novos (95 PASS).
+- **Força do snap ajustável** (`mSnapStrength` + `App::SnapTol`): controle
+  de 0.25x a 3x (botão lupa na action bar / Exibir → Força do snap) que
+  multiplica TODAS as tolerâncias de encaixe — guias inteligentes,
+  moldura, guias das réguas, arestas no resize e espaçamento — sem mudar
+  o valor final exato do encaixe.
 - Abas de documentos NÃO implementadas: o projeto usa telas/modos com
   seletores próprios (regra "não recriar o que existe"); telas sem UI de
   criação ficam para M10.
