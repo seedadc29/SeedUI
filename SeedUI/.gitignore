@@ -1,0 +1,7 @@
+# Saída de teste (descomente o git add -f quando quiser commitar)
+m04-self-test.txt
+
+# Build
+Build/
+.vs/
+*.user
