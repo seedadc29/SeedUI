@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Development|x64">
+      <Configuration>Development</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{C4D29E17-6B8F-4A3D-9E51-8F2B7C1D5A90}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>SeedNotas</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>$(DefaultPlatformToolset)</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Development|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>$(DefaultPlatformToolset)</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>$(DefaultPlatformToolset)</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Development|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>$(ProjectDir)Build\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)Build\Intermediate\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Development|x64'">
+    <OutDir>$(ProjectDir)Build\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)Build\Intermediate\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>$(ProjectDir)Build\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)Build\Intermediate\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Label="Vcpkg" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;_DEBUG;PLATFORM_DESKTOP;GRAPHICS_API_OPENGL_33;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)src;$(ProjectDir)..\SeedUI\src;$(ProjectDir)..\SeedUI\ThirdParty\nanosvg;$(ProjectDir)..\SeedUI\ThirdParty\json;$(ProjectDir)..\SeedUI\ThirdParty\raylib\src;$(ProjectDir)..\SeedUI\ThirdParty\raylib\src\external\glfw\include;$(ProjectDir)..\SeedUI\ThirdParty\imgui;$(ProjectDir)..\SeedUI\ThirdParty\imgui\backends;$(ProjectDir)thirdparty\winrt;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winmm.lib;shell32.lib;opengl32.lib;advapi32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;winspool.lib;windowsapp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Development|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;PLATFORM_DESKTOP;GRAPHICS_API_OPENGL_33;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)src;$(ProjectDir)..\SeedUI\src;$(ProjectDir)..\SeedUI\ThirdParty\nanosvg;$(ProjectDir)..\SeedUI\ThirdParty\json;$(ProjectDir)..\SeedUI\ThirdParty\raylib\src;$(ProjectDir)..\SeedUI\ThirdParty\raylib\src\external\glfw\include;$(ProjectDir)..\SeedUI\ThirdParty\imgui;$(ProjectDir)..\SeedUI\ThirdParty\imgui\backends;$(ProjectDir)thirdparty\winrt;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winmm.lib;shell32.lib;opengl32.lib;advapi32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;winspool.lib;windowsapp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;NDEBUG;PLATFORM_DESKTOP;GRAPHICS_API_OPENGL_33;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)src;$(ProjectDir)..\SeedUI\src;$(ProjectDir)..\SeedUI\ThirdParty\nanosvg;$(ProjectDir)..\SeedUI\ThirdParty\json;$(ProjectDir)..\SeedUI\ThirdParty\raylib\src;$(ProjectDir)..\SeedUI\ThirdParty\raylib\src\external\glfw\include;$(ProjectDir)..\SeedUI\ThirdParty\imgui;$(ProjectDir)..\SeedUI\ThirdParty\imgui\backends;$(ProjectDir)thirdparty\winrt;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <DebugInformationFormat>None</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winmm.lib;shell32.lib;opengl32.lib;advapi32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;winspool.lib;windowsapp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="$(ProjectDir)src\AnnotIcons.cpp" />
+    <ClCompile Include="$(ProjectDir)src\SeedNotasMain.cpp" />
+    <ClCompile Include="$(ProjectDir)src\ScreenCapture.cpp" />
+    <ClCompile Include="$(ProjectDir)src\SaveDialog.cpp" />
+    <ClCompile Include="$(ProjectDir)..\SeedUI\src\Annotations.cpp" />
+    <ClCompile Include="$(ProjectDir)..\SeedUI\src\Theme.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="$(ProjectDir)..\SeedUI\ThirdParty\raylib\src\raudio.c" />
+    <ClCompile Include="$(ProjectDir)..\SeedUI\ThirdParty\raylib\src\rcore.c" />
+    <ClCompile Include="$(ProjectDir)..\SeedUI\ThirdParty\raylib\src\rglfw.c" />
+    <ClCompile Include="$(ProjectDir)..\SeedUI\ThirdParty\raylib\src\rmodels.c" />
+    <ClCompile Include="$(ProjectDir)..\SeedUI\ThirdParty\raylib\src\rshapes.c" />
+    <ClCompile Include="$(ProjectDir)..\SeedUI\ThirdParty\raylib\src\rtext.c" />
+    <ClCompile Include="$(ProjectDir)..\SeedUI\ThirdParty\raylib\src\rtextures.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="$(ProjectDir)..\SeedUI\ThirdParty\imgui\imgui.cpp" />
+    <ClCompile Include="$(ProjectDir)..\SeedUI\ThirdParty\imgui\imgui_draw.cpp" />
+    <ClCompile Include="$(ProjectDir)..\SeedUI\ThirdParty\imgui\imgui_tables.cpp" />
+    <ClCompile Include="$(ProjectDir)..\SeedUI\ThirdParty\imgui\imgui_widgets.cpp" />
+    <ClCompile Include="$(ProjectDir)..\SeedUI\ThirdParty\imgui\backends\imgui_impl_glfw.cpp" />
+    <ClCompile Include="$(ProjectDir)..\SeedUI\ThirdParty\imgui\backends\imgui_impl_opengl3.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="$(ProjectDir)src\ScreenCapture.h" />
+    <ClInclude Include="$(ProjectDir)src\SaveDialog.h" />
+    <ClInclude Include="$(ProjectDir)..\SeedUI\src\Annotations.h" />
+    <ClInclude Include="$(ProjectDir)..\SeedUI\src\Theme.h" />
+    <ClInclude Include="$(ProjectDir)..\SeedUI\ThirdParty\raylib\src\raylib.h" />
+    <ClInclude Include="$(ProjectDir)..\SeedUI\ThirdParty\raylib\src\raymath.h" />
+    <ClInclude Include="$(ProjectDir)..\SeedUI\ThirdParty\raylib\src\rlgl.h" />
+    <ClInclude Include="$(ProjectDir)..\SeedUI\ThirdParty\raylib\src\config.h" />
+    <ClInclude Include="$(ProjectDir)..\SeedUI\ThirdParty\imgui\imgui.h" />
+  </ItemGroup>
+  <ItemDefinitionGroup>
+    <PostBuildEvent>
+      <Command>xcopy /E /Y /I "$(ProjectDir)..\SeedUI\assets\fonts" "$(OutDir)assets\fonts"</Command>
+      <Message>Copiando fontes do SeedUI para o SeedNotas...</Message>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>
