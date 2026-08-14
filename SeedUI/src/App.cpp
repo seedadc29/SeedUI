@@ -929,175 +929,6 @@ namespace seedui
         mStatusMsgUntil = GetTime() + 4.0;
     }
 
-    void App::RepetirUltimaAcao()
-    {
-        if (!PossuiModoAtivo())
-        {
-            mStatusMsg = "Nenhum modo ativo para repetir ação";
-            mStatusMsgUntil = GetTime() + 4.0;
-            return;
-        }
-
-        std::vector<std::string> ids = mSelectedElementIds;
-        if (!mSelectedElementId.empty() &&
-            std::find(ids.begin(), ids.end(), mSelectedElementId) == ids.end())
-            ids.push_back(mSelectedElementId);
-        if (ids.empty())
-        {
-            mStatusMsg = "Selecione um elemento para aplicar a repetição (Ctrl+R)";
-            mStatusMsgUntil = GetTime() + 4.0;
-            return;
-        }
-
-        Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
-        bool changed = false;
-
-        switch (mLastAction.kind)
-        {
-            case ActionKind::FillColor:
-            {
-                bool blocked = false;
-                int count = ApplyStyleToSelection(mode, ids, "cor_fundo", mLastAction.fillColor, blocked);
-                if (count > 0)
-                {
-                    changed = true;
-                    mStatusMsg = "Cor de preenchimento repetida: " + mLastAction.fillColor;
-                }
-                break;
-            }
-            case ActionKind::BorderColor:
-            {
-                bool blocked = false;
-                int count = ApplyStyleToSelection(mode, ids, "cor_borda", mLastAction.borderColor, blocked);
-                if (count > 0)
-                {
-                    changed = true;
-                    mStatusMsg = "Cor de contorno repetida: " + mLastAction.borderColor;
-                }
-                break;
-            }
-            case ActionKind::BorderWidth:
-            {
-                for (const std::string& id : ids)
-                {
-                    if (Element* el = Project::ResolverId(mode, id))
-                    {
-                        if (el->bloqueado) continue;
-                        el->estilos["espessura_borda"] = mLastAction.borderWidth;
-                        changed = true;
-                    }
-                }
-                if (changed)
-                    mStatusMsg = "Espessura de contorno repetida: " + std::to_string((int)mLastAction.borderWidth) + "px";
-                break;
-            }
-            case ActionKind::Opacity:
-            {
-                for (const std::string& id : ids)
-                {
-                    if (Element* el = Project::ResolverId(mode, id))
-                    {
-                        if (el->bloqueado) continue;
-                        el->estilos["opacidade"] = mLastAction.opacity;
-                        changed = true;
-                    }
-                }
-                if (changed)
-                    mStatusMsg = "Opacidade repetida: " + std::to_string((int)(mLastAction.opacity * 100.0f)) + "%";
-                break;
-            }
-            case ActionKind::CornerRadius:
-            {
-                for (const std::string& id : ids)
-                {
-                    if (Element* el = Project::ResolverId(mode, id))
-                    {
-                        if (el->bloqueado) continue;
-                        SetElementCornerRadius(*el, 10, mLastAction.cornerRadius);
-                        SetElementCornerRadius(*el, 11, mLastAction.cornerRadius);
-                        SetElementCornerRadius(*el, 12, mLastAction.cornerRadius);
-                        SetElementCornerRadius(*el, 13, mLastAction.cornerRadius);
-                        ClampElementCornerRadii(*el);
-                        changed = true;
-                    }
-                }
-                if (changed)
-                    mStatusMsg = "Raio dos cantos repetido: " + std::to_string((int)mLastAction.cornerRadius) + "px";
-                break;
-            }
-            case ActionKind::Rotate:
-            {
-                for (const std::string& id : ids)
-                {
-                    if (Element* el = Project::ResolverId(mode, id))
-                    {
-                        if (el->bloqueado) continue;
-                        const float curRot = Geo::ElementRotation(*el);
-                        el->transformacao["rotacao"] = fmodf(curRot + mLastAction.rotateDelta, 360.0f);
-                        changed = true;
-                    }
-                }
-                if (changed)
-                {
-                    char buf[32];
-                    snprintf(buf, sizeof(buf), "%.1f°", mLastAction.rotateDelta);
-                    mStatusMsg = std::string("Rotação repetida: ") + buf;
-                }
-                break;
-            }
-            case ActionKind::Scale:
-            {
-                for (const std::string& id : ids)
-                {
-                    if (Element* el = Project::ResolverId(mode, id))
-                    {
-                        if (el->bloqueado) continue;
-                        const float w = el->transformacao.value("largura", 160.0f);
-                        const float h = el->transformacao.value("altura", 32.0f);
-                        const float newW = std::max(1.0f, (mLastAction.scaleFactorX > 0.001f) ? (w * mLastAction.scaleFactorX) : (w + mLastAction.deltaW));
-                        const float newH = std::max(1.0f, (mLastAction.scaleFactorY > 0.001f) ? (h * mLastAction.scaleFactorY) : (h + mLastAction.deltaH));
-                        el->transformacao["largura"] = newW;
-                        el->transformacao["altura"] = newH;
-                        ClampElementCornerRadii(*el);
-                        changed = true;
-                    }
-                }
-                if (changed)
-                    mStatusMsg = "Redimensionamento repetido";
-                break;
-            }
-            case ActionKind::Move:
-            {
-                for (const std::string& id : ids)
-                {
-                    if (Element* el = Project::ResolverId(mode, id))
-                    {
-                        if (el->bloqueado) continue;
-                        ApplyPositionDelta(*el, mLastAction.moveDX, mLastAction.moveDY);
-                        changed = true;
-                    }
-                }
-                if (changed)
-                    mStatusMsg = "Deslocamento repetido";
-                break;
-            }
-            default:
-                mStatusMsg = "Nenhuma ação anterior registrada para repetir (Ctrl+R)";
-                break;
-        }
-
-        if (changed)
-        {
-            mProjectDirty = true;
-            CapturarHistorico();
-            mStatusMsgUntil = GetTime() + 4.0;
-        }
-        else
-        {
-            mStatusMsgUntil = GetTime() + 3.0;
-        }
-    }
-
     void App::EspelharSelecao(bool horizontal)
     {
         if (!PossuiModoAtivo())
@@ -3612,7 +3443,6 @@ namespace seedui
                 float deltaDeg = (angle - startAngle) * (180.0f / 3.14159265f);
                 if (ImGui::GetIO().KeyShift)
                     deltaDeg = roundf(deltaDeg / 15.0f) * 15.0f;
-                mCanvasLastRotDelta = deltaDeg;
                 const float deltaRad = deltaDeg * 0.017453292519943295f;
                 const float cosA = cosf(deltaRad);
                 const float sinA = sinf(deltaRad);
@@ -4089,22 +3919,6 @@ namespace seedui
             {
                 if (mCanvasDragMode == 1)
                 {
-                    if (!mCanvasGroupStarts.empty())
-                    {
-                        if (Element* el = Project::ResolverId(mode, mCanvasGroupStarts.front().id))
-                        {
-                            const float moveDX = el->transformacao.value("x", 0.0f) - mCanvasGroupStarts.front().x;
-                            const float moveDY = el->transformacao.value("y", 0.0f) - mCanvasGroupStarts.front().y;
-                            if (fabsf(moveDX) > 0.001f || fabsf(moveDY) > 0.001f)
-                            {
-                                mDuplicateDX = moveDX;
-                                mDuplicateDY = moveDY;
-                                mLastAction.kind = ActionKind::Move;
-                                mLastAction.moveDX = moveDX;
-                                mLastAction.moveDY = moveDY;
-                            }
-                        }
-                    }
                     if (mCloneForked)
                     {
                         mStatusMsg = "Clone posicionado — original voltou à posição inicial";
@@ -4120,31 +3934,14 @@ namespace seedui
                 else if (mCanvasDragMode == 14)
                 {
                     mStatusMsg = "Rotação ajustada";
-                    mLastAction.kind = ActionKind::Rotate;
-                    mLastAction.rotateDelta = mCanvasLastRotDelta;
                 }
                 else if (mCanvasDragMode >= 10 && mCanvasDragMode <= 13)
                 {
                     mStatusMsg = "Arredondamento da quina alterado";
-                    if (Element* el = Project::ResolverId(mode, mSelectedElementId))
-                    {
-                        mLastAction.kind = ActionKind::CornerRadius;
-                        mLastAction.cornerRadius = ElementCornerRadius(*el, mCanvasDragMode);
-                    }
                 }
                 else if (mCanvasDragMode >= 2 && mCanvasDragMode <= 9)
                 {
                     mStatusMsg = "Elemento redimensionado";
-                    if (Element* el = Project::ResolverId(mode, mSelectedElementId))
-                    {
-                        const float curW = el->transformacao.value("largura", 160.0f);
-                        const float curH = el->transformacao.value("altura", 32.0f);
-                        mLastAction.kind = ActionKind::Scale;
-                        mLastAction.scaleFactorX = curW / std::max(0.01f, mCanvasDragW);
-                        mLastAction.scaleFactorY = curH / std::max(0.01f, mCanvasDragH);
-                        mLastAction.deltaW = curW - mCanvasDragW;
-                        mLastAction.deltaH = curH - mCanvasDragH;
-                    }
                 }
                 mStatusMsgUntil = GetTime() + 4.0;
                 TraceLog(LOG_INFO, "M05 selecao: transformacao alterada (%s)",
@@ -4479,11 +4276,6 @@ namespace seedui
                     }
                     if (changed)
                     {
-                        mDuplicateDX = mx;
-                        mDuplicateDY = my;
-                        mLastAction.kind = ActionKind::Move;
-                        mLastAction.moveDX = mx;
-                        mLastAction.moveDY = my;
                         mProjectDirty = true;
                         if (PossuiModoAtivo())
                             RebuildGroupBounds(mProject.telas[mTelaAtiva].modos[mModoAtivo]);
@@ -4527,11 +4319,6 @@ namespace seedui
             !ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_D, false))
         {
             DuplicarSelecao();
-        }
-        if (!ImGui::GetIO().WantTextInput && ImGui::GetIO().KeyCtrl &&
-            !ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_R, false))
-        {
-            RepetirUltimaAcao();
         }
         if (!ImGui::GetIO().WantTextInput && ImGui::GetIO().KeyCtrl &&
             !ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_A, false))
@@ -5087,7 +4874,6 @@ namespace seedui
                                 !mSelectedElementIds.empty();
             if (!PossuiModoAtivo() || !hasSel) ImGui::BeginDisabled();
             if (ImGui::MenuItem("Duplicar", "Ctrl+D")) DuplicarSelecao();
-            if (ImGui::MenuItem("Repetir última ação", "Ctrl+R")) RepetirUltimaAcao();
             if (!PossuiModoAtivo() || !hasSel) ImGui::EndDisabled();
             if (ImGui::MenuItem("Selecionar tudo", "Ctrl+A", false, PossuiModoAtivo()))
                 SelecionarTodos();
@@ -5691,13 +5477,7 @@ namespace seedui
         float v = hasSel ? PixelsToUnit(bx) : 0.0f;
         if (field("##px", &v, single) && primary)
         {
-            const float newX = v * UnitToPixels();
-            const float oldX = primary->transformacao.value("x", 0.0f);
-            mLastAction.kind = ActionKind::Move;
-            mLastAction.moveDX = newX - oldX;
-            mLastAction.moveDY = 0.0f;
-            mDuplicateDX = mLastAction.moveDX;
-            primary->transformacao["x"] = newX;
+            primary->transformacao["x"] = v * UnitToPixels();
             propertyEdited = true;
         }
 
@@ -5707,13 +5487,7 @@ namespace seedui
         v = hasSel ? PixelsToUnit(by) : 0.0f;
         if (field("##py", &v, single) && primary)
         {
-            const float newY = v * UnitToPixels();
-            const float oldY = primary->transformacao.value("y", 0.0f);
-            mLastAction.kind = ActionKind::Move;
-            mLastAction.moveDX = 0.0f;
-            mLastAction.moveDY = newY - oldY;
-            mDuplicateDY = mLastAction.moveDY;
-            primary->transformacao["y"] = newY;
+            primary->transformacao["y"] = v * UnitToPixels();
             propertyEdited = true;
         }
 
@@ -5723,14 +5497,7 @@ namespace seedui
         v = hasSel ? PixelsToUnit(bw) : 0.0f;
         if (field("##pw", &v, single) && primary)
         {
-            const float newW = std::max(1.0f, v * UnitToPixels());
-            const float oldW = primary->transformacao.value("largura", 160.0f);
-            mLastAction.kind = ActionKind::Scale;
-            mLastAction.scaleFactorX = newW / std::max(1.0f, oldW);
-            mLastAction.scaleFactorY = 1.0f;
-            mLastAction.deltaW = newW - oldW;
-            mLastAction.deltaH = 0.0f;
-            primary->transformacao["largura"] = newW;
+            primary->transformacao["largura"] = std::max(1.0f, v * UnitToPixels());
             ClampElementCornerRadii(*primary);
             propertyEdited = true;
         }
@@ -5741,14 +5508,7 @@ namespace seedui
         v = hasSel ? PixelsToUnit(bh) : 0.0f;
         if (field("##ph", &v, single) && primary)
         {
-            const float newH = std::max(1.0f, v * UnitToPixels());
-            const float oldH = primary->transformacao.value("altura", 32.0f);
-            mLastAction.kind = ActionKind::Scale;
-            mLastAction.scaleFactorX = 1.0f;
-            mLastAction.scaleFactorY = newH / std::max(1.0f, oldH);
-            mLastAction.deltaW = 0.0f;
-            mLastAction.deltaH = newH - oldH;
-            primary->transformacao["altura"] = newH;
+            primary->transformacao["altura"] = std::max(1.0f, v * UnitToPixels());
             ClampElementCornerRadii(*primary);
             propertyEdited = true;
         }
@@ -5759,9 +5519,6 @@ namespace seedui
         v = hasSel ? rot : 0.0f;
         if (field("##prot", &v, single) && primary)
         {
-            const float oldRot = Geo::ElementRotation(*primary);
-            mLastAction.kind = ActionKind::Rotate;
-            mLastAction.rotateDelta = v - oldRot;
             primary->transformacao["rotacao"] = fmodf(v, 360.0f);
             propertyEdited = true;
         }
@@ -6526,8 +6283,6 @@ namespace seedui
                                        0.0f, 32.0f, "%.1f px"))
                 {
                     selected->estilos["espessura_borda"] = outlineWidth;
-                    mLastAction.kind = ActionKind::BorderWidth;
-                    mLastAction.borderWidth = outlineWidth;
                     mProjectDirty = true;
                 }
                 if (ImGui::SliderFloat("Transp. Contorno", &strokeTransparency,
@@ -6541,8 +6296,6 @@ namespace seedui
                 {
                     const float op = 1.0f - transparency / 100.0f;
                     selected->estilos["opacidade"] = op;
-                    mLastAction.kind = ActionKind::Opacity;
-                    mLastAction.opacity = op;
                     mProjectDirty = true;
                 }
 
@@ -6710,8 +6463,6 @@ namespace seedui
                             { "inferior_direita", uniformR },
                             { "inferior_esquerda", uniformR }
                         };
-                        mLastAction.kind = ActionKind::CornerRadius;
-                        mLastAction.cornerRadius = uniformR;
                         mProjectDirty = true;
                     }
                     if (!selected->estilos.is_object())
@@ -7412,16 +7163,6 @@ namespace seedui
                     if (applied)
                     {
                         mProjectDirty = true;
-                        if (border)
-                        {
-                            mLastAction.kind = ActionKind::BorderColor;
-                            mLastAction.borderColor = hex;
-                        }
-                        else
-                        {
-                            mLastAction.kind = ActionKind::FillColor;
-                            mLastAction.fillColor = hex;
-                        }
                         mStatusMsg = std::string(border ? "Contorno: "
                                                         : "Preenchimento: ") +
                                      hex + (applied > 1
@@ -7509,16 +7250,6 @@ namespace seedui
             if (applied)
             {
                 mProjectDirty = true;
-                if (mColorPickerTarget == 1)
-                {
-                    mLastAction.kind = ActionKind::BorderColor;
-                    mLastAction.borderColor = hex;
-                }
-                else if (mColorPickerTarget == 0)
-                {
-                    mLastAction.kind = ActionKind::FillColor;
-                    mLastAction.fillColor = hex;
-                }
             }
         }
         ImGui::End();

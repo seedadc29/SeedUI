@@ -105,39 +105,6 @@ namespace seedui
                        const std::vector<SmartGuides::Rect>& starts);
         float UnitToPixels() const;     // fator da unidade atual -> px
         float PixelsToUnit(float px) const;
-        enum class ActionKind
-        {
-            None,
-            Move,
-            Rotate,
-            Scale,
-            FillColor,
-            BorderColor,
-            BorderWidth,
-            Opacity,
-            CornerRadius
-        };
-
-        struct LastActionData
-        {
-            ActionKind kind = ActionKind::None;
-            float moveDX = 16.0f;
-            float moveDY = 16.0f;
-            float rotateDelta = 0.0f;
-            float scaleFactorX = 1.0f;
-            float scaleFactorY = 1.0f;
-            float deltaW = 0.0f;
-            float deltaH = 0.0f;
-            std::string fillColor;
-            std::string borderColor;
-            float borderWidth = 1.0f;
-            float opacity = 1.0f;
-            float cornerRadius = 0.0f;
-        };
-
-        LastActionData mLastAction;
-        void RepetirUltimaAcao(); // Ctrl+R: repete a última ação aplicada no elemento selecionado
-        float mCanvasLastRotDelta = 0.0f;
 
     private:
 
@@ -236,8 +203,6 @@ namespace seedui
         bool mCanvasDragPastThreshold = false;
         std::vector<Element> mElementClipboard;
         int mElementPasteGeneration = 0;
-        float mDuplicateDX = 16.0f; // deslocamento do Ctrl+D (repete o último)
-        float mDuplicateDY = 16.0f;
         // Ferramenta Medir: medição transitória (não entra no JSON).
         bool mMeasureDragging = false;
         float mMeasureX1 = 0.0f, mMeasureY1 = 0.0f;
