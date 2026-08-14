@@ -2678,13 +2678,16 @@ namespace seedui
             const float ew = element.transformacao.value("largura", 160.0f);
             const float eh = element.transformacao.value("altura", 32.0f);
 
+            float px = 0.0f, py = 0.0f;
+            Geo::ElementPivot(element, px, py);
+            const float rotRad = Geo::DegToRad(Geo::ElementRotation(element));
+            const float sinR = sinf(rotRad), cosR = cosf(rotRad);
+
             // Ponto de ORIGEM (pivô): clicar e arrastar reposiciona o centro
             // do resize espelhado (Shift) e da rotação. Prioridade sobre o
             // mover — o pivô é a "mira" laranja no centro da forma.
             if (element.tipo != "grupo")
             {
-                float px = 0.0f, py = 0.0f;
-                Geo::ElementPivot(element, px, py);
                 const float pivotTol = 9.0f / std::max(0.25f, viewScale);
                 const float pdx = x - px;
                 const float pdy = y - py;
@@ -2694,17 +2697,12 @@ namespace seedui
             // Alça de rotação: fora da caixa, no topo rotacionado (vale
             // também para grupos — o conjunto inteiro rotaciona junto).
             {
-                float px = 0.0f, py = 0.0f;
-                Geo::ElementPivot(element, px, py);
-                const float rotRad = Geo::DegToRad(Geo::ElementRotation(element));
-                const float sinR = sinf(rotRad), cosR = cosf(rotRad);
-                const float halfH = eh * 0.5f;
-                const float topX = px + halfH * sinR;
-                const float topY = py - halfH * cosR;
+                float tmx = ex + ew * 0.5f, tmy = ey;
+                Geo::RotatePoint(tmx, tmy, px, py, rotRad);
                 const float sticker = 18.0f / std::max(0.25f, viewScale);
                 const float rotTol = 10.0f / std::max(0.25f, viewScale);
-                const float hx = topX + sinR * sticker;
-                const float hy = topY - cosR * sticker;
+                const float hx = tmx + sinR * sticker;
+                const float hy = tmy - cosR * sticker;
                 const float rdx = x - hx;
                 const float rdy = y - hy;
                 if (rdx * rdx + rdy * rdy <= rotTol * rotTol) return 14;
@@ -2773,17 +2771,25 @@ namespace seedui
                 return 0;
             }
 
-            if (x < ex - tolerance || x > ex + ew + tolerance ||
-                y < ey - tolerance || y > ey + eh + tolerance)
+            // Transforma o ponto (x, y) para o espaço local não rotacionado do elemento
+            float localX = x;
+            float localY = y;
+            if (rotRad != 0.0f)
+            {
+                Geo::RotatePoint(localX, localY, px, py, -rotRad);
+            }
+
+            if (localX < ex - tolerance || localX > ex + ew + tolerance ||
+                localY < ey - tolerance || localY > ey + eh + tolerance)
                 return 0;
             if (element.tipo == "grupo")
             {
                 // Grupo: alças de tamanho (2-9) como um objeto único — o
                 // resize redimensiona TODOS os filhos em conjunto.
-                const bool left = fabsf(x - ex) <= tolerance;
-                const bool right = fabsf(x - ex - ew) <= tolerance;
-                const bool top = fabsf(y - ey) <= tolerance;
-                const bool bottom = fabsf(y - ey - eh) <= tolerance;
+                const bool left = fabsf(localX - ex) <= tolerance;
+                const bool right = fabsf(localX - ex - ew) <= tolerance;
+                const bool top = fabsf(localY - ey) <= tolerance;
+                const bool bottom = fabsf(localY - ey - eh) <= tolerance;
                 if (left && top) return 6;
                 if (right && top) return 7;
                 if (left && bottom) return 8;
@@ -2820,15 +2826,15 @@ namespace seedui
             };
             for (int index = 0; supportsCorners && index < 4; ++index)
             {
-                const float dx = x - cornerX[index];
-                const float dy = y - cornerY[index];
+                const float dx = localX - cornerX[index];
+                const float dy = localY - cornerY[index];
                 if (dx * dx + dy * dy <= cornerToleranceSq) return 10 + index;
             }
 
-            const bool left = fabsf(x - ex) <= tolerance;
-            const bool right = fabsf(x - ex - ew) <= tolerance;
-            const bool top = fabsf(y - ey) <= tolerance;
-            const bool bottom = fabsf(y - ey - eh) <= tolerance;
+            const bool left = fabsf(localX - ex) <= tolerance;
+            const bool right = fabsf(localX - ex - ew) <= tolerance;
+            const bool top = fabsf(localY - ey) <= tolerance;
+            const bool bottom = fabsf(localY - ey - eh) <= tolerance;
             if (left && top) return 6;
             if (right && top) return 7;
             if (left && bottom) return 8;
@@ -2837,7 +2843,7 @@ namespace seedui
             if (right) return 3;
             if (top) return 4;
             if (bottom) return 5;
-            return x >= ex && x <= ex + ew && y >= ey && y <= ey + eh ? 1 : 0;
+            return localX >= ex && localX <= ex + ew && localY >= ey && localY <= ey + eh ? 1 : 0;
         };
 
         // Hit-testing de alças sobre um retângulo genérico (caixa conjunta da

@@ -1030,29 +1030,45 @@ namespace seedui
                 // Illustrator. As alças continuam na cor cheia.
                 const ImU32 selectionLine = (selection & 0x00FFFFFF) |
                                             (primary ? 0x8F000000u : 0x77000000u);
-                const bool rotated = Geo::ElementRotation(*selected) != 0.0f;
+                const float rot = Geo::ElementRotation(*selected);
+                const bool rotated = rot != 0.0f;
+                const float rotRad = Geo::DegToRad(rot);
 
                 // Caminho (caneta): sem contorno laranja de demarcação — o
                 // caminho é editado pelos nós, como no Illustrator/CorelDRAW.
                 // Somente ferramentas de transformação mostram a caixa.
                 const bool isPath = selected->tipo == "caminho";
 
-                float boxMinX = 0.0f, boxMinY = 0.0f, boxMaxX = 0.0f, boxMaxY = 0.0f;
-                Geo::RotatedAABB(*selected, boxMinX, boxMinY, boxMaxX, boxMaxY);
-                const ImVec2 a(origin.x + boxMinX * viewScale, origin.y + boxMinY * viewScale);
-                const ImVec2 b(origin.x + boxMaxX * viewScale, origin.y + boxMaxY * viewScale);
+                // Ponto de pivô no espaço do documento
+                float px = 0.0f, py = 0.0f;
+                Geo::ElementPivot(*selected, px, py);
+
+                auto docToScreen = [&](float docX, float docY) -> ImVec2
+                {
+                    if (rotated)
+                        Geo::RotatePoint(docX, docY, px, py, rotRad);
+                    return ImVec2(origin.x + docX * viewScale, origin.y + docY * viewScale);
+                };
+
+                const ImVec2 ptTL = docToScreen(x, y);
+                const ImVec2 ptTM = docToScreen(x + w * 0.5f, y);
+                const ImVec2 ptTR = docToScreen(x + w, y);
+                const ImVec2 ptML = docToScreen(x, y + h * 0.5f);
+                const ImVec2 ptMR = docToScreen(x + w, y + h * 0.5f);
+                const ImVec2 ptBL = docToScreen(x, y + h);
+                const ImVec2 ptBM = docToScreen(x + w * 0.5f, y + h);
+                const ImVec2 ptBR = docToScreen(x + w, y + h);
+
                 if (!isPath && rotated)
                 {
-                    // Contorno segue o elemento rotacionado (resolve a caixa
-                    // AABB que ficaria "gorda" nas quinas).
-                    std::vector<ImVec2> outline;
-                    Geo::OutlineScreen(*selected, origin.x, origin.y, viewScale, outline, 64);
-                    if (outline.size() >= 3)
-                        dl->AddPolyline(outline.data(), (int)outline.size(), selectionLine,
-                            1.0f, ImDrawFlags_Closed); // 1px translúcido = fio fino
+                    // Caixa de seleção orientada (rotacionada junto com o objeto)
+                    const ImVec2 quad[4] = { ptTL, ptTR, ptBR, ptBL };
+                    dl->AddPolyline(quad, 4, selectionLine, ImDrawFlags_Closed, 1.0f);
                 }
                 else if (!isPath)
                 {
+                    const ImVec2 a = ptTL;
+                    const ImVec2 b = ptBR;
                     CornerRadii selectionRadii = GetCornerRadii(*selected, w, h);
                     selectionRadii.topLeft *= viewScale;
                     selectionRadii.topRight *= viewScale;
@@ -1139,9 +1155,9 @@ namespace seedui
                 const ImU32 handleFill = IM_COL32(245, 245, 245, 255);
                 const float hs = 4.0f;
                 const ImVec2 points[] = {
-                    a, ImVec2((a.x + b.x) * 0.5f, a.y), ImVec2(b.x, a.y),
-                    ImVec2(a.x, (a.y + b.y) * 0.5f), ImVec2(b.x, (a.y + b.y) * 0.5f),
-                    ImVec2(a.x, b.y), ImVec2((a.x + b.x) * 0.5f, b.y), b
+                    ptTL, ptTM, ptTR,
+                    ptML, ptMR,
+                    ptBL, ptBM, ptBR
                 };
                 for (const ImVec2& point : points)
                 {
@@ -1152,13 +1168,52 @@ namespace seedui
                 }
 
                 if (selected->tipo == "elipse" || selected->tipo == "poligono" || rotated)
+                {
+                    // Alça de rotação para formas rotacionadas
+                    const float cosR = cosf(rotRad);
+                    const float sinR = sinf(rotRad);
+                    float tmx = x + w * 0.5f, tmy = y;
+                    Geo::RotatePoint(tmx, tmy, px, py, rotRad);
+                    const float dirX = sinR;
+                    const float dirY = -cosR;
+                    const float sticker = 18.0f / std::max(0.25f, viewScale);
+                    const float handleDocX = tmx + dirX * sticker;
+                    const float handleDocY = tmy + dirY * sticker;
+                    const float topScreenX = origin.x + tmx * viewScale;
+                    const float topScreenY = origin.y + tmy * viewScale;
+                    const float handleScreenX = origin.x + handleDocX * viewScale;
+                    const float handleScreenY = origin.y + handleDocY * viewScale;
+                    dl->AddLine(ImVec2(topScreenX, topScreenY),
+                                ImVec2(handleScreenX, handleScreenY), selection, 1.5f);
+                    const float hr = 5.0f;
+                    dl->AddCircleFilled(ImVec2(handleScreenX, handleScreenY), hr, selection, 16);
+                    dl->AddCircle(ImVec2(handleScreenX, handleScreenY), hr,
+                                  IM_COL32(255, 255, 255, 210), 16, 1.5f);
+
+                    // Ponto de ORIGEM (pivô)
+                    const float pivotScreenX = origin.x + px * viewScale;
+                    const float pivotScreenY = origin.y + py * viewScale;
+                    const ImU32 pivotCol = ImGui::ColorConvertFloat4ToU32(
+                        Theme::Hex(0xffb347, 1.0f));
+                    const float pr = 3.5f;
+                    dl->AddLine(ImVec2(pivotScreenX - 6.0f, pivotScreenY),
+                                ImVec2(pivotScreenX + 6.0f, pivotScreenY),
+                                pivotCol, 1.0f);
+                    dl->AddLine(ImVec2(pivotScreenX, pivotScreenY - 6.0f),
+                                ImVec2(pivotScreenX, pivotScreenY + 6.0f),
+                                pivotCol, 1.0f);
+                    dl->AddCircleFilled(ImVec2(pivotScreenX, pivotScreenY), pr,
+                                        IM_COL32(20, 20, 20, 255), 16);
+                    dl->AddCircle(ImVec2(pivotScreenX, pivotScreenY), pr,
+                                  pivotCol, 16, 1.5f);
                     continue;
+                }
 
                 // Cada circulo controla somente a quina onde aparece.
                 const CornerRadii projectRadii = GetCornerRadii(*selected, w, h);
                 const float minMarkerInset = 14.0f;
                 const float maxMarkerInset = std::max(6.0f,
-                    std::min((b.x - a.x) * 0.5f, (b.y - a.y) * 0.5f) - 6.0f);
+                    std::min(w * viewScale * 0.5f, h * viewScale * 0.5f) - 6.0f);
                 auto markerInset = [&](float radius)
                 {
                     return std::min(maxMarkerInset,
@@ -1169,10 +1224,10 @@ namespace seedui
                 const float br = markerInset(projectRadii.bottomRight);
                 const float bl = markerInset(projectRadii.bottomLeft);
                 const ImVec2 cornerPoints[] = {
-                    ImVec2(a.x + tl, a.y + tl),
-                    ImVec2(b.x - tr, a.y + tr),
-                    ImVec2(b.x - br, b.y - br),
-                    ImVec2(a.x + bl, b.y - bl),
+                    ImVec2(ptTL.x + tl, ptTL.y + tl),
+                    ImVec2(ptTR.x - tr, ptTR.y + tr),
+                    ImVec2(ptBR.x - br, ptBR.y - br),
+                    ImVec2(ptBL.x + bl, ptBL.y - bl),
                 };
                 const ImU32 cornerFill = IM_COL32(30, 30, 30, 255);
                 const ImU32 selectedCornerFill = IM_COL32(245, 158, 11, 255);
@@ -1189,22 +1244,19 @@ namespace seedui
                 // Alça de rotação: fica acima da borda superior do elemento,
                 // na direção da normal transformada pela rotação.
                 {
-                    float px = 0.0f, py = 0.0f;
-                    Geo::ElementPivot(*selected, px, py);
-                    const float eh2 = h * 0.5f;
-                    const float rotRad = Geo::DegToRad(Geo::ElementRotation(*selected));
                     const float cosR = cosf(rotRad);
                     const float sinR = sinf(rotRad);
-                    // Ponto do topo central no espaço local (0,-eh2) -> projeto.
-                    const float topX = px + eh2 * sinR;
-                    const float topY = py - eh2 * cosR;
+                    float tmx = x + w * 0.5f, tmy = y;
+                    Geo::RotatePoint(tmx, tmy, px, py, rotRad);
                     const float dirX = sinR;
                     const float dirY = -cosR;
                     const float sticker = 18.0f / std::max(0.25f, viewScale);
-                    const float handleScreenX = origin.x + (topX + dirX * sticker) * viewScale;
-                    const float handleScreenY = origin.y + (topY + dirY * sticker) * viewScale;
-                    const float topScreenX = origin.x + topX * viewScale;
-                    const float topScreenY = origin.y + topY * viewScale;
+                    const float handleDocX = tmx + dirX * sticker;
+                    const float handleDocY = tmy + dirY * sticker;
+                    const float topScreenX = origin.x + tmx * viewScale;
+                    const float topScreenY = origin.y + tmy * viewScale;
+                    const float handleScreenX = origin.x + handleDocX * viewScale;
+                    const float handleScreenY = origin.y + handleDocY * viewScale;
                     dl->AddLine(ImVec2(topScreenX, topScreenY),
                                 ImVec2(handleScreenX, handleScreenY), selection, 1.5f);
                     const float hr = 5.0f;
@@ -1217,8 +1269,6 @@ namespace seedui
                 // (ou onde o usuário o arrastou — centro_rotacao). É o centro
                 // do redimensionamento espelhado (Shift) e da rotação.
                 {
-                    float px = 0.0f, py = 0.0f;
-                    Geo::ElementPivot(*selected, px, py);
                     const float pivotScreenX = origin.x + px * viewScale;
                     const float pivotScreenY = origin.y + py * viewScale;
                     const ImU32 pivotCol = ImGui::ColorConvertFloat4ToU32(
