@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include <filesystem>
+#include <array>
 
 namespace physics { class Physics; }
 
@@ -60,6 +61,8 @@ namespace game
             bool imported = false;
             bool loaded = false;
             RenderTexture2D thumbnail = {};
+            std::array<Texture2D, 4> billboards = {};
+            bool billboardsReady = false;
             // Unique textures owned by imported FBX assets (UnloadModel does
             // not release textures, so the owner must unload them explicitly).
             std::vector<Texture2D> importedTextures;
@@ -83,6 +86,7 @@ namespace game
         };
 
         void LoadAsset(Asset &asset, float polygonRatio = 1.0f);
+        void GenerateTreeBillboards(Asset &asset);
         void UnloadAssetModel(Asset &asset);
         void LoadImportedAssets();
         void RebuildEditorCollision(Instance &instance);
@@ -92,6 +96,7 @@ namespace game
         physics::Physics *mPhysics = nullptr;
         std::vector<Asset> mAssets;
         std::vector<Instance> mInstances;
+        int mTreeBillboardSource = -1;
         unsigned int mNextEditorId = 1;
     };
 }

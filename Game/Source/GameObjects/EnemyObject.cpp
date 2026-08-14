@@ -13,6 +13,21 @@ namespace game
     static int gSynthDetailedEnemyModels = 0;
     static constexpr int MaxSynthDetailedEnemyModels = 3;
     static float RandomUnit() { return (float)GetRandomValue(0, 10000) / 10000.0f; }
+    static bool SphereVisibleInCamera(const Camera3D &camera, const Vector3 &center, float radius)
+    {
+        const Vector3 forward = Vector3Normalize(Vector3Subtract(camera.target, camera.position));
+        const Vector3 toCenter = Vector3Subtract(center, camera.position);
+        const float depth = Vector3DotProduct(toCenter, forward);
+        if (depth < -radius) return false;
+        if (camera.projection == CAMERA_ORTHOGRAPHIC) return true;
+        const Vector2 screen = GetWorldToScreen(center, camera);
+        const float safeDepth = std::max(0.05f, depth);
+        const float pixelRadius = radius * (float)GetScreenHeight() /
+            (2.0f * safeDepth * tanf(camera.fovy * 0.5f * DEG2RAD));
+        return screen.x + pixelRadius >= 0.0f && screen.y + pixelRadius >= 0.0f &&
+               screen.x - pixelRadius <= GetScreenWidth() &&
+               screen.y - pixelRadius <= GetScreenHeight();
+    }
     static const char *CategoryName(EnemyCategory category)
     {
         return category == EnemyCategory::Big ? "Big" : category == EnemyCategory::Flying ? "Flying" : "Blob";
@@ -260,6 +275,9 @@ namespace game
             ? 36.0f : (scene.GetSettings().retroMode ? 46.0f : 55.0f);
         if (glm::distance(glm::vec2(player.x, player.z), glm::vec2(mPosition.x, mPosition.z)) > drawDistance) return;
         const Vector3 position = { mPosition.x, mPosition.y + (mConfig.category == EnemyCategory::Flying ? 1.0f : 0.0f), mPosition.z };
+        if (!SphereVisibleInCamera(scene.GetCamera(),
+            {position.x, position.y + mVisualHeight * 0.5f, position.z},
+            mVisualHeight * 0.65f)) return;
         Color tint = WHITE;
         if (mHitFlash > 0.0f)
             tint = {255, 72, 72, 255};

@@ -76,6 +76,22 @@ namespace game
             }
             return {};
         }
+
+        bool SphereVisibleInCamera(const Camera3D &camera, const Vector3 &center, float radius)
+        {
+            const Vector3 forward = Vector3Normalize(Vector3Subtract(camera.target, camera.position));
+            const Vector3 toCenter = Vector3Subtract(center, camera.position);
+            const float depth = Vector3DotProduct(toCenter, forward);
+            if (depth < -radius) return false;
+            if (camera.projection == CAMERA_ORTHOGRAPHIC) return true;
+            const Vector2 screen = GetWorldToScreen(center, camera);
+            const float safeDepth = std::max(0.05f, depth);
+            const float pixelRadius = radius * (float)GetScreenHeight() /
+                (2.0f * safeDepth * tanf(camera.fovy * 0.5f * DEG2RAD));
+            return screen.x + pixelRadius >= 0.0f && screen.y + pixelRadius >= 0.0f &&
+                   screen.x - pixelRadius <= GetScreenWidth() &&
+                   screen.y - pixelRadius <= GetScreenHeight();
+        }
     }
 
     NatureObject::NatureObject(TerrainObject *terrain) : mTerrain(terrain) {}
@@ -89,6 +105,8 @@ namespace game
         {
             UnloadAssetModel(asset);
             if (asset.thumbnail.id != 0) UnloadRenderTexture(asset.thumbnail);
+            for (Texture2D &billboard : asset.billboards)
+                if (billboard.id != 0) UnloadTexture(billboard);
         }
     }
 
@@ -532,6 +550,50 @@ namespace game
         asset.loaded = false;
     }
 
+    void NatureObject::GenerateTreeBillboards(Asset &asset)
+    {
+        if (!asset.tree || !asset.loaded || asset.billboardsReady) return;
+        const int assetIndex = (int)(&asset - mAssets.data());
+        if (mTreeBillboardSource >= 0 && mTreeBillboardSource != assetIndex) return;
+        const BoundingBox bounds = GetModelBoundingBox(asset.model);
+        const float height = std::max(0.001f, bounds.max.y - bounds.min.y);
+        const float width = std::max(bounds.max.x - bounds.min.x, bounds.max.z - bounds.min.z);
+        const float distance = std::max(height, width) * 1.72f;
+        const Vector3 target = {0.0f, height * 0.50f, 0.0f};
+
+        for (int direction = 0; direction < 4; ++direction)
+        {
+            RenderTexture2D targetTexture = LoadRenderTexture(128, 128);
+            if (targetTexture.id == 0) return;
+            const float angle = direction * 90.0f * DEG2RAD;
+            Camera3D camera = {};
+            camera.position = {sinf(angle) * distance, height * 0.52f,
+                               cosf(angle) * distance};
+            camera.target = target;
+            camera.up = {0.0f, 1.0f, 0.0f};
+            camera.fovy = 38.0f;
+            camera.projection = CAMERA_PERSPECTIVE;
+            BeginTextureMode(targetTexture);
+                ClearBackground(BLANK);
+                BeginMode3D(camera);
+                    DrawModelEx(asset.model, {0.0f, -bounds.min.y, 0.0f},
+                                {0.0f, 1.0f, 0.0f}, 0.0f,
+                                {1.0f, 1.0f, 1.0f}, WHITE);
+                EndMode3D();
+            EndTextureMode();
+            Image image = LoadImageFromTexture(targetTexture.texture);
+            ImageFlipVertical(&image);
+            asset.billboards[(size_t)direction] = LoadTextureFromImage(image);
+            UnloadImage(image);
+            UnloadRenderTexture(targetTexture);
+            if (asset.billboards[(size_t)direction].id != 0)
+                SetTextureFilter(asset.billboards[(size_t)direction], TEXTURE_FILTER_POINT);
+        }
+        asset.billboardsReady = std::all_of(asset.billboards.begin(), asset.billboards.end(),
+            [](const Texture2D &texture) { return texture.id != 0; });
+        if (asset.billboardsReady) mTreeBillboardSource = assetIndex;
+    }
+
     void NatureObject::Update(Scene &scene, float)
     {
         const Vector3 cameraPosition = scene.GetCamera().position;
@@ -542,9 +604,11 @@ namespace game
         const float unloadRadius = reducedProfile
             ? 21.0f : (scene.GetSettings().retroMode ? 42.0f : 52.0f);
         bool loadedThisFrame = false;
-        int loadedAssetCount = 0;
-        for (const Asset &asset : mAssets) if (asset.loaded) ++loadedAssetCount;
-        const int detailedAssetBudget = scene.GetSettings().synthMode ? 2 : INT_MAX;
+        int loadedTreeCount = 0, loadedGeneralCount = 0;
+        for (const Asset &asset : mAssets)
+            if (asset.loaded) (asset.tree ? loadedTreeCount : loadedGeneralCount)++;
+        const int treeBudget = scene.GetSettings().synthMode ? 2 : INT_MAX;
+        const int generalBudget = scene.GetSettings().synthMode ? 1 : INT_MAX;
         for (int assetIndex = 0; assetIndex < (int)mAssets.size(); ++assetIndex)
         {
             float closestSq = FLT_MAX;
@@ -556,18 +620,29 @@ namespace game
                 closestSq = std::min(closestSq, glm::dot(delta, delta));
             }
             Asset &asset = mAssets[assetIndex];
-            if (closestSq <= loadRadius * loadRadius && !asset.loaded && !loadedThisFrame &&
-                loadedAssetCount < detailedAssetBudget)
+            const bool budgetAvailable = asset.tree
+                ? loadedTreeCount < treeBudget : loadedGeneralCount < generalBudget;
+            // Uma arvore visivel pode gerar seu impostor mesmo fora do raio do
+            // modelo 3D. Depois da captura, o modelo e liberado e a imagem fica.
+            const float effectiveLoadRadius = scene.GetSettings().synthMode && asset.tree &&
+                mTreeBillboardSource < 0 && !asset.billboardsReady ? 29.0f : loadRadius;
+            if (closestSq <= effectiveLoadRadius * effectiveLoadRadius &&
+                !asset.loaded && !loadedThisFrame &&
+                budgetAvailable)
             {
                 LoadAsset(asset, scene.GetSettings().synthMode
                     ? scene.GetSettings().synthScenePolygonRatio : 1.0f);
                 loadedThisFrame = asset.loaded;
-                if (asset.loaded) ++loadedAssetCount;
+                if (asset.loaded)
+                {
+                    if (asset.tree) { ++loadedTreeCount; GenerateTreeBillboards(asset); }
+                    else ++loadedGeneralCount;
+                }
             }
             else if (asset.loaded && closestSq > unloadRadius * unloadRadius)
             {
                 UnloadAssetModel(asset);
-                --loadedAssetCount;
+                if (asset.tree) --loadedTreeCount; else --loadedGeneralCount;
             }
         }
     }
@@ -577,6 +652,7 @@ namespace game
         const Vector3 cameraPosition = scene.GetCamera().position;
         const glm::vec3 playerPosition(cameraPosition.x, cameraPosition.y, cameraPosition.z);
         const bool reducedProfile = scene.GetSettings().crtMode || scene.GetSettings().synthMode;
+        const Camera3D &camera = scene.GetCamera();
         const float drawRadius = reducedProfile
             ? 29.0f : (scene.GetSettings().retroMode ? 38.0f : 45.0f);
         for (const Instance &instance : mInstances)
@@ -585,6 +661,26 @@ namespace game
                                   instance.position.z - playerPosition.z);
             if (glm::dot(delta, delta) > drawRadius * drawRadius) continue;
             const Asset &asset = mAssets[instance.assetIndex];
+            const float height = asset.desiredHeight * instance.scale;
+            const Vector3 center = {instance.position.x, instance.position.y + height * 0.5f,
+                                    instance.position.z};
+            if (!SphereVisibleInCamera(camera, center, height * 0.65f)) continue;
+            const Asset *billboardAsset = &asset;
+            if (asset.tree && !asset.billboardsReady && mTreeBillboardSource >= 0 &&
+                mTreeBillboardSource < (int)mAssets.size())
+                billboardAsset = &mAssets[(size_t)mTreeBillboardSource];
+            if (asset.tree && billboardAsset->billboardsReady &&
+                (!asset.loaded || glm::dot(delta, delta) > 12.0f * 12.0f))
+            {
+                float angle = atan2f(camera.position.x - instance.position.x,
+                                     camera.position.z - instance.position.z) * RAD2DEG - instance.yaw;
+                int direction = ((int)floorf((angle + 45.0f) / 90.0f) % 4 + 4) % 4;
+                const Texture2D billboard = billboardAsset->billboards[(size_t)direction];
+                DrawBillboardRec(camera, billboard,
+                    {0.0f, 0.0f, (float)billboard.width, (float)billboard.height},
+                    center, {height * 1.05f, height}, WHITE);
+                continue;
+            }
             if (!asset.loaded)
             {
                 // Representacao procedural barata enquanto o modelo detalhado
@@ -592,7 +688,6 @@ namespace game
                 // combina com o visual low-poly do SeedSynth.
                 if (!reducedProfile) continue;
                 const Vector3 base = {instance.position.x, instance.position.y, instance.position.z};
-                const float height = asset.desiredHeight * instance.scale;
                 if (asset.tree)
                 {
                     const float trunkHeight = height * 0.42f;
