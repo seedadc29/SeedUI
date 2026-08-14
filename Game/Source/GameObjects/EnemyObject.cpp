@@ -11,6 +11,17 @@
 namespace game
 {
     static float RandomUnit() { return (float)GetRandomValue(0, 10000) / 10000.0f; }
+    static bool ReserveReducedModelLoadSlot()
+    {
+        // Carregar glTF e enviar malhas para a GPU ocorre na thread principal.
+        // Limitar a uma carga por intervalo transforma um pico grande em
+        // pequenas cargas espaçadas; enquanto isso o inimigo usa o cubo low-poly.
+        static double nextLoadTime = 0.0;
+        const double now = GetTime();
+        if (now < nextLoadTime) return false;
+        nextLoadTime = now + 0.075;
+        return true;
+    }
     static const char *CategoryName(EnemyCategory category)
     {
         return category == EnemyCategory::Big ? "Big" : category == EnemyCategory::Flying ? "Flying" : "Blob";
@@ -28,6 +39,9 @@ namespace game
         mVisualHeight = config.category == EnemyCategory::Big ? 2.4f :
                         config.category == EnemyCategory::Flying ? 1.7f : 1.35f;
         mStateTimer = 0.5f + RandomUnit() * 2.0f;
+        // Espalha os ticks de IA distante entre quadros. Sem esta fase inicial,
+        // as 200 instancias acordavam juntas e causavam um pico a cada 0,16 s.
+        mDistantUpdateAccumulator = RandomUnit() * 0.16f;
     }
 
     void EnemyObject::OnSpawn(Scene &)
@@ -132,7 +146,7 @@ namespace game
                 mDistantUpdateAccumulator + deltaTime, 0.24f);
             if (mDistantUpdateAccumulator < 0.16f) return;
             deltaTime = mDistantUpdateAccumulator;
-            mDistantUpdateAccumulator = 0.0f;
+            mDistantUpdateAccumulator -= 0.16f;
         }
         else
         {
@@ -140,7 +154,9 @@ namespace game
         }
         const float modelDistance = reducedProfile
             ? 32.0f : (retroMode ? 42.0f : 48.0f);
-        if (loadDistance <= modelDistance) EnsureModelLoaded();
+        if (loadDistance <= modelDistance &&
+            (!reducedProfile || mLoadAttempted || ReserveReducedModelLoadSlot()))
+            EnsureModelLoaded();
         mModel.Update(deltaTime);
         mHitFlash = std::max(0.0f, mHitFlash - deltaTime);
         if (IsDead()) { mDeathTimer = std::max(0.0f, mDeathTimer - deltaTime); return; }

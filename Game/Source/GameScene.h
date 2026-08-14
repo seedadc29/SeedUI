@@ -111,6 +111,7 @@ namespace game
         int mEditorLevel = 1;
         char mEditorSearch[64] = {};
         char mEditorImportStatus[160] = {};
+        char mSynthPatchStatus[192] = {};
         RenderTexture2D mEnemyEditorThumbnails[12] = {};
         int mEditorProp = 0;
         float mEditorPropPlacementScale = 1.0f;

@@ -1267,6 +1267,205 @@ namespace game
             return {};
 #endif
         }
+
+        void CopySynthPatch(Settings &target, const Settings &source)
+        {
+            target.synthInternalWidth = source.synthInternalWidth;
+            target.synthTextureSize = source.synthTextureSize;
+            target.synthWireframe = source.synthWireframe;
+            target.synthPointFilter = source.synthPointFilter;
+            target.synthQuantizeStrength = source.synthQuantizeStrength;
+            target.synthColorLevels = source.synthColorLevels;
+            target.synthMonochromeStrength = source.synthMonochromeStrength;
+            target.synthPaletteMode = source.synthPaletteMode;
+            target.synthPaletteStrength = source.synthPaletteStrength;
+            target.synthDitherStrength = source.synthDitherStrength;
+            target.synthEdgeStrength = source.synthEdgeStrength;
+            target.synthBinary = source.synthBinary;
+            target.synthBinaryStrength = source.synthBinaryStrength;
+            target.synthBinaryCellSize = source.synthBinaryCellSize;
+            target.synthBinaryThreshold = source.synthBinaryThreshold;
+            target.synthGrid = source.synthGrid;
+            target.synthGridStrength = source.synthGridStrength;
+            target.synthGridSpacing = source.synthGridSpacing;
+            target.synthScanlines = source.synthScanlines;
+            target.synthScanlineStrength = source.synthScanlineStrength;
+            target.synthScanlineSpacing = source.synthScanlineSpacing;
+            target.synthCurvature = source.synthCurvature;
+            target.synthRgbSplit = source.synthRgbSplit;
+            target.synthVignette = source.synthVignette;
+            target.synthInvert = source.synthInvert;
+            target.synthMode = true;
+            target.retroMode = true;
+        }
+
+        void ResetSynthPatch(Settings &settings)
+        {
+            const Settings defaults;
+            CopySynthPatch(settings, defaults);
+        }
+
+        std::filesystem::path SelectSynthPatchFile(bool save)
+        {
+#if defined(_WIN32)
+            wchar_t fileName[32768] = {};
+            if (save) wcscpy_s(fileName, L"Modelo_SeedSynth.seedsynth");
+            const wchar_t filter[] =
+                L"Modelo SeedSynth (*.seedsynth)\0*.seedsynth\0Todos os arquivos (*.*)\0*.*\0";
+            OPENFILENAMEW dialog = {};
+            dialog.lStructSize = sizeof(dialog);
+            dialog.hwndOwner = (HWND)GetWindowHandle();
+            dialog.lpstrFile = fileName;
+            dialog.nMaxFile = (DWORD)std::size(fileName);
+            dialog.lpstrFilter = filter;
+            dialog.nFilterIndex = 1;
+            dialog.lpstrDefExt = L"seedsynth";
+            dialog.lpstrTitle = save ? L"Salvar modelo SeedSynth" : L"Importar modelo SeedSynth";
+            dialog.Flags = OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_EXPLORER |
+                           (save ? OFN_OVERWRITEPROMPT : OFN_FILEMUSTEXIST | OFN_HIDEREADONLY);
+            const BOOL accepted = save ? GetSaveFileNameW(&dialog) : GetOpenFileNameW(&dialog);
+            return accepted ? std::filesystem::path(fileName) : std::filesystem::path{};
+#else
+            return {};
+#endif
+        }
+
+        bool SaveSynthPatchFile(const Settings &settings, const std::filesystem::path &path,
+                                std::string &error)
+        {
+            std::ofstream file(path, std::ios::trunc);
+            if (!file) { error = "Nao foi possivel criar o arquivo."; return false; }
+            file << "SEEDSYNTH_PATCH 1\n";
+#define SAVE_SYNTH_VALUE(name) file << #name "=" << settings.name << '\n'
+            SAVE_SYNTH_VALUE(synthInternalWidth);
+            SAVE_SYNTH_VALUE(synthTextureSize);
+            SAVE_SYNTH_VALUE(synthWireframe);
+            SAVE_SYNTH_VALUE(synthPointFilter);
+            SAVE_SYNTH_VALUE(synthQuantizeStrength);
+            SAVE_SYNTH_VALUE(synthColorLevels);
+            SAVE_SYNTH_VALUE(synthMonochromeStrength);
+            SAVE_SYNTH_VALUE(synthPaletteMode);
+            SAVE_SYNTH_VALUE(synthPaletteStrength);
+            SAVE_SYNTH_VALUE(synthDitherStrength);
+            SAVE_SYNTH_VALUE(synthEdgeStrength);
+            SAVE_SYNTH_VALUE(synthBinary);
+            SAVE_SYNTH_VALUE(synthBinaryStrength);
+            SAVE_SYNTH_VALUE(synthBinaryCellSize);
+            SAVE_SYNTH_VALUE(synthBinaryThreshold);
+            SAVE_SYNTH_VALUE(synthGrid);
+            SAVE_SYNTH_VALUE(synthGridStrength);
+            SAVE_SYNTH_VALUE(synthGridSpacing);
+            SAVE_SYNTH_VALUE(synthScanlines);
+            SAVE_SYNTH_VALUE(synthScanlineStrength);
+            SAVE_SYNTH_VALUE(synthScanlineSpacing);
+            SAVE_SYNTH_VALUE(synthCurvature);
+            SAVE_SYNTH_VALUE(synthRgbSplit);
+            SAVE_SYNTH_VALUE(synthVignette);
+            SAVE_SYNTH_VALUE(synthInvert);
+#undef SAVE_SYNTH_VALUE
+            if (!file) { error = "Falha ao gravar o arquivo."; return false; }
+            return true;
+        }
+
+        bool LoadSynthPatchFile(Settings &settings, const std::filesystem::path &path,
+                                std::string &error)
+        {
+            std::error_code fileError;
+            const auto bytes = std::filesystem::file_size(path, fileError);
+            if (fileError || bytes > 64 * 1024)
+            { error = "Arquivo invalido ou maior que 64 KB."; return false; }
+            std::ifstream file(path);
+            std::string line;
+            if (!file || !std::getline(file, line))
+            { error = "Nao foi possivel ler o arquivo."; return false; }
+            if (!line.empty() && line.back() == '\r') line.pop_back();
+            if (line != "SEEDSYNTH_PATCH 1")
+            { error = "Formato SeedSynth desconhecido."; return false; }
+
+            Settings patch = settings;
+            int recognized = 0;
+            try
+            {
+                while (std::getline(file, line))
+                {
+                    if (!line.empty() && line.back() == '\r') line.pop_back();
+                    const size_t separator = line.find('=');
+                    if (separator == std::string::npos) continue;
+                    const std::string key = line.substr(0, separator);
+                    const std::string value = line.substr(separator + 1);
+#define LOAD_SYNTH_INT(name) do { if (key == #name) { patch.name = std::stoi(value); ++recognized; } } while (0)
+#define LOAD_SYNTH_FLOAT(name) do { if (key == #name) { patch.name = std::stof(value); ++recognized; } } while (0)
+#define LOAD_SYNTH_BOOL(name) do { if (key == #name) { patch.name = std::stoi(value) != 0; ++recognized; } } while (0)
+                    LOAD_SYNTH_INT(synthInternalWidth);
+                    LOAD_SYNTH_INT(synthTextureSize);
+                    LOAD_SYNTH_BOOL(synthWireframe);
+                    LOAD_SYNTH_BOOL(synthPointFilter);
+                    LOAD_SYNTH_FLOAT(synthQuantizeStrength);
+                    LOAD_SYNTH_INT(synthColorLevels);
+                    LOAD_SYNTH_FLOAT(synthMonochromeStrength);
+                    LOAD_SYNTH_INT(synthPaletteMode);
+                    LOAD_SYNTH_FLOAT(synthPaletteStrength);
+                    LOAD_SYNTH_FLOAT(synthDitherStrength);
+                    LOAD_SYNTH_FLOAT(synthEdgeStrength);
+                    LOAD_SYNTH_BOOL(synthBinary);
+                    LOAD_SYNTH_FLOAT(synthBinaryStrength);
+                    LOAD_SYNTH_INT(synthBinaryCellSize);
+                    LOAD_SYNTH_FLOAT(synthBinaryThreshold);
+                    LOAD_SYNTH_BOOL(synthGrid);
+                    LOAD_SYNTH_FLOAT(synthGridStrength);
+                    LOAD_SYNTH_INT(synthGridSpacing);
+                    LOAD_SYNTH_BOOL(synthScanlines);
+                    LOAD_SYNTH_FLOAT(synthScanlineStrength);
+                    LOAD_SYNTH_INT(synthScanlineSpacing);
+                    LOAD_SYNTH_FLOAT(synthCurvature);
+                    LOAD_SYNTH_FLOAT(synthRgbSplit);
+                    LOAD_SYNTH_FLOAT(synthVignette);
+                    LOAD_SYNTH_FLOAT(synthInvert);
+#undef LOAD_SYNTH_INT
+#undef LOAD_SYNTH_FLOAT
+#undef LOAD_SYNTH_BOOL
+                }
+            }
+            catch (...)
+            { error = "O modelo contem um valor numerico invalido."; return false; }
+            if (recognized == 0)
+            { error = "O modelo nao contem parametros reconhecidos."; return false; }
+
+            const float importedFloats[] = {
+                patch.synthQuantizeStrength, patch.synthMonochromeStrength,
+                patch.synthPaletteStrength, patch.synthDitherStrength,
+                patch.synthEdgeStrength, patch.synthBinaryStrength,
+                patch.synthBinaryThreshold, patch.synthGridStrength,
+                patch.synthScanlineStrength, patch.synthCurvature,
+                patch.synthRgbSplit, patch.synthVignette, patch.synthInvert
+            };
+            for (float value : importedFloats)
+                if (!std::isfinite(value))
+                { error = "O modelo contem um valor nao finito."; return false; }
+
+            patch.synthInternalWidth = std::clamp(patch.synthInternalWidth, 64, 960);
+            patch.synthTextureSize = std::clamp(patch.synthTextureSize, 32, 512);
+            patch.synthColorLevels = std::clamp(patch.synthColorLevels, 2, 256);
+            patch.synthPaletteMode = std::clamp(patch.synthPaletteMode, 0, 5);
+            patch.synthBinaryCellSize = std::clamp(patch.synthBinaryCellSize, 4, 48);
+            patch.synthGridSpacing = std::clamp(patch.synthGridSpacing, 2, 64);
+            patch.synthScanlineSpacing = std::clamp(patch.synthScanlineSpacing, 1, 12);
+            patch.synthQuantizeStrength = std::clamp(patch.synthQuantizeStrength, 0.0f, 1.0f);
+            patch.synthMonochromeStrength = std::clamp(patch.synthMonochromeStrength, 0.0f, 1.0f);
+            patch.synthPaletteStrength = std::clamp(patch.synthPaletteStrength, 0.0f, 1.0f);
+            patch.synthDitherStrength = std::clamp(patch.synthDitherStrength, 0.0f, 1.0f);
+            patch.synthEdgeStrength = std::clamp(patch.synthEdgeStrength, 0.0f, 1.0f);
+            patch.synthBinaryStrength = std::clamp(patch.synthBinaryStrength, 0.0f, 1.0f);
+            patch.synthBinaryThreshold = std::clamp(patch.synthBinaryThreshold, 0.0f, 1.0f);
+            patch.synthGridStrength = std::clamp(patch.synthGridStrength, 0.0f, 1.0f);
+            patch.synthScanlineStrength = std::clamp(patch.synthScanlineStrength, 0.0f, 1.0f);
+            patch.synthCurvature = std::clamp(patch.synthCurvature, 0.0f, 1.0f);
+            patch.synthRgbSplit = std::clamp(patch.synthRgbSplit, 0.0f, 1.0f);
+            patch.synthVignette = std::clamp(patch.synthVignette, 0.0f, 1.0f);
+            patch.synthInvert = std::clamp(patch.synthInvert, 0.0f, 1.0f);
+            CopySynthPatch(settings, patch);
+            return true;
+        }
     }
 
     void GameScene::ToggleLevelEditor()
@@ -2414,6 +2613,59 @@ namespace game
                     resolutionDraft = mSettings.synthInternalWidth;
                     textureDraft = mSettings.synthTextureSize;
                     save = true;
+                }
+
+                ImGui::Separator();
+                ImGui::TextUnformatted("Modelo externo");
+                if (ImGui::Button("Reset", ImVec2(122.0f, 36.0f)))
+                {
+                    ResetSynthPatch(mSettings);
+                    resolutionDraft = mSettings.synthInternalWidth;
+                    textureDraft = mSettings.synthTextureSize;
+                    std::snprintf(mSynthPatchStatus, sizeof(mSynthPatchStatus),
+                                  "Patch restaurado para o padrao.");
+                    save = true;
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Salvar modelo...", ImVec2(122.0f, 36.0f)))
+                {
+                    const std::filesystem::path path = SelectSynthPatchFile(true);
+                    if (!path.empty())
+                    {
+                        std::string error;
+                        if (SaveSynthPatchFile(mSettings, path, error))
+                            std::snprintf(mSynthPatchStatus, sizeof(mSynthPatchStatus),
+                                          "Salvo fora do jogo: %s", path.filename().string().c_str());
+                        else
+                            std::snprintf(mSynthPatchStatus, sizeof(mSynthPatchStatus),
+                                          "Erro: %s", error.c_str());
+                    }
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Importar...", ImVec2(122.0f, 36.0f)))
+                {
+                    const std::filesystem::path path = SelectSynthPatchFile(false);
+                    if (!path.empty())
+                    {
+                        std::string error;
+                        if (LoadSynthPatchFile(mSettings, path, error))
+                        {
+                            resolutionDraft = mSettings.synthInternalWidth;
+                            textureDraft = mSettings.synthTextureSize;
+                            std::snprintf(mSynthPatchStatus, sizeof(mSynthPatchStatus),
+                                          "Importado: %s", path.filename().string().c_str());
+                            save = true;
+                        }
+                        else
+                            std::snprintf(mSynthPatchStatus, sizeof(mSynthPatchStatus),
+                                          "Erro: %s", error.c_str());
+                    }
+                }
+                if (mSynthPatchStatus[0] != '\0')
+                {
+                    ImGui::PushTextWrapPos(0.0f);
+                    ImGui::TextDisabled("%s", mSynthPatchStatus);
+                    ImGui::PopTextWrapPos();
                 }
                 ImGui::EndTabItem();
             }

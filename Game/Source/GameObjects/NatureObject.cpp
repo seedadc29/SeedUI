@@ -531,16 +531,26 @@ namespace game
 
     void NatureObject::Update(Scene &scene, float)
     {
+        if (mAssets.empty()) return;
         const Vector3 cameraPosition = scene.GetCamera().position;
         const glm::vec3 playerPosition(cameraPosition.x, cameraPosition.y, cameraPosition.z);
         const bool reducedProfile = scene.GetSettings().crtMode || scene.GetSettings().synthMode;
         const float loadRadius = reducedProfile
             ? 25.0f : (scene.GetSettings().retroMode ? 34.0f : 42.0f);
+        // Uma margem maior evita descarregar e reler o mesmo glTF quando o
+        // jogador oscila perto do limite de streaming.
         const float unloadRadius = reducedProfile
-            ? 32.0f : (scene.GetSettings().retroMode ? 42.0f : 52.0f);
+            ? 52.0f : (scene.GetSettings().retroMode ? 48.0f : 58.0f);
         bool loadedThisFrame = false;
-        for (int assetIndex = 0; assetIndex < (int)mAssets.size(); ++assetIndex)
+        const bool streamingLoadAvailable = !reducedProfile || GetTime() >= mNextStreamingLoadTime;
+        // Perfis leves verificam apenas uma fatia do catalogo por quadro. A
+        // busca anterior fazia assets x instancias em todo quadro (dezenas de
+        // milhares de comparacoes), mesmo quando a camera estava parada.
+        const size_t checksThisFrame = reducedProfile
+            ? std::min<size_t>(6, mAssets.size()) : mAssets.size();
+        for (size_t check = 0; check < checksThisFrame; ++check)
         {
+            const int assetIndex = (int)((mStreamingAssetCursor + check) % mAssets.size());
             float closestSq = FLT_MAX;
             for (const Instance &instance : mInstances)
             {
@@ -550,16 +560,20 @@ namespace game
                 closestSq = std::min(closestSq, glm::dot(delta, delta));
             }
             Asset &asset = mAssets[assetIndex];
-            if (closestSq <= loadRadius * loadRadius && !asset.loaded && !loadedThisFrame)
+            if (closestSq <= loadRadius * loadRadius && !asset.loaded && !loadedThisFrame &&
+                streamingLoadAvailable)
             {
                 LoadAsset(asset);
                 loadedThisFrame = asset.loaded;
+                if (loadedThisFrame && reducedProfile)
+                    mNextStreamingLoadTime = GetTime() + 0.075;
             }
             else if (asset.loaded && closestSq > unloadRadius * unloadRadius)
             {
                 UnloadAssetModel(asset);
             }
         }
+        mStreamingAssetCursor = (mStreamingAssetCursor + checksThisFrame) % mAssets.size();
     }
 
     void NatureObject::Draw(Scene &scene)
