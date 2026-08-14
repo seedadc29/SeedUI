@@ -11,7 +11,8 @@
 namespace game
 {
     static int gSynthDetailedEnemyModels = 0;
-    static constexpr int MaxSynthDetailedEnemyModels = 3;
+    static constexpr int MaxSynthDetailedEnemyModels = 16;
+    static double gNextSynthEnemyModelLoad = 0.0;
     static float RandomUnit() { return (float)GetRandomValue(0, 10000) / 10000.0f; }
     static bool SphereVisibleInCamera(const Camera3D &camera, const Vector3 &center, float radius)
     {
@@ -172,12 +173,13 @@ namespace game
         {
             mDistantUpdateAccumulator = 0.0f;
         }
-        const float modelDistance = reducedProfile
-            ? 22.0f : (retroMode ? 42.0f : 48.0f);
+        const float modelDistance = scene.GetSettings().synthMode
+            ? 36.0f : (reducedProfile ? 22.0f : (retroMode ? 42.0f : 48.0f));
         // Modelos animados glTF mantem malha, esqueleto e animacoes por
         // instancia. Nos perfis leves, descarregue-os fora da vizinhanca para
         // impedir crescimento continuo de RAM durante a exploracao.
-        if (reducedProfile && loadDistance > 30.0f && mModel.IsLoaded())
+        if (reducedProfile && loadDistance > (scene.GetSettings().synthMode ? 44.0f : 30.0f) &&
+            mModel.IsLoaded())
         {
             mModel.Unload();
             mLoadAttempted = false;
@@ -187,11 +189,13 @@ namespace game
         {
             if (scene.GetSettings().synthMode)
             {
-                if (!mLoadAttempted && !mDetailedModelSlot &&
+                const double now = GetTime();
+                if (!mLoadAttempted && !mDetailedModelSlot && now >= gNextSynthEnemyModelLoad &&
                     gSynthDetailedEnemyModels < MaxSynthDetailedEnemyModels)
                 {
                     mDetailedModelSlot = true;
                     ++gSynthDetailedEnemyModels;
+                    gNextSynthEnemyModelLoad = now + 0.045;
                 }
                 if (!mLoadAttempted && mDetailedModelSlot &&
                     !EnsureModelLoaded(scene.GetSettings().synthEnemyPolygonRatio))
