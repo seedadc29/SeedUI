@@ -116,6 +116,38 @@ namespace seedui
             ImGui::MenuItem(label, milestone, false, false);
         }
 
+        bool IconMenuItem(IconId icon, const char* label,
+                          const char* shortcut = nullptr,
+                          bool selected = false, bool enabled = true)
+        {
+            const std::string paddedLabel = std::string("    ") + label;
+            const bool clicked = ImGui::MenuItem(paddedLabel.c_str(), shortcut,
+                                                  selected, enabled);
+            const ImVec2 min = ImGui::GetItemRectMin();
+            const ImVec2 max = ImGui::GetItemRectMax();
+            const ImU32 tint = ImGui::GetColorU32(
+                enabled ? ImGuiCol_Text : ImGuiCol_TextDisabled);
+            DrawIconAt(icon, min.x + 5.0f,
+                       min.y + (max.y - min.y - 15.0f) * 0.5f,
+                       15.0f, tint);
+            return clicked;
+        }
+
+        bool IconTextButton(IconId icon, const char* label,
+                            const char* tooltip = nullptr)
+        {
+            const std::string paddedLabel = std::string("    ") + label;
+            const bool clicked = ImGui::Button(paddedLabel.c_str());
+            const ImVec2 min = ImGui::GetItemRectMin();
+            const ImVec2 max = ImGui::GetItemRectMax();
+            DrawIconAt(icon, min.x + 6.0f,
+                       min.y + (max.y - min.y - 15.0f) * 0.5f,
+                       15.0f, ImGui::GetColorU32(ImGuiCol_Text));
+            if (tooltip && ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", tooltip);
+            return clicked;
+        }
+
         void PanelHint(const char* text)
         {
             ImGui::PushStyleColor(ImGuiCol_Text, Theme::TextDisabled);
@@ -266,7 +298,12 @@ namespace seedui
                 start.rot = Geo::ElementRotation(element);
                 out.push_back(start);
             }
-            for (Element& child : element.filhos) CollectTransformStarts(child, out);
+            const bool powerClip = element.propriedades.is_object() &&
+                element.propriedades.value("powerclip", false);
+            const bool moveContentsWithFrame = !powerClip ||
+                element.propriedades.value("powerclip_conteudo_bloqueado", true);
+            if (moveContentsWithFrame)
+                for (Element& child : element.filhos) CollectTransformStarts(child, out);
         }
 
         // Recalcula a caixa (x/y/largura/altura) de cada GRUPO do modo a partir
@@ -421,6 +458,52 @@ namespace seedui
             for (Element& child : element.filhos)
                 ApplyPositionDelta(child, dx, dy);
         }
+
+        // Transforma uma subárvore cujas coordenadas são absolutas. Caminhos
+        // Bézier precisam ter nós e alças escalados junto com a caixa.
+        void ApplyPowerClipAffine(Element& element,
+                                  float sourceLeft, float sourceTop,
+                                  float targetLeft, float targetTop,
+                                  float scaleX, float scaleY)
+        {
+            const float x = element.transformacao.value("x", 0.0f);
+            const float y = element.transformacao.value("y", 0.0f);
+            const float w = element.transformacao.value("largura", 160.0f);
+            const float h = element.transformacao.value("altura", 32.0f);
+            element.transformacao["x"] = targetLeft + (x - sourceLeft) * scaleX;
+            element.transformacao["y"] = targetTop + (y - sourceTop) * scaleY;
+            element.transformacao["largura"] = std::max(1.0f, w * fabsf(scaleX));
+            element.transformacao["altura"] = std::max(1.0f, h * fabsf(scaleY));
+
+            if (element.tipo == "caminho" &&
+                element.transformacao.contains("pontos") &&
+                element.transformacao["pontos"].is_array())
+            {
+                for (auto& point : element.transformacao["pontos"])
+                {
+                    point["x"] = point.value("x", 0.0f) * scaleX;
+                    point["y"] = point.value("y", 0.0f) * scaleY;
+                    point["cx1"] = point.value("cx1", 0.0f) * scaleX;
+                    point["cy1"] = point.value("cy1", 0.0f) * scaleY;
+                    point["cx2"] = point.value("cx2", 0.0f) * scaleX;
+                    point["cy2"] = point.value("cy2", 0.0f) * scaleY;
+                }
+            }
+            if (element.transformacao.contains("centro_rotacao") &&
+                element.transformacao["centro_rotacao"].is_object())
+            {
+                const float px = element.transformacao["centro_rotacao"].value("x", x + w * 0.5f);
+                const float py = element.transformacao["centro_rotacao"].value("y", y + h * 0.5f);
+                element.transformacao["centro_rotacao"] = {
+                    { "x", targetLeft + (px - sourceLeft) * scaleX },
+                    { "y", targetTop + (py - sourceTop) * scaleY }
+                };
+            }
+            ClampElementCornerRadii(element);
+            for (Element& child : element.filhos)
+                ApplyPowerClipAffine(child, sourceLeft, sourceTop,
+                                     targetLeft, targetTop, scaleX, scaleY);
+        }
     }
 
     void App::Run(bool captureAfterBoot)
@@ -531,6 +614,33 @@ namespace seedui
                         };
                         mCornerSelectionElementId = panel->id;
                         mSelectedCornerMask = 0x0Fu;
+                    }
+                }
+                else if (mFrameCount == 45)
+                {
+                    // Exercita o mesmo caminho do botão "Editar conteúdo":
+                    // contêiner com filho maior que a máscara e portal aberto.
+                    Modo& captureMode =
+                        mProject.telas[mTelaAtiva].modos[mModoAtivo];
+                    if (Element* frame = Project::ResolverId(
+                            captureMode, mSelectedElementId))
+                    {
+                        frame->propriedades["powerclip"] = true;
+                        frame->propriedades[
+                            "powerclip_conteudo_bloqueado"] = true;
+                        Element child;
+                        child.id = "retangulo_powerclip_capture";
+                        child.tipo = "retangulo";
+                        child.nome = "Conteudo PowerClip";
+                        child.transformacao = {
+                            { "x", 300.0f }, { "y", 180.0f },
+                            { "largura", 460.0f }, { "altura", 250.0f }
+                        };
+                        child.estilos["cor_fundo"] = "#e53935";
+                        frame->filhos.push_back(std::move(child));
+                        EntrarEdicaoPowerClip(frame->id);
+                        TraceLog(LOG_INFO,
+                                 "CAPTURE: ambiente PowerClip aberto");
                     }
                 }
                 else if (mFrameCount == 60)
@@ -657,6 +767,9 @@ namespace seedui
         mTelaAtiva = 0;
         mModoAtivo = 0;
         mSelectedElementId.clear();
+        mSelectedElementIds.clear();
+        mPowerClipEditFrameId.clear();
+        mPowerClipDirectFrameId.clear();
         mStatusMsg = "Projeto aberto: " + mProject.nome;
         mStatusMsgUntil = GetTime() + 6.0;
         TraceLog(LOG_INFO, "Projeto aberto: %s (telas=%d)", path.c_str(),
@@ -715,6 +828,9 @@ namespace seedui
         mTelaAtiva = 0;
         mModoAtivo = 0;
         mSelectedElementId.clear();
+        mSelectedElementIds.clear();
+        mPowerClipEditFrameId.clear();
+        mPowerClipDirectFrameId.clear();
         mStatusMsg = "Projeto fechado.";
         mStatusMsgUntil = GetTime() + 5.0;
     }
@@ -814,7 +930,17 @@ namespace seedui
             e.estilos["espessura_borda"] = 3.0f;
         }
 
-        modo.raiz.push_back(std::move(e));
+        if (!mPowerClipEditFrameId.empty())
+        {
+            if (Element* frame = Project::ResolverId(modo, mPowerClipEditFrameId))
+                frame->filhos.push_back(std::move(e));
+            else
+                modo.raiz.push_back(std::move(e));
+        }
+        else
+        {
+            modo.raiz.push_back(std::move(e));
+        }
         mSelectedElementId = id;
         mSelectedElementIds.clear();
         mSelectedElementIds.push_back(id);
@@ -848,6 +974,7 @@ namespace seedui
     {
         mElementClipboard.clear();
         mElementPasteGeneration = 0;
+        mElementClipboardFromCut = false;
         if (!PossuiModoAtivo()) return;
 
         std::vector<std::string> ids = mSelectedElementIds;
@@ -869,6 +996,50 @@ namespace seedui
         mStatusMsgUntil = GetTime() + 4.0;
     }
 
+    void App::RecortarElementosSelecionados()
+    {
+        mElementClipboard.clear();
+        mElementPasteGeneration = 0;
+        mElementClipboardFromCut = false;
+        if (!PossuiModoAtivo()) return;
+
+        std::vector<std::string> ids = mSelectedElementIds;
+        if (!mSelectedElementId.empty() &&
+            std::find(ids.begin(), ids.end(), mSelectedElementId) == ids.end())
+            ids.push_back(mSelectedElementId);
+        if (ids.empty())
+        {
+            mStatusMsg = "Selecione um elemento para recortar";
+            mStatusMsgUntil = GetTime() + 4.0;
+            return;
+        }
+
+        Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+        mElementClipboard = Project::CopiarElementos(mode, ids);
+        if (mElementClipboard.empty()) return;
+
+        int removed = 0;
+        for (const std::string& id : ids)
+            if (Project::ExcluirElemento(mode, id)) ++removed;
+        if (removed == 0)
+        {
+            mElementClipboard.clear();
+            mStatusMsg = "Nao foi possivel recortar objetos bloqueados";
+            mStatusMsgUntil = GetTime() + 4.0;
+            return;
+        }
+
+        mElementClipboardFromCut = true;
+        mSelectedElementIds.clear();
+        mSelectedElementId.clear();
+        mSelectedCornerMask = 0;
+        mProjectDirty = true;
+        CapturarHistorico();
+        mStatusMsg = std::to_string(removed) +
+                     " elemento(s) recortado(s) · Ctrl+V mantem a posicao";
+        mStatusMsgUntil = GetTime() + 5.0;
+    }
+
     void App::ColarElementosCopiados()
     {
         if (!PossuiModoAtivo() || mElementClipboard.empty())
@@ -879,17 +1050,58 @@ namespace seedui
         }
 
         Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
-        ++mElementPasteGeneration;
-        const float delta = 16.0f * (float)mElementPasteGeneration;
+        const bool restoreOriginalPosition = mElementClipboardFromCut;
+        if (!restoreOriginalPosition) ++mElementPasteGeneration;
+        const float delta = restoreOriginalPosition
+            ? 0.0f : 16.0f * (float)mElementPasteGeneration;
         const std::vector<std::string> pastedRootIds = Project::ColarElementos(
             mProject, mode, mElementClipboard, delta);
+        if (!mPowerClipEditFrameId.empty())
+            for (const std::string& id : pastedRootIds)
+                Project::ReparentearElemento(mode, id, mPowerClipEditFrameId);
 
+        if (restoreOriginalPosition)
+        {
+            mElementClipboardFromCut = false;
+            mElementPasteGeneration = 0;
+        }
         mSelectedElementIds = pastedRootIds;
         mSelectedElementId = pastedRootIds.empty() ? std::string() : pastedRootIds.back();
         mProjectDirty = true;
+        CapturarHistorico();
         mStatusMsg = std::to_string(pastedRootIds.size()) +
-                     " elemento(s) colado(s)";
+                     (restoreOriginalPosition
+                        ? " elemento(s) restaurado(s) na posicao original"
+                        : " elemento(s) colado(s)");
         mStatusMsgUntil = GetTime() + 4.0;
+    }
+
+    void App::AtualizarDeltaDuplicacaoManual(const Element& el)
+    {
+        if (mDup.hasSourceSnapshot && mDup.lastDuplicatedId == el.id)
+        {
+            const float curX = el.transformacao.value("x", 0.0f);
+            const float curY = el.transformacao.value("y", 0.0f);
+            const float curRot = Geo::ElementRotation(el);
+            const float curW = el.transformacao.value("largura", 160.0f);
+            const float curH = el.transformacao.value("altura", 32.0f);
+
+            const float dx = curX - mDup.sourceX;
+            const float dy = curY - mDup.sourceY;
+            const float drot = curRot - mDup.sourceRot;
+            const float fw = curW / std::max(0.01f, mDup.sourceW);
+            const float fh = curH / std::max(0.01f, mDup.sourceH);
+
+            if (fabsf(dx) > 0.001f || fabsf(dy) > 0.001f || fabsf(drot) > 0.001f ||
+                fabsf(fw - 1.0f) > 0.001f || fabsf(fh - 1.0f) > 0.001f)
+            {
+                mDup.deltaX = dx;
+                mDup.deltaY = dy;
+                mDup.deltaRot = drot;
+                mDup.factorW = fw;
+                mDup.factorH = fh;
+            }
+        }
     }
 
     void App::DuplicarSelecao()
@@ -913,115 +1125,98 @@ namespace seedui
         }
 
         Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+        const bool continuingSequence =
+            ids.size() == 1 && mDup.hasSourceSnapshot &&
+            ids.front() == mDup.lastDuplicatedId;
+        if (!continuingSequence)
+            mDup.ResetToDefault();
 
-        // Verifica se há uma transformação aprendida para repetir
-        // Condição: temos delta aprendido E o elemento atualmente selecionado é o último da sequência
-        const bool repeatingSequence = mDupSeq.hasLearnedDelta &&
-                                      !mDupSeq.lastCreatedId.empty() &&
-                                      (mSelectedElementId == mDupSeq.lastCreatedId ||
-                                       (!ids.empty() && ids.front() == mDupSeq.lastCreatedId));
+        // Capture os valores antes de inserir no vetor do modo. A insercao da
+        // copia pode realocar mode.raiz e invalidar ponteiros para o original.
+        const Element* source = Project::ResolverId(mode, ids.front());
+        if (!source) return;
+        const float srcX = source->transformacao.value("x", 0.0f);
+        const float srcY = source->transformacao.value("y", 0.0f);
+        const float srcRot = Geo::ElementRotation(*source);
+        const float srcW = source->transformacao.value("largura", 160.0f);
+        const float srcH = source->transformacao.value("altura", 32.0f);
 
-        if (repeatingSequence)
-        {
-            // Cria a nova cópia (C, D, etc.) como clone do objeto atualmente selecionado (B, C, etc.)
-            const std::vector<Element> copies = Project::CopiarElementos(mode, ids);
-            if (copies.empty()) return;
-
-            ++mElementPasteGeneration;
-            // Deslocamento 0 para não somar o offset padrão (+16px) ao delta aprendido
-            const std::vector<std::string> pastedRootIds = Project::ColarElementosOffset(
-                mProject, mode, copies, 0.0f, 0.0f);
-
-            if (pastedRootIds.empty()) return;
-
-            // Aplica as fórmulas exatas de repetição ao novo elemento criado
-            if (Element* clone = Project::ResolverId(mode, pastedRootIds.front()))
-            {
-                // Objeto de origem (o elemento selecionado antes da duplicação, ex: B)
-                if (const Element* src = Project::ResolverId(mode, ids.front()))
-                {
-                    const float srcX = src->transformacao.value("x", 0.0f);
-                    const float srcY = src->transformacao.value("y", 0.0f);
-                    const float srcRot = Geo::ElementRotation(*src);
-                    const float srcW = src->transformacao.value("largura", 160.0f);
-                    const float srcH = src->transformacao.value("altura", 32.0f);
-
-                    const float newX = srcX + mDupSeq.learnedDelta.deltaX;
-                    const float newY = srcY + mDupSeq.learnedDelta.deltaY;
-                    const float newRot = srcRot + mDupSeq.learnedDelta.deltaRot;
-                    const float newW = std::max(1.0f, srcW * mDupSeq.learnedDelta.factorW);
-                    const float newH = std::max(1.0f, srcH * mDupSeq.learnedDelta.factorH);
-
-                    clone->transformacao["x"] = newX;
-                    clone->transformacao["y"] = newY;
-                    clone->transformacao["rotacao"] = newRot;
-                    clone->transformacao["largura"] = newW;
-                    clone->transformacao["altura"] = newH;
-                    ClampElementCornerRadii(*clone);
-
-                    // Diagnóstico detalhado: A, B, Delta, C
-                    char diagBuf[512];
-                    snprintf(diagBuf, sizeof(diagBuf),
-                             "[Ctrl+D Repetição] A(x=%.1f,y=%.1f,rot=%.1f°,w=%.1f,h=%.1f) | "
-                             "B(x=%.1f,y=%.1f,rot=%.1f°,w=%.1f,h=%.1f) | "
-                             "Delta(dx=%.1f,dy=%.1f,drot=%.1f°,fw=%.2f,fh=%.2f) -> "
-                             "Novo(x=%.1f,y=%.1f,rot=%.1f°,w=%.1f,h=%.1f)",
-                             mDupSeq.stateA.x, mDupSeq.stateA.y, mDupSeq.stateA.rot, mDupSeq.stateA.w, mDupSeq.stateA.h,
-                             mDupSeq.stateB.x, mDupSeq.stateB.y, mDupSeq.stateB.rot, mDupSeq.stateB.w, mDupSeq.stateB.h,
-                             mDupSeq.learnedDelta.deltaX, mDupSeq.learnedDelta.deltaY, mDupSeq.learnedDelta.deltaRot,
-                             mDupSeq.learnedDelta.factorW, mDupSeq.learnedDelta.factorH,
-                             newX, newY, newRot, newW, newH);
-                    mStatusMsg = diagBuf;
-                    mStatusMsgUntil = GetTime() + 10.0;
-                    TraceLog(LOG_INFO, "%s", diagBuf);
-                }
-            }
-
-            // Atualiza a cadeia: a nova cópia é selecionada e se torna a última da cadeia
-            mDupSeq.lastCreatedId = pastedRootIds.front();
-            // Mantém mDupSeq.hasLearnedDelta e mDupSeq.learnedDelta intactos para as próximas cópias (D, E, etc.)
-
-            mSelectedElementIds = pastedRootIds;
-            mSelectedElementId = pastedRootIds.back();
-            mProjectDirty = true;
-            CapturarHistorico();
-            return;
-        }
-
-        // Caso contrário: primeira duplicação (A -> B) ou duplicação simples sem delta aprendido
+        // Cópia profunda dos elementos selecionados
         const std::vector<Element> copies = Project::CopiarElementos(mode, ids);
         if (copies.empty()) return;
 
-        // Captura o estado original A antes de criar B
-        if (const Element* orig = Project::ResolverId(mode, ids.front()))
-        {
-            mDupSeq.stateA.id = orig->id;
-            mDupSeq.stateA.x = orig->transformacao.value("x", 0.0f);
-            mDupSeq.stateA.y = orig->transformacao.value("y", 0.0f);
-            mDupSeq.stateA.rot = Geo::ElementRotation(*orig);
-            mDupSeq.stateA.w = orig->transformacao.value("largura", 160.0f);
-            mDupSeq.stateA.h = orig->transformacao.value("altura", 32.0f);
-        }
-
+        // Cola com offset 0 para aplicar o vetor de transformação preciso
         ++mElementPasteGeneration;
         const std::vector<std::string> pastedRootIds = Project::ColarElementosOffset(
-            mProject, mode, copies, 16.0f, 16.0f);
+            mProject, mode, copies, 0.0f, 0.0f);
+        if (!mPowerClipEditFrameId.empty())
+            for (const std::string& id : pastedRootIds)
+                Project::ReparentearElemento(mode, id, mPowerClipEditFrameId);
 
         if (pastedRootIds.empty()) return;
 
-        // Inicializa a sequência: B foi criado
-        mDupSeq.hasSequence = true;
-        mDupSeq.lastCreatedId = pastedRootIds.front();
-        mDupSeq.hasLearnedDelta = false;
-        mDupSeq.learnedDelta = {};
+        if (pastedRootIds.size() == 1)
+        {
+            const std::string newId = pastedRootIds.front();
+            Element* clone = Project::ResolverId(mode, newId);
+            if (clone)
+            {
+                // A duplicata herda integralmente o estado visual atual da
+                // selecionada: cores, gradientes, espessura/opacidade do
+                // contorno, opacidade do preenchimento e demais estilos.
+                // Copiar o bloco inteiro tambem preserva propriedades futuras.
+                clone->estilos = copies.front().estilos;
+                clone->layout = copies.front().layout;
+                clone->estados = copies.front().estados;
+                clone->propriedades = copies.front().propriedades;
+
+                // Preserve toda a transformacao (inclusive campos especificos
+                // da forma) e altere apenas os componentes incrementais do
+                // Smart Duplicate.
+                clone->transformacao = copies.front().transformacao;
+                clone->transformacao["x"] = srcX + mDup.deltaX;
+                clone->transformacao["y"] = srcY + mDup.deltaY;
+                clone->transformacao["rotacao"] = srcRot + mDup.deltaRot;
+                clone->transformacao["largura"] = std::max(1.0f, srcW * mDup.factorW);
+                clone->transformacao["altura"] = std::max(1.0f, srcH * mDup.factorH);
+                ClampElementCornerRadii(*clone);
+
+                // Configura o rastreamento para aprender novo delta caso o usuário mova este clone
+                mDup.lastDuplicatedId = newId;
+                mDup.sourceX = srcX;
+                mDup.sourceY = srcY;
+                mDup.sourceRot = srcRot;
+                mDup.sourceW = srcW;
+                mDup.sourceH = srcH;
+                mDup.hasSourceSnapshot = true;
+            }
+        }
+        else
+        {
+            for (const std::string& newId : pastedRootIds)
+            {
+                if (Element* clone = Project::ResolverId(mode, newId))
+                {
+                    const float curX = clone->transformacao.value("x", 0.0f);
+                    const float curY = clone->transformacao.value("y", 0.0f);
+                    clone->transformacao["x"] = curX + mDup.deltaX;
+                    clone->transformacao["y"] = curY + mDup.deltaY;
+                }
+            }
+            mDup.lastDuplicatedId.clear();
+            mDup.hasSourceSnapshot = false;
+        }
 
         mSelectedElementIds = pastedRootIds;
         mSelectedElementId = pastedRootIds.back();
         mProjectDirty = true;
         CapturarHistorico();
 
-        mStatusMsg = std::to_string(pastedRootIds.size()) +
-                     " elemento(s) duplicado(s) (Ctrl+D)";
+        char statusBuf[256];
+        snprintf(statusBuf, sizeof(statusBuf),
+                 "%zu elemento(s) duplicado(s) (Ctrl+D): dx=%.1f, dy=%.1f",
+                 pastedRootIds.size(), mDup.deltaX, mDup.deltaY);
+        mStatusMsg = statusBuf;
         mStatusMsgUntil = GetTime() + 4.0;
     }
 
@@ -1264,7 +1459,7 @@ namespace seedui
         if (!mPenDrawing)
         {
             // Verifica hover sobre segmentos de um caminho selecionado para inserção de nó (+).
-            if (PossuiModoAtivo() && !mSelectedElementId.empty())
+            if (mPenAutoAddDelete && PossuiModoAtivo() && !mSelectedElementId.empty())
             {
                 Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
                 Element* sel = Project::ResolverId(mode, mSelectedElementId);
@@ -1281,7 +1476,8 @@ namespace seedui
                     float projX = 0.0f, projY = 0.0f;
                     int segIdx = -1;
                     float segT = 0.0f;
-                    if (Geo::FindSegmentOnPath(*sel, localX, localY, tol, segIdx, segT, projX, projY))
+                    if (Geo::FindSegmentOnPath(*sel, localX, localY, tol, segIdx, segT, projX, projY) &&
+                        segT > 0.02f && segT < 0.98f)
                     {
                         mPenHoverSegmentIndex = segIdx;
                         mPenHoverT = segT;
@@ -1363,9 +1559,9 @@ namespace seedui
                 }
             }
 
-            // CONTINUAR CONTORNO: se houver um caminho selecionado e o clique
-            // for no ÚLTIMO ponto (ponto solto), retoma o desenho a partir
-            // dele — os próximos cliques adicionam pontos ao mesmo caminho.
+            // CONTINUAR CONTORNO: uma extremidade de caminho aberto retoma o
+            // desenho. Se for a primeira, inverte-se a direção do caminho e
+            // das alças para preservar exatamente a geometria existente.
             if (canvasHovered && inside &&
                 ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             {
@@ -1381,14 +1577,39 @@ namespace seedui
                     const float sbx = sel->transformacao.value("x", 0.0f);
                     const float sby = sel->transformacao.value("y", 0.0f);
                     const int last = (int)spts.size() - 1;
+                    const float fx = sbx + spts[0].value("x", 0.0f);
+                    const float fy = sby + spts[0].value("y", 0.0f);
                     const float lx = sbx + spts[last].value("x", 0.0f);
                     const float ly = sby + spts[last].value("y", 0.0f);
-                    const float ddx = px - lx, ddy = py - ly;
-                    if (ddx * ddx + ddy * ddy <= 256.0f)
+                    const float fdx = px - fx, fdy = py - fy;
+                    const float ldx = px - lx, ldy = py - ly;
+                    const bool atFirst = fdx * fdx + fdy * fdy <= 256.0f;
+                    const bool atLast = ldx * ldx + ldy * ldy <= 256.0f;
+                    if (atFirst || atLast)
                     {
+                        if (atFirst && !atLast)
+                        {
+                            auto& reversible = sel->transformacao["pontos"];
+                            std::reverse(reversible.begin(), reversible.end());
+                            for (auto& point : reversible)
+                            {
+                                const float oldOutX = point.value("cx2", 0.0f);
+                                const float oldOutY = point.value("cy2", 0.0f);
+                                const bool broken = point.value("quebrado", 0.0f) > 0.5f;
+                                const float oldInX = broken
+                                    ? point.value("cx1", 0.0f) : -oldOutX;
+                                const float oldInY = broken
+                                    ? point.value("cy1", 0.0f) : -oldOutY;
+                                point["cx2"] = oldInX;
+                                point["cy2"] = oldInY;
+                                point["cx1"] = oldOutX;
+                                point["cy1"] = oldOutY;
+                                point["quebrado"] = 1.0f;
+                            }
+                        }
                         // Retoma o desenho no caminho existente.
                         mPenDrawing = true;
-                        mStatusMsg = "Contorno em continuação — clique p/ adicionar";
+                        mStatusMsg = "Contorno em continuação — clique/arraste para adicionar";
                         mStatusMsgUntil = GetTime() + 4.0;
                         return;
                     }
@@ -1396,7 +1617,7 @@ namespace seedui
             }
             // EXCLUIR PONTO: clicar em um NÓ existente com a caneta remove
             // o ponto da forma (mantém o caminho com 2+ pontos).
-            if (canvasHovered && inside &&
+            if (mPenAutoAddDelete && canvasHovered && inside &&
                 ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             {
                 Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
@@ -1458,7 +1679,18 @@ namespace seedui
                     { "cor_borda", "#cfcfcf" },
                     { "espessura_borda", 1.5f }
                 };
-                mode.raiz.push_back(std::move(e));
+                if (!mPowerClipEditFrameId.empty())
+                {
+                    if (Element* frame = Project::ResolverId(
+                            mode, mPowerClipEditFrameId))
+                        frame->filhos.push_back(std::move(e));
+                    else
+                        mode.raiz.push_back(std::move(e));
+                }
+                else
+                {
+                    mode.raiz.push_back(std::move(e));
+                }
                 mSelectedElementId = id;
                 mSelectedElementIds = { id };
                 mPenDrawing = true;
@@ -1466,7 +1698,7 @@ namespace seedui
                 mPenDragStartX = mPenDragX = px;
                 mPenDragStartY = mPenDragY = py;
                 mProjectDirty = true;
-                mStatusMsg = "Caneta: clique adiciona ponto · arraste cria curva · Alt quebra alça · Espaço move nó";
+                mStatusMsg = "Bézier: clique=reta · arraste=curva · Ctrl=restringe · Alt=quebra · Espaço=conclui";
                 mStatusMsgUntil = GetTime() + 6.0;
             }
             ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
@@ -1478,6 +1710,20 @@ namespace seedui
         if (!path || path->tipo != "caminho")
         {
             mPenDrawing = false;
+            return;
+        }
+
+        auto& pts = path->transformacao["pontos"];
+
+        if ((ImGui::IsKeyPressed(ImGuiKey_Delete, false) ||
+             ImGui::IsKeyPressed(ImGuiKey_Backspace, false)) &&
+            pts.is_array() && pts.size() > 1)
+        {
+            pts.erase(pts.end() - 1);
+            RecalcularCaixaCaminho(*path);
+            mProjectDirty = true;
+            mStatusMsg = "Último nó removido do traçado";
+            mStatusMsgUntil = GetTime() + 4.0;
             return;
         }
 
@@ -1495,16 +1741,17 @@ namespace seedui
             return;
         }
         if (ImGui::IsKeyPressed(ImGuiKey_Enter) ||
+            (!mPenDragging && ImGui::IsKeyPressed(ImGuiKey_Space, false)) ||
             ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
         {
             mPenDrawing = false;
             mProjectDirty = true;
+            CapturarHistorico();
             mStatusMsg = "Caminho finalizado (aberto)";
             mStatusMsgUntil = GetTime() + 4.0;
             return;
         }
 
-        auto& pts = path->transformacao["pontos"];
         const float bx = path->transformacao.value("x", 0.0f);
         const float by = path->transformacao.value("y", 0.0f);
 
@@ -1612,11 +1859,16 @@ namespace seedui
                     float ddx = mPenDragX - mPenDragStartX;
                     float ddy = mPenDragY - mPenDragStartY;
 
-                    // SHIFT: trava a inclinação da alça em incrementos de 45°
-                    if (ImGui::GetIO().KeyShift)
+                    // Ctrl usa o ângulo de restrição configurável da
+                    // caneta; Shift preserva o comportamento anterior de 45°.
+                    if (ImGui::GetIO().KeyCtrl || ImGui::GetIO().KeyShift)
                     {
                         const float angle = atan2f(ddy, ddx);
-                        const float snappedAngle = roundf(angle / 0.785398163f) * 0.785398163f;
+                        const float stepDegrees = ImGui::GetIO().KeyCtrl
+                            ? std::max(1.0f, std::min(90.0f, mPenConstrainAngle))
+                            : 45.0f;
+                        const float stepRadians = stepDegrees * 0.017453292519943295f;
+                        const float snappedAngle = roundf(angle / stepRadians) * stepRadians;
                         const float len = sqrtf(ddx * ddx + ddy * ddy);
                         ddx = len * cosf(snappedAngle);
                         ddy = len * sinf(snappedAngle);
@@ -1671,6 +1923,7 @@ namespace seedui
         if (removed == 0) return;
         mSelectedElementId.clear();
         mSelectedElementIds.clear();
+        mPowerClipDirectFrameId.clear();
         mSelectedCornerMask = 0;
         mProjectDirty = true;
         CapturarHistorico();
@@ -1766,8 +2019,17 @@ namespace seedui
         if (!PossuiModoAtivo()) return;
         Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
         mSelectedElementIds.clear();
-        for (const Element& e : mode.raiz)
-            mSelectedElementIds.push_back(e.id);
+        if (!mPowerClipEditFrameId.empty())
+        {
+            if (Element* frame = Project::ResolverId(mode, mPowerClipEditFrameId))
+                for (const Element& e : frame->filhos)
+                    mSelectedElementIds.push_back(e.id);
+        }
+        else
+        {
+            for (const Element& e : mode.raiz)
+                mSelectedElementIds.push_back(e.id);
+        }
         mSelectedElementId = mSelectedElementIds.empty()
             ? std::string() : mSelectedElementIds.back();
         if (!mSelectedElementIds.empty())
@@ -2097,6 +2359,7 @@ namespace seedui
                 created->transformacao["altura"] = h;
                 created->estilos["opacidade"] = 1.0f;
             }
+            CapturarHistorico();
             mCurrentTool = Tool::Select; // volta à seleção após criar
             mStatusMsg = "Retangulo criado no tamanho da tela base (" +
                          std::to_string((int)w) + "x" + std::to_string((int)h) + ")";
@@ -2429,6 +2692,403 @@ namespace seedui
         mStatusMsgUntil = GetTime() + 4.0;
     }
 
+    void App::CriarPowerClipSelecao()
+    {
+        if (!PossuiModoAtivo() || mSelectedElementIds.size() != 2)
+        {
+            mStatusMsg = "PowerClip requer exatamente dois objetos selecionados";
+            mStatusMsgUntil = GetTime() + 5.0;
+            return;
+        }
+
+        Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+        std::string frameId = mSelectedElementId;
+        if (std::find(mSelectedElementIds.begin(), mSelectedElementIds.end(), frameId) ==
+            mSelectedElementIds.end())
+            frameId = mSelectedElementIds.back();
+        const std::string contentId = mSelectedElementIds.front() == frameId
+            ? mSelectedElementIds.back() : mSelectedElementIds.front();
+
+        Element* frame = Project::ResolverId(mode, frameId);
+        Element* content = Project::ResolverId(mode, contentId);
+        if (!frame || !content || frame->bloqueado || content->bloqueado)
+        {
+            mStatusMsg = "PowerClip indisponivel: objeto ausente ou bloqueado";
+            mStatusMsgUntil = GetTime() + 5.0;
+            return;
+        }
+
+        const bool openPath = frame->tipo == "caminho" &&
+            frame->transformacao.value("fechado", 0.0f) < 0.5f;
+        if (frame->tipo == "linha" || frame->tipo == "grupo" ||
+            frame->tipo == "texto" || openPath)
+        {
+            mStatusMsg = "A moldura do PowerClip precisa ser uma forma fechada";
+            mStatusMsgUntil = GetTime() + 5.0;
+            return;
+        }
+
+        // O objeto ativo (o ultimo selecionado ou aquele que recebeu o clique
+        // direito) e a moldura. O outro objeto vira conteudo, preservando suas
+        // coordenadas absolutas, estilos e transformacoes.
+        if (!Project::ReparentearElemento(mode, contentId, frameId))
+        {
+            mStatusMsg = "Nao foi possivel criar o PowerClip com esta hierarquia";
+            mStatusMsgUntil = GetTime() + 5.0;
+            return;
+        }
+
+        frame = Project::ResolverId(mode, frameId);
+        if (!frame) return;
+        frame->propriedades["powerclip"] = true;
+        frame->propriedades["powerclip_conteudo_bloqueado"] = true;
+        mPowerClipEditFrameId.clear();
+        mPowerClipDirectFrameId.clear();
+        mSelectedElementIds = { frameId };
+        mSelectedElementId = frameId;
+        mSelectedCornerMask = 0;
+        mProjectDirty = true;
+        CapturarHistorico();
+        mStatusMsg = "PowerClip criado: conteudo recortado pela forma ativa";
+        mStatusMsgUntil = GetTime() + 5.0;
+    }
+
+    void App::EntrarEdicaoPowerClip(const std::string& requestedFrameId)
+    {
+        if (!PossuiModoAtivo()) return;
+        Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+        const std::string frameId = requestedFrameId.empty()
+            ? PowerClipContextFrameId() : requestedFrameId;
+        Element* frame = Project::ResolverId(mode, frameId);
+        if (!frame || !frame->propriedades.is_object() ||
+            !frame->propriedades.value("powerclip", false) || frame->filhos.empty())
+        {
+            mStatusMsg = "Selecione uma moldura PowerClip com conteudo";
+            mStatusMsgUntil = GetTime() + 4.0;
+            return;
+        }
+
+        mPowerClipEditFrameId = frameId;
+        mPowerClipDirectFrameId.clear();
+        // O último filho é o que aparece acima na pilha visual.
+        mSelectedElementId = frame->filhos.back().id;
+        mSelectedElementIds = { mSelectedElementId };
+        mSelectedCornerMask = 0;
+        mCurrentTool = Tool::Select;
+        mStatusMsg = "Editando conteudo do PowerClip · Esc conclui";
+        mStatusMsgUntil = GetTime() + 5.0;
+    }
+
+    void App::SairEdicaoPowerClip()
+    {
+        if (mPowerClipEditFrameId.empty()) return;
+        const std::string frameId = mPowerClipEditFrameId;
+        mPowerClipEditFrameId.clear();
+        mPowerClipDirectFrameId.clear();
+        if (PossuiModoAtivo() && Project::ResolverId(
+                mProject.telas[mTelaAtiva].modos[mModoAtivo], frameId))
+        {
+            mSelectedElementId = frameId;
+            mSelectedElementIds = { frameId };
+        }
+        mSelectedCornerMask = 0;
+        mStatusMsg = "Edicao do PowerClip concluida";
+        mStatusMsgUntil = GetTime() + 4.0;
+    }
+
+    void App::ExtrairConteudoPowerClip()
+    {
+        if (!PossuiModoAtivo()) return;
+        Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+        const std::string frameId = PowerClipContextFrameId();
+        Element* frame = Project::ResolverId(mode, frameId);
+        if (!frame || !frame->propriedades.is_object() ||
+            !frame->propriedades.value("powerclip", false))
+        {
+            mStatusMsg = "Selecione uma moldura PowerClip";
+            mStatusMsgUntil = GetTime() + 4.0;
+            return;
+        }
+
+        std::vector<std::string> extractedIds;
+        if (!Project::ExtrairFilhos(mode, frameId, extractedIds))
+        {
+            mStatusMsg = "O PowerClip nao possui conteudo para extrair";
+            mStatusMsgUntil = GetTime() + 4.0;
+            return;
+        }
+        frame = Project::ResolverId(mode, frameId);
+        if (frame && frame->propriedades.is_object())
+        {
+            frame->propriedades.erase("powerclip");
+            frame->propriedades.erase("powerclip_conteudo_bloqueado");
+            frame->propriedades.erase("powerclip_ajuste");
+        }
+        mPowerClipEditFrameId.clear();
+        mPowerClipDirectFrameId.clear();
+        mSelectedElementIds = extractedIds;
+        mSelectedElementId = extractedIds.empty() ? frameId : extractedIds.back();
+        mSelectedCornerMask = 0;
+        mProjectDirty = true;
+        CapturarHistorico();
+        mStatusMsg = "Conteudo extraido · mascara PowerClip removida";
+        mStatusMsgUntil = GetTime() + 5.0;
+    }
+
+    void App::AjustarConteudoPowerClip(int ajuste)
+    {
+        if (!PossuiModoAtivo()) return;
+        Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+        const std::string frameId = PowerClipContextFrameId();
+        Element* frame = Project::ResolverId(mode, frameId);
+        if (!frame || !frame->propriedades.is_object() ||
+            !frame->propriedades.value("powerclip", false) || frame->filhos.empty())
+            return;
+
+        float contentLeft = FLT_MAX, contentTop = FLT_MAX;
+        float contentRight = -FLT_MAX, contentBottom = -FLT_MAX;
+        for (Element& child : frame->filhos)
+            CollectVisibleBounds(child, contentLeft, contentTop,
+                                 contentRight, contentBottom);
+        if (contentRight <= contentLeft || contentBottom <= contentTop) return;
+
+        const float frameX = frame->transformacao.value("x", 0.0f);
+        const float frameY = frame->transformacao.value("y", 0.0f);
+        const float frameW = std::max(1.0f,
+            frame->transformacao.value("largura", 160.0f));
+        const float frameH = std::max(1.0f,
+            frame->transformacao.value("altura", 32.0f));
+        const float contentW = std::max(0.01f, contentRight - contentLeft);
+        const float contentH = std::max(0.01f, contentBottom - contentTop);
+
+        float sx = 1.0f, sy = 1.0f;
+        const char* behavior = "centralizar";
+        if (ajuste == 1)
+        {
+            sx = sy = std::min(frameW / contentW, frameH / contentH);
+            behavior = "ajustar";
+        }
+        else if (ajuste == 2)
+        {
+            sx = sy = std::max(frameW / contentW, frameH / contentH);
+            behavior = "preencher";
+        }
+        else if (ajuste == 3)
+        {
+            sx = frameW / contentW;
+            sy = frameH / contentH;
+            behavior = "esticar";
+        }
+        const float targetLeft = frameX + (frameW - contentW * sx) * 0.5f;
+        const float targetTop = frameY + (frameH - contentH * sy) * 0.5f;
+        for (Element& child : frame->filhos)
+            ApplyPowerClipAffine(child, contentLeft, contentTop,
+                                 targetLeft, targetTop, sx, sy);
+        frame->propriedades["powerclip_ajuste"] = behavior;
+        mProjectDirty = true;
+        CapturarHistorico();
+        mStatusMsg = std::string("PowerClip: ") + behavior + " conteudo";
+        mStatusMsgUntil = GetTime() + 4.0;
+    }
+
+    std::string App::PowerClipContextFrameId()
+    {
+        if (!PossuiModoAtivo()) return {};
+        Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+        auto validFrame = [&](const std::string& id) -> bool
+        {
+            Element* element = Project::ResolverId(mode, id);
+            return element && element->propriedades.is_object() &&
+                element->propriedades.value("powerclip", false);
+        };
+        if (validFrame(mPowerClipEditFrameId)) return mPowerClipEditFrameId;
+        if (validFrame(mPowerClipDirectFrameId))
+        {
+            Element* frame = Project::ResolverId(mode, mPowerClipDirectFrameId);
+            auto contains = [&](const Element& root, const std::string& wanted,
+                                auto& self) -> bool
+            {
+                if (root.id == wanted) return true;
+                for (const Element& child : root.filhos)
+                    if (self(child, wanted, self)) return true;
+                return false;
+            };
+            bool selectedInside = false;
+            if (frame)
+                for (const Element& child : frame->filhos)
+                    if (contains(child, mSelectedElementId, contains))
+                    {
+                        selectedInside = true;
+                        break;
+                    }
+            if (selectedInside) return mPowerClipDirectFrameId;
+            mPowerClipDirectFrameId.clear();
+        }
+        if (validFrame(mSelectedElementId)) return mSelectedElementId;
+        for (const std::string& id : mSelectedElementIds)
+            if (validFrame(id)) return id;
+        return {};
+    }
+
+    void App::SelecionarConteudoPowerClip()
+    {
+        if (!PossuiModoAtivo()) return;
+        Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+        const std::string frameId = PowerClipContextFrameId();
+        Element* frame = Project::ResolverId(mode, frameId);
+        if (!frame || frame->filhos.empty())
+        {
+            mStatusMsg = "O PowerClip nao possui conteudo";
+            mStatusMsgUntil = GetTime() + 4.0;
+            return;
+        }
+        mPowerClipDirectFrameId = frameId;
+        mSelectedElementId = frame->filhos.back().id;
+        mSelectedElementIds = { mSelectedElementId };
+        mSelectedCornerMask = 0;
+        mStatusMsg = "Conteudo interno selecionado · recorte permanece ativo";
+        mStatusMsgUntil = GetTime() + 5.0;
+    }
+
+    void App::AdicionarConteudoPowerClip(bool substituir)
+    {
+        if (!PossuiModoAtivo()) return;
+        Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+        const std::string frameId = PowerClipContextFrameId();
+        Element* frame = Project::ResolverId(mode, frameId);
+        if (!frame) return;
+
+        std::vector<std::string> incoming;
+        for (const std::string& id : mSelectedElementIds)
+            if (id != frameId && id != mSelectedElementId)
+                incoming.push_back(id);
+        if (mSelectedElementId != frameId &&
+            Project::ResolverId(mode, mSelectedElementId))
+            incoming.push_back(mSelectedElementId);
+        std::vector<std::string> uniqueIncoming;
+        for (const std::string& id : incoming)
+            if (std::find(uniqueIncoming.begin(), uniqueIncoming.end(), id) ==
+                uniqueIncoming.end())
+                uniqueIncoming.push_back(id);
+        incoming = std::move(uniqueIncoming);
+        incoming.erase(std::remove_if(incoming.begin(), incoming.end(),
+            [&](const std::string& id)
+            {
+                for (const Element& child : frame->filhos)
+                {
+                    auto contains = [&](const Element& root, const std::string& wanted,
+                                        auto& self) -> bool
+                    {
+                        if (root.id == wanted) return true;
+                        for (const Element& nested : root.filhos)
+                            if (self(nested, wanted, self)) return true;
+                        return false;
+                    };
+                    if (contains(child, id, contains)) return true;
+                }
+                return false;
+            }), incoming.end());
+
+        if (incoming.empty())
+        {
+            mStatusMsg = "Selecione a moldura e pelo menos um objeto externo";
+            mStatusMsgUntil = GetTime() + 5.0;
+            return;
+        }
+
+        std::vector<std::string> oldContents;
+        if (substituir && !frame->filhos.empty())
+            Project::ExtrairFilhos(mode, frameId, oldContents);
+
+        std::vector<std::string> moved;
+        for (const std::string& id : incoming)
+            if (Project::ReparentearElemento(mode, id, frameId))
+                moved.push_back(id);
+        if (moved.empty()) return;
+
+        mPowerClipDirectFrameId = mPowerClipEditFrameId.empty()
+            ? frameId : std::string();
+        mSelectedElementIds = moved;
+        mSelectedElementId = moved.back();
+        mSelectedCornerMask = 0;
+        mProjectDirty = true;
+        CapturarHistorico();
+        mStatusMsg = substituir
+            ? "Conteudo do PowerClip substituido; anterior extraido"
+            : std::to_string(moved.size()) + " objeto(s) adicionado(s) ao PowerClip";
+        mStatusMsgUntil = GetTime() + 5.0;
+    }
+
+    void App::RemoverConteudoSelecionadoPowerClip()
+    {
+        if (!PossuiModoAtivo()) return;
+        Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+        const std::string frameId = PowerClipContextFrameId();
+        Element* frame = Project::ResolverId(mode, frameId);
+        if (!frame) return;
+
+        auto contains = [&](const Element& root, const std::string& wanted,
+                            auto& self) -> bool
+        {
+            if (root.id == wanted) return true;
+            for (const Element& child : root.filhos)
+                if (self(child, wanted, self)) return true;
+            return false;
+        };
+        std::vector<std::string> selected = mSelectedElementIds;
+        if (selected.empty() && !mSelectedElementId.empty())
+            selected.push_back(mSelectedElementId);
+        std::vector<std::string> removed;
+        for (const std::string& id : selected)
+        {
+            bool isContent = false;
+            for (const Element& child : frame->filhos)
+                if (contains(child, id, contains)) { isContent = true; break; }
+            if (isContent && Project::ReparentearElemento(mode, id, ""))
+                removed.push_back(id);
+        }
+        if (removed.empty())
+        {
+            mStatusMsg = "Selecione um objeto interno para remover";
+            mStatusMsgUntil = GetTime() + 4.0;
+            return;
+        }
+        mPowerClipDirectFrameId.clear();
+        mSelectedElementIds = removed;
+        mSelectedElementId = removed.back();
+        mSelectedCornerMask = 0;
+        mProjectDirty = true;
+        CapturarHistorico();
+        mStatusMsg = "Conteudo selecionado removido da mascara sem ser apagado";
+        mStatusMsgUntil = GetTime() + 5.0;
+    }
+
+    void App::RemoverPowerClip()
+    {
+        if (!PossuiModoAtivo()) return;
+        Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+        const std::string frameId = PowerClipContextFrameId();
+        Element* frame = Project::ResolverId(mode, frameId);
+        if (!frame) return;
+        std::vector<std::string> extracted;
+        if (!frame->filhos.empty())
+            Project::ExtrairFilhos(mode, frameId, extracted);
+        frame = Project::ResolverId(mode, frameId);
+        if (!frame) return;
+        frame->propriedades.erase("powerclip");
+        frame->propriedades.erase("powerclip_conteudo_bloqueado");
+        frame->propriedades.erase("powerclip_ajuste");
+        mPowerClipEditFrameId.clear();
+        mPowerClipDirectFrameId.clear();
+        mSelectedElementIds = { frameId };
+        mSelectedElementId = frameId;
+        mSelectedCornerMask = 0;
+        mProjectDirty = true;
+        CapturarHistorico();
+        mStatusMsg = "PowerClip removido; moldura e objetos foram preservados";
+        mStatusMsgUntil = GetTime() + 5.0;
+    }
+
     void App::ResetarHistorico()
     {
         mHistory.clear();
@@ -2471,6 +3131,17 @@ namespace seedui
         mProject = std::move(restored);
         mSelectedElementId.clear();
         mSelectedElementIds.clear();
+        mPowerClipEditFrameId.clear();
+        mPowerClipDirectFrameId.clear();
+        if (PossuiModoAtivo())
+        {
+            Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+            if (!mode.raiz.empty())
+            {
+                mSelectedElementId = mode.raiz.back().id;
+                mSelectedElementIds = { mode.raiz.back().id };
+            }
+        }
         mProjectDirty = true;
         mStatusMsg = "Desfazer";
         mStatusMsgUntil = GetTime() + 3.0;
@@ -2491,6 +3162,17 @@ namespace seedui
         mProject = std::move(restored);
         mSelectedElementId.clear();
         mSelectedElementIds.clear();
+        mPowerClipEditFrameId.clear();
+        mPowerClipDirectFrameId.clear();
+        if (PossuiModoAtivo())
+        {
+            Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+            if (!mode.raiz.empty())
+            {
+                mSelectedElementId = mode.raiz.back().id;
+                mSelectedElementIds = { mode.raiz.back().id };
+            }
+        }
         mProjectDirty = true;
         mStatusMsg = "Refazer";
         mStatusMsgUntil = GetTime() + 3.0;
@@ -2502,6 +3184,37 @@ namespace seedui
         // (selecionar, mover, marquee) fica suspensa até soltar.
         if (mGuideDragKind != 0) return;
 
+        // Saída do ambiente interno tem prioridade sobre a ferramenta ativa,
+        // inclusive durante Caneta, Texto ou criação de formas.
+        if (!mPowerClipEditFrameId.empty() && PossuiModoAtivo())
+        {
+            if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            {
+                SairEdicaoPowerClip();
+                return;
+            }
+            if (canvasHovered && ImGui::GetIO().KeyCtrl &&
+                ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+            {
+                const ImVec2 portalMouse = ImGui::GetMousePos();
+                float portalX = 0.0f, portalY = 0.0f;
+                if (CanvasScreenToProject(&mProject, portalMouse.x, portalMouse.y,
+                                          portalX, portalY, false,
+                                          mCanvasZoom, mCanvasPanX, mCanvasPanY))
+                {
+                    Modo& portalMode =
+                        mProject.telas[mTelaAtiva].modos[mModoAtivo];
+                    if (!Project::PontoDentroElemento(
+                            portalMode, mPowerClipEditFrameId,
+                            portalX, portalY))
+                    {
+                        SairEdicaoPowerClip();
+                        return;
+                    }
+                }
+            }
+        }
+
         // Ferramenta Medir: medição transitória de distância/ângulo.
         if (mCurrentTool == Tool::Measure && mHasProject)
         {
@@ -2510,8 +3223,7 @@ namespace seedui
         }
 
         // Caneta: desenha caminhos Bézier ponto a ponto.
-        if (mCurrentTool == Tool::Pen && mHasProject &&
-            !ImGui::GetIO().KeyCtrl)
+        if (mCurrentTool == Tool::Pen && mHasProject)
         {
             HandlePenTool(canvasHovered);
             return;
@@ -2564,6 +3276,7 @@ namespace seedui
                         created->transformacao["altura"] = h;
                         created->estilos["opacidade"] = 1.0f;
                     }
+                    CapturarHistorico();
                     mStatusMsg = std::string(name) + " criado";
                     mStatusMsgUntil = GetTime() + 4.0;
                 }
@@ -2618,6 +3331,7 @@ namespace seedui
                         created->transformacao["altura"] =
                             dragged ? std::max(16.0f, dragH) : 26.0f;
                     }
+                    CapturarHistorico();
                     mStatusMsg = dragged
                         ? "Caixa de texto criada — edite o conteúdo no Inspetor"
                         : "Texto criado — edite o conteúdo no Inspetor";
@@ -2640,6 +3354,29 @@ namespace seedui
         }
 
         Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+        if (!mPowerClipEditFrameId.empty())
+        {
+            Element* editFrame = Project::ResolverId(mode, mPowerClipEditFrameId);
+            if (!editFrame || !editFrame->propriedades.is_object() ||
+                !editFrame->propriedades.value("powerclip", false))
+                mPowerClipEditFrameId.clear();
+        }
+        if (!mPowerClipDirectFrameId.empty())
+        {
+            Element* directFrame = Project::ResolverId(
+                mode, mPowerClipDirectFrameId);
+            if (!directFrame || !directFrame->propriedades.is_object() ||
+                !directFrame->propriedades.value("powerclip", false))
+                mPowerClipDirectFrameId.clear();
+            else
+                (void)PowerClipContextFrameId(); // também valida o filho ativo
+        }
+        if (!mPowerClipEditFrameId.empty() &&
+            ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+        {
+            SairEdicaoPowerClip();
+            return;
+        }
         auto isSelected = [&](const std::string& id)
         {
             return std::find(mSelectedElementIds.begin(), mSelectedElementIds.end(), id) !=
@@ -2670,6 +3407,80 @@ namespace seedui
         CanvasProjectToScreen(&mProject, 0.0f, 0.0f, unusedX, unusedY, viewScale,
                               mCanvasZoom, mCanvasPanX, mCanvasPanY);
         const float tolerance = 8.0f / std::max(0.25f, viewScale);
+        auto elementAtPoint = [&](float x, float y) -> Element*
+        {
+            if (!mPowerClipEditFrameId.empty())
+                return Project::ConteudoPowerClipNoPonto(
+                    mode, mPowerClipEditFrameId, x, y, false);
+            if (!mPowerClipDirectFrameId.empty())
+                return Project::ConteudoPowerClipNoPonto(
+                    mode, mPowerClipDirectFrameId, x, y, true);
+            return Project::ElementoNoPonto(mode, x, y);
+        };
+
+        // Ctrl + duplo clique: entra no portal; quando já está dentro, um
+        // Ctrl + duplo clique fora da moldura conclui a edição.
+        if (canvasHovered && mouseOnFrame && ImGui::GetIO().KeyCtrl &&
+            ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+        {
+            if (!mPowerClipEditFrameId.empty())
+            {
+                if (!Project::PontoDentroElemento(
+                        mode, mPowerClipEditFrameId, mouseX, mouseY))
+                {
+                    SairEdicaoPowerClip();
+                    return;
+                }
+            }
+            else
+            {
+                Element* hit = Project::ElementoNoPonto(mode, mouseX, mouseY);
+                if (hit && hit->propriedades.is_object() &&
+                    hit->propriedades.value("powerclip", false))
+                {
+                    EntrarEdicaoPowerClip(hit->id);
+                    return;
+                }
+            }
+        }
+
+        // Ctrl + clique simples seleciona um filho sem abrir o ambiente. A
+        // moldura continua recortando tanto o objeto quanto suas alças. Cliques
+        // repetidos percorrem os objetos sobrepostos, do frontal ao traseiro.
+        if (mPowerClipEditFrameId.empty() && canvasHovered && mouseOnFrame &&
+            ImGui::GetIO().KeyCtrl && !ImGui::GetIO().KeyAlt &&
+            ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
+            !ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+        {
+            Element* frame = Project::ElementoNoPonto(mode, mouseX, mouseY);
+            if (frame && frame->propriedades.is_object() &&
+                frame->propriedades.value("powerclip", false))
+            {
+                std::vector<Element*> hits = Project::ConteudosPowerClipNoPonto(
+                    mode, frame->id, mouseX, mouseY, true);
+                if (!hits.empty())
+                {
+                    size_t next = 0;
+                    if (mPowerClipDirectFrameId == frame->id)
+                    {
+                        for (size_t i = 0; i < hits.size(); ++i)
+                            if (hits[i]->id == mSelectedElementId)
+                            {
+                                next = (i + 1) % hits.size();
+                                break;
+                            }
+                    }
+                    mPowerClipDirectFrameId = frame->id;
+                    mSelectedElementId = hits[next]->id;
+                    mSelectedElementIds = { mSelectedElementId };
+                    mSelectedCornerMask = 0;
+                    mCanvasDragMode = 0;
+                    mStatusMsg = "Objeto interno selecionado · Ctrl+clique alterna";
+                    mStatusMsgUntil = GetTime() + 5.0;
+                    return;
+                }
+            }
+        }
 
         auto dragModeAt = [&](const Element& element, float x, float y)
         {
@@ -3069,11 +3880,27 @@ namespace seedui
             }
             else if (current)
             {
-                currentHandle = dragModeAt(*current, mouseX, mouseY);
+                const bool directInside = mPowerClipDirectFrameId.empty() ||
+                    Project::PontoDentroElemento(mode,
+                        mPowerClipDirectFrameId, mouseX, mouseY);
+                if (directInside)
+                    currentHandle = dragModeAt(*current, mouseX, mouseY);
             }
-            Element* hit = currentHandle >= 2
+            Element* hit = (currentHandle >= 2 ||
+                            (!mPowerClipDirectFrameId.empty() &&
+                             currentHandle == 1))
                 ? current
-                : Project::ElementoNoPonto(mode, mouseX, mouseY);
+                : elementAtPoint(mouseX, mouseY);
+            if (!mPowerClipDirectFrameId.empty() && !hit && currentHandle == 0)
+            {
+                const std::string directFrameId = mPowerClipDirectFrameId;
+                const bool insideFrame = Project::PontoDentroElemento(
+                    mode, directFrameId, mouseX, mouseY);
+                mPowerClipDirectFrameId.clear();
+                hit = insideFrame
+                    ? Project::ResolverId(mode, directFrameId)
+                    : Project::ElementoNoPonto(mode, mouseX, mouseY);
+            }
             // Clique em espaço vazio DENTRO da caixa conjunta move o conjunto
             // (o usuário não precisa acertar o corpo de um elemento).
             if (multiSel && !hit && currentHandle == 0 &&
@@ -3138,8 +3965,11 @@ namespace seedui
                 mCanvasCornerDragMask = 0;
                 if (!isSelected(hit->id))
                 {
-                    if (mDupSeq.lastCreatedId != hit->id)
-                        mDupSeq.Reset();
+                    if (hit->id != mDup.lastDuplicatedId)
+                    {
+                        mDup.hasSourceSnapshot = false;
+                        mDup.lastDuplicatedId.clear();
+                    }
                     mSelectedElementIds.clear();
                     mSelectedElementIds.push_back(hit->id);
                 }
@@ -3151,7 +3981,6 @@ namespace seedui
                 mCanvasCornerDragMask = 0;
                 if (!additive)
                 {
-                    mDupSeq.Reset();
                     mSelectedElementIds.clear();
                     mSelectedElementId.clear();
                 }
@@ -3237,11 +4066,22 @@ namespace seedui
         // esquerdo em andamento, o clique direito é o fork de clone (tratado
         // no bloco de arrasto abaixo) — por isso o armamento só vale quando
         // não há arrasto ativo.
+        bool powerClipContextReserved = !mPowerClipEditFrameId.empty() ||
+                                        !mPowerClipDirectFrameId.empty();
+        if (!powerClipContextReserved && mSelectedElementIds.size() == 1)
+        {
+            if (Element* selected = Project::ResolverId(
+                    mode, mSelectedElementIds.front()))
+                powerClipContextReserved = selected->propriedades.is_object() &&
+                    selected->propriedades.value("powerclip", false);
+        }
         if (canvasHovered && mouseOnFrame && mCurrentTool != Tool::Zoom &&
+            mSelectedElementIds.size() != 2 &&
+            !powerClipContextReserved &&
             mCanvasDragMode == 0 && !mRightDragArmed &&
             ImGui::IsMouseClicked(ImGuiMouseButton_Right))
         {
-            Element* hit = Project::ElementoNoPonto(mode, mouseX, mouseY);
+            Element* hit = elementAtPoint(mouseX, mouseY);
             if (hit && !hit->bloqueado)
             {
                 mRightDragArmed = true;
@@ -3258,6 +4098,16 @@ namespace seedui
             const float threshold = 4.0f / mCanvasZoom;
             if (dx * dx + dy * dy > threshold * threshold)
             {
+                if (Element* origA = Project::ResolverId(mode, mRightDragElementId))
+                {
+                    mRightDragSourceA.id = origA->id;
+                    mRightDragSourceA.x = origA->transformacao.value("x", 0.0f);
+                    mRightDragSourceA.y = origA->transformacao.value("y", 0.0f);
+                    mRightDragSourceA.rot = Geo::ElementRotation(*origA);
+                    mRightDragSourceA.w = origA->transformacao.value("largura", 160.0f);
+                    mRightDragSourceA.h = origA->transformacao.value("altura", 32.0f);
+                }
+
                 const std::string cloneId =
                     Project::ClonarElemento(mode, mProject, mRightDragElementId);
                 if (!cloneId.empty())
@@ -3312,8 +4162,19 @@ namespace seedui
             if (right - left > tolerance && bottom - top > tolerance)
             {
                 std::vector<std::string> found;
-                CollectElementsInRect(mode.raiz, left, top, right, bottom, found,
-                                      mMarqueeContainOnly);
+                if (!mPowerClipEditFrameId.empty())
+                {
+                    if (Element* frame = Project::ResolverId(
+                            mode, mPowerClipEditFrameId))
+                        CollectElementsInRect(frame->filhos, left, top, right,
+                                              bottom, found,
+                                              mMarqueeContainOnly);
+                }
+                else
+                {
+                    CollectElementsInRect(mode.raiz, left, top, right, bottom,
+                                          found, mMarqueeContainOnly);
+                }
                 for (const std::string& id : found)
                     if (!isSelected(id)) mSelectedElementIds.push_back(id);
                 mSelectedElementId = mSelectedElementIds.empty()
@@ -3335,6 +4196,31 @@ namespace seedui
             // moldura (o usuário pode sair da tela base por conta própria).
             CanvasScreenToProject(&mProject, mouse.x, mouse.y, mouseX, mouseY, false,
                                   mCanvasZoom, mCanvasPanX, mCanvasPanY);
+            if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            {
+                for (const CanvasTransformStart& start : mCanvasGroupStarts)
+                {
+                    if (Element* el = Project::ResolverId(mode, start.id))
+                    {
+                        el->transformacao["x"] = start.x;
+                        el->transformacao["y"] = start.y;
+                    }
+                }
+                mCanvasDragMode = 0;
+                mCanvasDragChanged = false;
+                mCanvasGroupStarts.clear();
+                mGuideSnapX = -1.0f;
+                mGuideSnapY = -1.0f;
+                mGuideFixedSnapX = -1.0f;
+                mGuideFixedSnapY = -1.0f;
+                mGuideSpacingX1 = mGuideSpacingX2 = -1.0f;
+                mGuideSpacingY1 = mGuideSpacingY2 = -1.0f;
+                mShiftGuides.clear();
+                mShiftGuidesLabels.clear();
+                mCloneForked = false;
+                mCanvasDragPastThreshold = false;
+                return;
+            }
             Element* selected = Project::ResolverId(mode, mSelectedElementId);
             if (!selected || selected->bloqueado)
             {
@@ -3358,6 +4244,22 @@ namespace seedui
                 ImGui::IsMouseDown(ImGuiMouseButton_Left) &&
                 ImGui::IsMouseClicked(ImGuiMouseButton_Right))
             {
+                if (Element* origEl = Project::ResolverId(mode, mSelectedElementId))
+                {
+                    float ax = origEl->transformacao.value("x", 0.0f);
+                    float ay = origEl->transformacao.value("y", 0.0f);
+                    for (const CanvasTransformStart& st : mCanvasGroupStarts)
+                    {
+                        if (st.id == mSelectedElementId) { ax = st.x; ay = st.y; break; }
+                    }
+                    mCloneForkSourceA.id = mSelectedElementId;
+                    mCloneForkSourceA.x = ax;
+                    mCloneForkSourceA.y = ay;
+                    mCloneForkSourceA.rot = Geo::ElementRotation(*origEl);
+                    mCloneForkSourceA.w = origEl->transformacao.value("largura", 160.0f);
+                    mCloneForkSourceA.h = origEl->transformacao.value("altura", 32.0f);
+                }
+
                 const std::string cloneId =
                     Project::ClonarElemento(mode, mProject, mSelectedElementId);
                 if (!cloneId.empty())
@@ -4015,26 +4917,87 @@ namespace seedui
             (ImGui::IsMouseReleased(ImGuiMouseButton_Left) ||
              (mCloneDragging && ImGui::IsMouseReleased(ImGuiMouseButton_Right))))
         {
-            if (mCloneDragging)
+            if (mCloneForked)
             {
-                mStatusMsg = "Clone criado (botão direito)";
-                mStatusMsgUntil = GetTime() + 4.0;
+                if (Element* b = Project::ResolverId(mode, mSelectedElementId))
+                {
+                    const float bx = b->transformacao.value("x", 0.0f);
+                    const float by = b->transformacao.value("y", 0.0f);
+                    const float brot = Geo::ElementRotation(*b);
+                    const float bw = b->transformacao.value("largura", 160.0f);
+                    const float bh = b->transformacao.value("altura", 32.0f);
+
+                    mDup.deltaX = bx - mCloneForkSourceA.x;
+                    mDup.deltaY = by - mCloneForkSourceA.y;
+                    mDup.deltaRot = brot - mCloneForkSourceA.rot;
+                    mDup.factorW = bw / std::max(0.01f, mCloneForkSourceA.w);
+                    mDup.factorH = bh / std::max(0.01f, mCloneForkSourceA.h);
+
+                    mDup.lastDuplicatedId = b->id;
+                    mDup.sourceX = bx;
+                    mDup.sourceY = by;
+                    mDup.sourceRot = brot;
+                    mDup.sourceW = bw;
+                    mDup.sourceH = bh;
+                    mDup.hasSourceSnapshot = true;
+
+                    mProjectDirty = true;
+                    CapturarHistorico();
+
+                    char diagBuf[512];
+                    snprintf(diagBuf, sizeof(diagBuf),
+                             "Clone posicionado (Ctrl+D repetirá dx=%.1f, dy=%.1f)",
+                             mDup.deltaX, mDup.deltaY);
+                    mStatusMsg = diagBuf;
+                    mStatusMsgUntil = GetTime() + 5.0;
+                    TraceLog(LOG_INFO, "%s", diagBuf);
+                }
+            }
+            else if (mCloneDragging)
+            {
+                if (Element* b = Project::ResolverId(mode, mSelectedElementId))
+                {
+                    const float bx = b->transformacao.value("x", 0.0f);
+                    const float by = b->transformacao.value("y", 0.0f);
+                    const float brot = Geo::ElementRotation(*b);
+                    const float bw = b->transformacao.value("largura", 160.0f);
+                    const float bh = b->transformacao.value("altura", 32.0f);
+
+                    mDup.deltaX = bx - mRightDragSourceA.x;
+                    mDup.deltaY = by - mRightDragSourceA.y;
+                    mDup.deltaRot = brot - mRightDragSourceA.rot;
+                    mDup.factorW = bw / std::max(0.01f, mRightDragSourceA.w);
+                    mDup.factorH = bh / std::max(0.01f, mRightDragSourceA.h);
+
+                    mDup.lastDuplicatedId = b->id;
+                    mDup.sourceX = bx;
+                    mDup.sourceY = by;
+                    mDup.sourceRot = brot;
+                    mDup.sourceW = bw;
+                    mDup.sourceH = bh;
+                    mDup.hasSourceSnapshot = true;
+
+                    mProjectDirty = true;
+                    CapturarHistorico();
+
+                    char diagBuf[512];
+                    snprintf(diagBuf, sizeof(diagBuf),
+                             "Clone criado com botão direito (Ctrl+D repetirá dx=%.1f, dy=%.1f)",
+                             mDup.deltaX, mDup.deltaY);
+                    mStatusMsg = diagBuf;
+                    mStatusMsgUntil = GetTime() + 5.0;
+                    TraceLog(LOG_INFO, "%s", diagBuf);
+                }
             }
             else if (mCanvasDragChanged)
             {
+                mProjectDirty = true;
+                CapturarHistorico();
                 if (mCanvasDragMode == 1)
                 {
-                    if (mCloneForked)
-                    {
-                        mStatusMsg = "Clone posicionado — original voltou à posição inicial";
-                        mStatusMsgUntil = GetTime() + 4.0;
-                    }
-                    else
-                    {
-                        mStatusMsg = std::to_string(mCanvasGroupStarts.size()) +
-                                     " elemento(s) movido(s)";
-                        mStatusMsgUntil = GetTime() + 4.0;
-                    }
+                    mStatusMsg = std::to_string(mCanvasGroupStarts.size()) +
+                                 " elemento(s) movido(s)";
+                    mStatusMsgUntil = GetTime() + 4.0;
                 }
                 else if (mCanvasDragMode == 14)
                 {
@@ -4049,52 +5012,14 @@ namespace seedui
                     mStatusMsg = "Elemento redimensionado";
                 }
 
-                // Aprendizado da transformação manual (Ctrl+D estilo CorelDRAW)
-                if (mDupSeq.hasSequence && !mDupSeq.lastCreatedId.empty())
+                if (!mSelectedElementId.empty())
                 {
-                    if (Element* b = Project::ResolverId(mode, mDupSeq.lastCreatedId))
+                    if (Element* el = Project::ResolverId(mode, mSelectedElementId))
                     {
-                        mDupSeq.stateB.id = b->id;
-                        mDupSeq.stateB.x = b->transformacao.value("x", 0.0f);
-                        mDupSeq.stateB.y = b->transformacao.value("y", 0.0f);
-                        mDupSeq.stateB.rot = Geo::ElementRotation(*b);
-                        mDupSeq.stateB.w = b->transformacao.value("largura", 160.0f);
-                        mDupSeq.stateB.h = b->transformacao.value("altura", 32.0f);
-
-                        const float dx = mDupSeq.stateB.x - mDupSeq.stateA.x;
-                        const float dy = mDupSeq.stateB.y - mDupSeq.stateA.y;
-                        const float drot = mDupSeq.stateB.rot - mDupSeq.stateA.rot;
-                        const float fw = mDupSeq.stateB.w / std::max(0.01f, mDupSeq.stateA.w);
-                        const float fh = mDupSeq.stateB.h / std::max(0.01f, mDupSeq.stateA.h);
-
-                        if (fabsf(dx) > 0.001f || fabsf(dy) > 0.001f || fabsf(drot) > 0.001f ||
-                            fabsf(fw - 1.0f) > 0.001f || fabsf(fh - 1.0f) > 0.001f)
-                        {
-                            mDupSeq.hasLearnedDelta = true;
-                            mDupSeq.learnedDelta.deltaX = dx;
-                            mDupSeq.learnedDelta.deltaY = dy;
-                            mDupSeq.learnedDelta.deltaRot = drot;
-                            mDupSeq.learnedDelta.factorW = fw;
-                            mDupSeq.learnedDelta.factorH = fh;
-
-                            char diagBuf[512];
-                            snprintf(diagBuf, sizeof(diagBuf),
-                                     "[Ctrl+D Aprendido] A(x=%.1f,y=%.1f,rot=%.1f°,w=%.1f,h=%.1f) -> "
-                                     "B(x=%.1f,y=%.1f,rot=%.1f°,w=%.1f,h=%.1f) | "
-                                     "Delta(dx=%.1f,dy=%.1f,drot=%.1f°,fw=%.2f,fh=%.2f)",
-                                     mDupSeq.stateA.x, mDupSeq.stateA.y, mDupSeq.stateA.rot, mDupSeq.stateA.w, mDupSeq.stateA.h,
-                                     mDupSeq.stateB.x, mDupSeq.stateB.y, mDupSeq.stateB.rot, mDupSeq.stateB.w, mDupSeq.stateB.h,
-                                     dx, dy, drot, fw, fh);
-                            mStatusMsg = diagBuf;
-                            mStatusMsgUntil = GetTime() + 10.0;
-                            TraceLog(LOG_INFO, "%s", diagBuf);
-                        }
+                        AtualizarDeltaDuplicacaoManual(*el);
                     }
                 }
-                else
-                {
-                    mStatusMsgUntil = GetTime() + 4.0;
-                }
+                mStatusMsgUntil = GetTime() + 4.0;
                 TraceLog(LOG_INFO, "M05 selecao: transformacao alterada (%s)",
                          mSelectedElementId.c_str());
             }
@@ -4315,6 +5240,8 @@ namespace seedui
         if (!ImGui::GetIO().WantTextInput && !ImGui::GetIO().KeyCtrl &&
             !ImGui::GetIO().KeyAlt)
         {
+            if (ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_N, false))
+                mCurrentTool = Tool::Pen;
             if (ImGui::IsKeyPressed(ImGuiKey_P, false)) mCurrentTool = Tool::Pen;
             if (ImGui::IsKeyPressed(ImGuiKey_V, false)) mCurrentTool = Tool::Select;
             if (ImGui::IsKeyPressed(ImGuiKey_H, false)) mCurrentTool = Tool::Pan;
@@ -4366,9 +5293,9 @@ namespace seedui
             if (ImGui::IsKeyPressed(ImGuiKey_2, false)) AlinharElementosSelecionados(3);
             if (ImGui::IsKeyPressed(ImGuiKey_D, false)) AlinharElementosSelecionados(4);
             if (ImGui::IsKeyPressed(ImGuiKey_S, false)) AlinharElementosSelecionados(5);
-            if (ImGui::IsKeyPressed(ImGuiKey_Delete, false) ||
+            if (!mPenDrawing && (ImGui::IsKeyPressed(ImGuiKey_Delete, false) ||
                 ImGui::IsKeyPressed(ImGuiKey_Backspace, false) ||
-                ImGui::IsKeyPressed(ImGuiKey_X, false))
+                ImGui::IsKeyPressed(ImGuiKey_X, false)))
             {
                 // Delete / Backspace / X: remove o NÓ do caminho em edição; sem nó selecionado, apaga o
                 // elemento selecionado.
@@ -4430,6 +5357,14 @@ namespace seedui
                         mProjectDirty = true;
                         if (PossuiModoAtivo())
                             RebuildGroupBounds(mProject.telas[mTelaAtiva].modos[mModoAtivo]);
+
+                        if (!mSelectedElementId.empty())
+                        {
+                            if (Element* el = Project::ResolverId(mode, mSelectedElementId))
+                            {
+                                AtualizarDeltaDuplicacaoManual(*el);
+                            }
+                        }
                     }
                 }
             }
@@ -4457,6 +5392,12 @@ namespace seedui
             ImGui::SetClipboardText(AnnotationsToText(mAnnot, mGlobalDirectives).c_str());
         }
         if (!ImGui::GetIO().WantTextInput && ImGui::GetIO().KeyCtrl &&
+            !ImGui::GetIO().KeyShift && !ImGui::GetIO().KeyAlt &&
+            ImGui::IsKeyPressed(ImGuiKey_X, false))
+        {
+            RecortarElementosSelecionados();
+        }
+        if (!ImGui::GetIO().WantTextInput && ImGui::GetIO().KeyCtrl &&
             !ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_C, false))
         {
             CopiarElementosSelecionados();
@@ -4468,6 +5409,11 @@ namespace seedui
         }
         if (!ImGui::GetIO().WantTextInput && ImGui::GetIO().KeyCtrl &&
             !ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_D, false))
+        {
+            DuplicarSelecao();
+        }
+        if (!ImGui::GetIO().WantTextInput && ImGui::GetIO().KeyCtrl &&
+            !ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_R, false))
         {
             DuplicarSelecao();
         }
@@ -4581,7 +5527,28 @@ namespace seedui
                 const ImVec2 canvasDropMax = ImGui::GetItemRectMax();
                 const bool canvasHovered = ImGui::IsItemHovered(
                     ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
-                if (canvasHovered)
+                // A navegação do PowerClip fica sobre o item invisível que
+                // ocupa o canvas inteiro. Fazemos o hit-test explicitamente para
+                // que o canvas não consuma o clique destinado à casinha.
+                const ImVec2 portalWindowPos = ImGui::GetWindowPos();
+                const ImVec2 portalNavMin(portalWindowPos.x + 34.0f,
+                                          portalWindowPos.y + 34.0f);
+                const ImVec2 portalNavMax(portalNavMin.x + 38.0f,
+                                          portalNavMin.y + 38.0f);
+                const ImVec2 portalMouse = ImGui::GetMousePos();
+                const bool portalNavVisible =
+                    !mPowerClipDirectFrameId.empty() ||
+                    !mPowerClipEditFrameId.empty();
+                const bool portalNavHovered = portalNavVisible &&
+                    portalMouse.x >= portalNavMin.x &&
+                    portalMouse.y >= portalNavMin.y &&
+                    portalMouse.x < portalNavMax.x &&
+                    portalMouse.y < portalNavMax.y;
+                const bool portalNavClicked = portalNavHovered &&
+                    ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+                const bool canvasInteractiveHovered =
+                    canvasHovered && !portalNavHovered;
+                if (canvasInteractiveHovered)
                 {
                     if (ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.0f))
                     {
@@ -4605,13 +5572,242 @@ namespace seedui
                 // Guias das réguas ANTES da interação normal: ao arrastar uma
                 // guia, a seleção/movimento do canvas é suprimida (o guard em
                 // HandleCanvasInteraction devolve cedo quando mGuideDragKind).
-                HandleGuidesInteraction();
-                HandleCanvasInteraction(canvasHovered);
+                if (!portalNavHovered)
+                    HandleGuidesInteraction();
+
+                // Com exatamente dois objetos selecionados, o clique direito
+                // sobre um deles define esse objeto como moldura e oferece a
+                // criação do PowerClip. O outro permanece como conteúdo.
+                if (canvasInteractiveHovered && PossuiModoAtivo() &&
+                    mSelectedElementIds.size() == 2 &&
+                    ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+                {
+                    float contextX = 0.0f, contextY = 0.0f;
+                    const ImVec2 contextMouse = ImGui::GetMousePos();
+                    CanvasScreenToProject(&mProject, contextMouse.x, contextMouse.y,
+                                          contextX, contextY, false,
+                                          mCanvasZoom, mCanvasPanX, mCanvasPanY);
+                    Modo& contextMode =
+                        mProject.telas[mTelaAtiva].modos[mModoAtivo];
+                    if (Element* hit = Project::ElementoNoPonto(contextMode, contextX, contextY))
+                    {
+                        if (std::find(mSelectedElementIds.begin(), mSelectedElementIds.end(),
+                                      hit->id) != mSelectedElementIds.end())
+                            mSelectedElementId = hit->id;
+                    }
+                    // Abre mesmo se o clique cair entre os dois objetos ou em
+                    // uma parte transparente. Nesse caso, o objeto ativo da
+                    // seleção continua sendo usado como moldura.
+                    ImGui::OpenPopup("##canvas_powerclip_context");
+                }
+
+                // Um PowerClip selecionado (ou em edição) reserva o clique
+                // direito para as operações próprias da máscara.
+                if (canvasInteractiveHovered && PossuiModoAtivo() &&
+                    mSelectedElementIds.size() != 2 &&
+                    ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+                {
+                    Modo& contextMode =
+                        mProject.telas[mTelaAtiva].modos[mModoAtivo];
+                    const std::string frameId = PowerClipContextFrameId();
+                    Element* frame = Project::ResolverId(contextMode, frameId);
+                    if (frame && frame->propriedades.is_object() &&
+                        frame->propriedades.value("powerclip", false))
+                        ImGui::OpenPopup("##canvas_powerclip_edit_context");
+                }
+                HandleCanvasInteraction(canvasInteractiveHovered);
+                if (ImGui::BeginPopup("##canvas_powerclip_context"))
+                {
+                    if (PowerClipContextFrameId().empty())
+                    {
+                        const bool canCreate = mSelectedElementIds.size() == 2;
+                        if (IconMenuItem(IconId::Frame,
+                                         "Criar máscara (PowerClip)", nullptr,
+                                         false, canCreate))
+                            CriarPowerClipSelecao();
+                        ImGui::TextDisabled("O objeto clicado é a moldura");
+                    }
+                    else
+                    {
+                        if (IconMenuItem(IconId::Plus,
+                                         "Adicionar conteúdo selecionado"))
+                            AdicionarConteudoPowerClip(false);
+                        if (IconMenuItem(IconId::Redo,
+                                         "Substituir conteúdo"))
+                            AdicionarConteudoPowerClip(true);
+                        ImGui::Separator();
+                        if (IconMenuItem(IconId::PowerClipEnter,
+                                         "Editar conteúdo"))
+                            EntrarEdicaoPowerClip();
+                    }
+                    ImGui::EndPopup();
+                }
+                if (ImGui::BeginPopup("##canvas_powerclip_edit_context"))
+                {
+                    const bool internalSelected =
+                        !mPowerClipDirectFrameId.empty() ||
+                        (!mPowerClipEditFrameId.empty() &&
+                         !mSelectedElementId.empty());
+                    if (internalSelected)
+                    {
+                        if (IconMenuItem(IconId::Cut, "Recortar objeto", "Ctrl+X"))
+                            RecortarElementosSelecionados();
+                        if (IconMenuItem(IconId::Copy, "Copiar objeto", "Ctrl+C"))
+                            CopiarElementosSelecionados();
+                        if (IconMenuItem(IconId::Duplicate,
+                                         "Duplicar objeto", "Ctrl+D"))
+                            DuplicarSelecao();
+                        ImGui::Separator();
+                    }
+                    if (mPowerClipEditFrameId.empty())
+                    {
+                        if (IconMenuItem(IconId::PowerClipEnter,
+                                         "Editar conteúdo"))
+                            EntrarEdicaoPowerClip();
+                    }
+                    else if (IconMenuItem(IconId::PowerClipExit,
+                                          "Finalizar edição do PowerClip", "Esc"))
+                    {
+                        SairEdicaoPowerClip();
+                    }
+                    if (mPowerClipEditFrameId.empty() &&
+                        IconMenuItem(IconId::Select,
+                                     "Selecionar conteúdo interno"))
+                        SelecionarConteudoPowerClip();
+                    if ((!mPowerClipDirectFrameId.empty() ||
+                         !mPowerClipEditFrameId.empty()) &&
+                        IconMenuItem(IconId::X,
+                                     "Remover conteúdo selecionado"))
+                        RemoverConteudoSelecionadoPowerClip();
+                    ImGui::Separator();
+                    if (IconMenuItem(IconId::PowerClipCenter,
+                                     "Centralizar conteúdo"))
+                        AjustarConteudoPowerClip(0);
+                    if (IconMenuItem(IconId::PowerClipFit,
+                                     "Ajustar conteúdo proporcionalmente"))
+                        AjustarConteudoPowerClip(1);
+                    if (IconMenuItem(IconId::PowerClipFill,
+                                     "Preencher a moldura"))
+                        AjustarConteudoPowerClip(2);
+                    if (IconMenuItem(IconId::PowerClipStretch,
+                                     "Esticar até a moldura"))
+                        AjustarConteudoPowerClip(3);
+
+                    Modo& contextMode =
+                        mProject.telas[mTelaAtiva].modos[mModoAtivo];
+                    const std::string frameId = PowerClipContextFrameId();
+                    Element* frame = Project::ResolverId(contextMode, frameId);
+                    if (frame)
+                    {
+                        const bool linked = frame->propriedades.value(
+                            "powerclip_conteudo_bloqueado", true);
+                        if (IconMenuItem(linked ? IconId::Unlink : IconId::Link,
+                                         linked ? "Desvincular da moldura"
+                                                : "Vincular à moldura"))
+                        {
+                            frame->propriedades[
+                                "powerclip_conteudo_bloqueado"] = !linked;
+                            mProjectDirty = true;
+                            CapturarHistorico();
+                        }
+                    }
+                    ImGui::Separator();
+                    if (IconMenuItem(IconId::PowerClipExtract,
+                                     "Extrair conteúdo"))
+                        ExtrairConteudoPowerClip();
+                    if (IconMenuItem(IconId::Trash,
+                                     "Remover PowerClip"))
+                        RemoverPowerClip();
+                    ImGui::EndPopup();
+                }
+                if (portalNavClicked)
+                {
+                    if (!mPowerClipEditFrameId.empty())
+                        SairEdicaoPowerClip();
+                    else if (!mPowerClipDirectFrameId.empty())
+                        EntrarEdicaoPowerClip(mPowerClipDirectFrameId);
+                }
+
                 CanvasDraw(mHasProject ? &mProject : nullptr, mTelaAtiva, mModoAtivo,
                            &mSelectedElementIds, mSelectedElementId.c_str(),
                            mSelectedCornerMask, mRulersVisible, mRulersLocked,
                            mGridVisible, mWireframeMode,
-                           mCanvasZoom, mCanvasPanX, mCanvasPanY, UnitToPixels());
+                           mCanvasZoom, mCanvasPanX, mCanvasPanY, UnitToPixels(),
+                           mPowerClipEditFrameId.c_str(),
+                           mPowerClipDirectFrameId.c_str());
+
+                // Navegação fixa do portal: independe do zoom/pan e aparece
+                // quando um filho foi acessado por Ctrl+clique ou quando o
+                // ambiente interno está aberto.
+                if (!mPowerClipDirectFrameId.empty() ||
+                    !mPowerClipEditFrameId.empty())
+                {
+                    const bool editingPortal = !mPowerClipEditFrameId.empty();
+                    ImDrawList* navDraw = ImGui::GetWindowDrawList();
+                    const ImU32 navFill = editingPortal
+                        ? (portalNavHovered ? IM_COL32(34, 113, 184, 255)
+                                           : IM_COL32(20, 82, 143, 245))
+                        : (portalNavHovered ? IM_COL32(60, 62, 68, 255)
+                                           : IM_COL32(31, 31, 36, 245));
+                    navDraw->AddRectFilled(portalNavMin, portalNavMax,
+                                           navFill, 5.0f);
+                    navDraw->AddRect(portalNavMin, portalNavMax,
+                                     portalNavHovered
+                                         ? IM_COL32(100, 185, 255, 255)
+                                         : IM_COL32(85, 88, 96, 255),
+                                     5.0f, 0, 1.0f);
+                    DrawIconAt(IconId::PowerClipHome,
+                               portalNavMin.x + 7.0f, portalNavMin.y + 7.0f,
+                               24.0f, IM_COL32(242, 246, 252, 255));
+                    if (editingPortal)
+                        DrawIconAt(IconId::PowerClipExit,
+                                   portalNavMax.x - 13.0f,
+                                   portalNavMax.y - 13.0f,
+                                   11.0f, IM_COL32(255, 205, 80, 255));
+                    if (portalNavHovered)
+                    {
+                        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+                        ImGui::BeginTooltip();
+                        ImGui::TextUnformatted(
+                            editingPortal
+                                ? "Finalizar edição do PowerClip"
+                                : "Entrar no ambiente interno do PowerClip");
+                        ImGui::EndTooltip();
+                    }
+                }
+                if (!mPowerClipEditFrameId.empty() && PossuiModoAtivo())
+                {
+                    Modo& editMode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+                    if (Element* frame = Project::ResolverId(
+                            editMode, mPowerClipEditFrameId))
+                    {
+                        std::vector<ImVec2> outlineProject;
+                        Geo::OutlineProject(*frame, outlineProject, 96);
+                        std::vector<ImVec2> outlineScreen;
+                        outlineScreen.reserve(outlineProject.size());
+                        float scale = 1.0f;
+                        for (const ImVec2& point : outlineProject)
+                        {
+                            float sx = 0.0f, sy = 0.0f;
+                            CanvasProjectToScreen(&mProject, point.x, point.y,
+                                                  sx, sy, scale,
+                                                  mCanvasZoom, mCanvasPanX,
+                                                  mCanvasPanY);
+                            outlineScreen.emplace_back(sx, sy);
+                        }
+                        ImDrawList* editDraw = ImGui::GetWindowDrawList();
+                        const ImU32 editColor = IM_COL32(40, 170, 255, 255);
+                        if (outlineScreen.size() >= 3)
+                            editDraw->AddPolyline(
+                                outlineScreen.data(), (int)outlineScreen.size(),
+                                editColor, ImDrawFlags_Closed, 1.5f);
+                        if (!outlineScreen.empty())
+                            editDraw->AddText(
+                                ImVec2(outlineScreen.front().x,
+                                       outlineScreen.front().y - 18.0f),
+                                editColor, "Editando PowerClip");
+                    }
+                }
                 DesenharGuias();
                 DesenharMedicao();
                 // Guias inteligentes: linha magenta na posição encaixada
@@ -4770,7 +5966,8 @@ namespace seedui
                 }
 
                 // Linha Elástica da Caneta (Rubber Banding estilo Illustrator)
-                if (mCurrentTool == Tool::Pen && mPenDrawing && PossuiModoAtivo())
+                if (mCurrentTool == Tool::Pen && mPenDrawing && mPenPreview &&
+                    PossuiModoAtivo())
                 {
                     Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
                     if (Element* sel = Project::ResolverId(mode, mSelectedElementId))
@@ -4837,7 +6034,8 @@ namespace seedui
                 }
 
                 // Indicador de Inserção de Nó (+) ao passar a caneta sobre a curva
-                if (mCurrentTool == Tool::Pen && !mPenDrawing && mPenHoverSegmentIndex >= 0 && PossuiModoAtivo())
+                if (mCurrentTool == Tool::Pen && mPenAutoAddDelete && !mPenDrawing &&
+                    mPenHoverSegmentIndex >= 0 && PossuiModoAtivo())
                 {
                     float spx = 0.0f, spy = 0.0f, scale = 1.0f;
                     CanvasProjectToScreen(&mProject, mPenHoverProjX, mPenHoverProjY, spx, spy, scale, mCanvasZoom, mCanvasPanX, mCanvasPanY);
@@ -5015,6 +6213,7 @@ namespace seedui
             ImGui::Separator();
             const bool canCopy = PossuiModoAtivo() && !mSelectedElementId.empty();
             if (!canCopy) ImGui::BeginDisabled();
+            if (ImGui::MenuItem("Recortar", "Ctrl+X")) RecortarElementosSelecionados();
             if (ImGui::MenuItem("Copiar", "Ctrl+C")) CopiarElementosSelecionados();
             if (!canCopy) ImGui::EndDisabled();
             const bool canPaste = PossuiModoAtivo() && !mElementClipboard.empty();
@@ -5145,6 +6344,11 @@ namespace seedui
             }
             if (ImGui::MenuItem("Desagrupar", "Ctrl+Shift+G", false, canUngroup))
                 DesagruparElementosSelecionados();
+            const bool canPowerClip = PossuiModoAtivo() &&
+                                      mSelectedElementIds.size() == 2;
+            if (ImGui::MenuItem("Criar máscara (PowerClip)", nullptr, false,
+                                canPowerClip))
+                CriarPowerClipSelecao();
             const bool canConvert = PossuiModoAtivo() &&
                                     (!mSelectedElementId.empty() ||
                                      !mSelectedElementIds.empty());
@@ -5360,6 +6564,9 @@ namespace seedui
         separator();
         const bool canCopy = PossuiModoAtivo() && !mSelectedElementId.empty();
         if (!canCopy) ImGui::BeginDisabled();
+        if (IconButton(IconId::Cut, "Edição · Recortar seleção (Ctrl+X)", button))
+            RecortarElementosSelecionados();
+        ImGui::SameLine();
         if (IconButton(IconId::Copy, "Edição · Copiar seleção (Ctrl+C)", button))
             CopiarElementosSelecionados();
         if (!canCopy) ImGui::EndDisabled();
@@ -5559,6 +6766,92 @@ namespace seedui
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(5, 0));
         ImGui::AlignTextToFramePadding();
 
+        // Barra contextual da moldura: aparece ao selecionar um PowerClip e
+        // permanece enquanto o usuário edita os objetos internos.
+        Element* powerClipFrame = nullptr;
+        if (PossuiModoAtivo())
+        {
+            Modo& activeMode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+            const std::string frameId = mPowerClipEditFrameId.empty()
+                ? mSelectedElementId : mPowerClipEditFrameId;
+            Element* candidate = Project::ResolverId(activeMode, frameId);
+            if (candidate && candidate->propriedades.is_object() &&
+                candidate->propriedades.value("powerclip", false))
+                powerClipFrame = candidate;
+        }
+        if (powerClipFrame)
+        {
+            ImGui::TextDisabled("PowerClip");
+            ImGui::SameLine(0, 12);
+            if (mPowerClipEditFrameId.empty())
+            {
+                if (IconTextButton(IconId::PowerClipEnter, "Editar conteúdo"))
+                    EntrarEdicaoPowerClip(powerClipFrame->id);
+            }
+            else if (IconTextButton(IconId::PowerClipExit,
+                                    "Concluir edição  Esc"))
+            {
+                SairEdicaoPowerClip();
+            }
+            ImGui::SameLine(0, 12);
+            if (IconTextButton(IconId::PowerClipCenter, "Centralizar"))
+                AjustarConteudoPowerClip(0);
+            ImGui::SameLine();
+            if (IconTextButton(IconId::PowerClipFit, "Ajustar",
+                               "Mostra todo o conteúdo preservando a proporção"))
+                AjustarConteudoPowerClip(1);
+            ImGui::SameLine();
+            if (IconTextButton(IconId::PowerClipFill, "Preencher",
+                               "Preenche a moldura e recorta o excedente"))
+                AjustarConteudoPowerClip(2);
+            ImGui::SameLine();
+            if (IconTextButton(IconId::PowerClipStretch, "Esticar"))
+                AjustarConteudoPowerClip(3);
+            ImGui::SameLine(0, 12);
+            bool linked = powerClipFrame->propriedades.value(
+                "powerclip_conteudo_bloqueado", true);
+            DrawIcon(linked ? IconId::Link : IconId::Unlink, 15.0f,
+                     ImGui::GetColorU32(ImGuiCol_Text));
+            ImGui::SameLine(0, 3);
+            if (ImGui::Checkbox("Vincular conteúdo à moldura", &linked))
+            {
+                powerClipFrame->propriedades[
+                    "powerclip_conteudo_bloqueado"] = linked;
+                mProjectDirty = true;
+                CapturarHistorico();
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip(linked
+                    ? "Mover a moldura também move o conteúdo"
+                    : "Moldura e conteúdo podem ser movidos separadamente");
+            ImGui::SameLine(0, 12);
+            if (IconTextButton(IconId::PowerClipExtract,
+                               "Extrair / remover máscara"))
+                ExtrairConteudoPowerClip();
+            ImGui::PopStyleVar();
+            return;
+        }
+
+        if (mCurrentTool == Tool::Pen)
+        {
+            ImGui::TextDisabled("Caneta Bézier");
+            ImGui::SameLine(0, 14);
+            ImGui::Checkbox("Visualizar segmento##pen_preview", &mPenPreview);
+            ImGui::SameLine(0, 14);
+            ImGui::Checkbox("Adicionar/excluir nós##pen_auto_nodes", &mPenAutoAddDelete);
+            ImGui::SameLine(0, 14);
+            ImGui::TextDisabled("Restringir:");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(62.0f);
+            if (ImGui::InputFloat("##pen_constrain_angle", &mPenConstrainAngle,
+                                  1.0f, 5.0f, "%.0f°"))
+                mPenConstrainAngle = std::max(1.0f, std::min(90.0f, mPenConstrainAngle));
+            ImGui::SameLine(0, 18);
+            ImGui::TextDisabled("Shift+N/P · Ctrl restringe · Alt quebra · Espaço/Enter conclui · Esc cancela");
+            ImGui::PopStyleVar();
+            return;
+        }
+
         // Preset/perfil (indicador visual; galeria de modelos é M09).
         ImGui::TextDisabled("Personalizado");
         if (ImGui::IsItemHovered())
@@ -5677,43 +6970,9 @@ namespace seedui
         if (propertyEdited)
         {
             mProjectDirty = true;
-            if (primary && mDupSeq.hasSequence && mDupSeq.lastCreatedId == primary->id)
+            if (primary)
             {
-                mDupSeq.stateB.id = primary->id;
-                mDupSeq.stateB.x = primary->transformacao.value("x", 0.0f);
-                mDupSeq.stateB.y = primary->transformacao.value("y", 0.0f);
-                mDupSeq.stateB.rot = Geo::ElementRotation(*primary);
-                mDupSeq.stateB.w = primary->transformacao.value("largura", 160.0f);
-                mDupSeq.stateB.h = primary->transformacao.value("altura", 32.0f);
-
-                const float dx = mDupSeq.stateB.x - mDupSeq.stateA.x;
-                const float dy = mDupSeq.stateB.y - mDupSeq.stateA.y;
-                const float drot = mDupSeq.stateB.rot - mDupSeq.stateA.rot;
-                const float fw = mDupSeq.stateB.w / std::max(0.01f, mDupSeq.stateA.w);
-                const float fh = mDupSeq.stateB.h / std::max(0.01f, mDupSeq.stateA.h);
-
-                if (fabsf(dx) > 0.001f || fabsf(dy) > 0.001f || fabsf(drot) > 0.001f ||
-                    fabsf(fw - 1.0f) > 0.001f || fabsf(fh - 1.0f) > 0.001f)
-                {
-                    mDupSeq.hasLearnedDelta = true;
-                    mDupSeq.learnedDelta.deltaX = dx;
-                    mDupSeq.learnedDelta.deltaY = dy;
-                    mDupSeq.learnedDelta.deltaRot = drot;
-                    mDupSeq.learnedDelta.factorW = fw;
-                    mDupSeq.learnedDelta.factorH = fh;
-
-                    char diagBuf[512];
-                    snprintf(diagBuf, sizeof(diagBuf),
-                             "[Ctrl+D Aprendido] A(x=%.1f,y=%.1f,rot=%.1f°,w=%.1f,h=%.1f) -> "
-                             "B(x=%.1f,y=%.1f,rot=%.1f°,w=%.1f,h=%.1f) | "
-                             "Delta(dx=%.1f,dy=%.1f,drot=%.1f°,fw=%.2f,fh=%.2f)",
-                             mDupSeq.stateA.x, mDupSeq.stateA.y, mDupSeq.stateA.rot, mDupSeq.stateA.w, mDupSeq.stateA.h,
-                             mDupSeq.stateB.x, mDupSeq.stateB.y, mDupSeq.stateB.rot, mDupSeq.stateB.w, mDupSeq.stateB.h,
-                             dx, dy, drot, fw, fh);
-                    mStatusMsg = diagBuf;
-                    mStatusMsgUntil = GetTime() + 10.0;
-                    TraceLog(LOG_INFO, "%s", diagBuf);
-                }
+                AtualizarDeltaDuplicacaoManual(*primary);
             }
         }
 
@@ -6097,7 +7356,7 @@ namespace seedui
         ToolButton(IconId::Polygon, "Criar polígono · arraste no canvas", kFamilyCreate);
         ToolButton(IconId::Slash, "Criar linha · arraste para definir o traço", kFamilyCreate);
         ToolButton(IconId::PenTool,
-                   "Caneta · clique adiciona ponto · arraste cria curva · duplo clique/Enter fecha",
+                   "Caneta Bézier (Shift+N/P) · clique=reta · arraste=curva · Ctrl=restringe · Alt=quebra · Espaço/Enter conclui",
                    kFamilyCreate);
         DrawToolFamilySeparator(kFamilyCreate);
 
@@ -6305,6 +7564,9 @@ namespace seedui
                                 mTelaAtiva = ti;
                                 mModoAtivo = mi;
                                 mSelectedElementId.clear();
+                                mSelectedElementIds.clear();
+                                mPowerClipEditFrameId.clear();
+                                mPowerClipDirectFrameId.clear();
                             }
                             if (modoAtivo) ImGui::PopStyleColor();
 
@@ -6324,6 +7586,12 @@ namespace seedui
                                 ImGui::Indent(14.0f);
                                 if (mo.raiz.empty())
                                     ImGui::TextColored(Theme::TextDisabled, "Nenhum elemento neste modo.");
+                                else if (!mPowerClipEditFrameId.empty())
+                                {
+                                    if (Element* frame = Project::ResolverId(
+                                            mo, mPowerClipEditFrameId))
+                                        DrawElementTree(*frame);
+                                }
                                 else
                                     for (Element& e : mo.raiz) DrawElementTree(e);
                                 ImGui::Unindent(14.0f);
@@ -7024,6 +8292,11 @@ namespace seedui
             }
             else
             {
+                std::vector<Element>* visibleLayers = &layerMode->raiz;
+                if (!mPowerClipEditFrameId.empty())
+                    if (Element* frame = Project::ResolverId(
+                            *layerMode, mPowerClipEditFrameId))
+                        visibleLayers = &frame->filhos;
                 // Ações de camada (estilo CorelDRAW): trazer/só subir, descer.
                 if (ImGui::Button("↑ Trazer ao topo", ImVec2(-1.0f, 0.0f)))
                     MoverCamadaSelecionada(+1000);
@@ -7037,9 +8310,9 @@ namespace seedui
                 ImGui::SetColumnWidth(0, 26.0f);
                 ImGui::SetColumnWidth(1, 26.0f);
                 // Lista plana da raiz: do topo (último) para o fundo.
-                for (int i = (int)layerMode->raiz.size() - 1; i >= 0; --i)
+                for (int i = (int)visibleLayers->size() - 1; i >= 0; --i)
                 {
-                    Element& layer = layerMode->raiz[(size_t)i];
+                    Element& layer = (*visibleLayers)[(size_t)i];
                     ImGui::PushID((int)i + 1000);
 
                     const bool isSel = layer.id == mSelectedElementId;

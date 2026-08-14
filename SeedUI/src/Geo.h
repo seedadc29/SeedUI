@@ -327,9 +327,9 @@ namespace seedui
             return (outSeg >= 0);
         }
 
-        // AABB do elemento rotacionado (espaço do projeto). Útil para hit
-        // aproximado, caixa de seleção e alinhamento. Rotaciona os 4 cantos
-        // do retângulo local e pode ser usado por ReformatBBox abaixo.
+        // AABB do elemento rotacionado (espaço do projeto).
+        // Obtém os 4 cantos locais, rotaciona em torno do pivô no espaço do documento
+        // e calcula os limites globais [minX, minY, maxX, maxY].
         inline void RotatedAABB(const Element& e, float& minX, float& minY,
                                 float& maxX, float& maxY)
         {
@@ -345,22 +345,20 @@ namespace seedui
             }
             float px = 0.0f, py = 0.0f;
             ElementPivot(e, px, py);
-            float corners[8];
-            float cs[4] = { x, y, x + w, y + h };
+            float cx[4] = { x, x + w, x + w, x };
+            float cy[4] = { y, y, y + h, y + h };
             for (int i = 0; i < 4; ++i)
             {
-                corners[i * 2] = cs[i % 2 == 0 ? 0 : 2];
-                corners[i * 2 + 1] = cs[i < 2 ? 0 : 2];
-                RotatePoint(corners[i * 2], corners[i * 2 + 1], px, py, radians);
+                RotatePoint(cx[i], cy[i], px, py, radians);
             }
-            minX = corners[0]; minY = corners[1];
-            maxX = corners[0]; maxY = corners[1];
-            for (int i = 0; i < 4; ++i)
+            minX = cx[0]; maxX = cx[0];
+            minY = cy[0]; maxY = cy[0];
+            for (int i = 1; i < 4; ++i)
             {
-                minX = std::min(minX, corners[i * 2]);
-                minY = std::min(minY, corners[i * 2 + 1]);
-                maxX = std::max(maxX, corners[i * 2]);
-                maxY = std::max(maxY, corners[i * 2 + 1]);
+                minX = std::min(minX, cx[i]);
+                minY = std::min(minY, cy[i]);
+                maxX = std::max(maxX, cx[i]);
+                maxY = std::max(maxY, cy[i]);
             }
         }
 
@@ -637,15 +635,18 @@ namespace seedui
             CornerRadii(e, radii);
             const int perCorner = std::max(1, segments / 4);
             const float twoPi = (float)(2.0 * 3.14159265358979323846);
-            // Cantos: ângulos de 180° até 0°, percorrendo TL, TR, BR, BL.
+            // Coordenadas de tela/projeto têm Y crescente para baixo. Para
+            // percorrer o contorno continuamente no sentido horário, cada
+            // arco precisa avançar 90° (os sinais antigos cruzavam TL/BR e
+            // produziam diagonais dentro de retângulos arredondados).
             const float centers[4][2] = {
                 { radii[0], radii[0] },
                 { w - radii[1], radii[1] },
                 { w - radii[2], h - radii[2] },
                 { radii[3], h - radii[3] }
             };
-            const float startAngles[4] = { 180.0f, 90.0f, 0.0f, -90.0f };
-            const float endAngles[4] = { 90.0f, 0.0f, -90.0f, -180.0f };
+            const float startAngles[4] = { 180.0f, 270.0f, 0.0f, 90.0f };
+            const float endAngles[4] = { 270.0f, 360.0f, 90.0f, 180.0f };
             out.reserve(perCorner * 4);
             for (int corner = 0; corner < 4; ++corner)
             {

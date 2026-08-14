@@ -83,6 +83,17 @@ namespace seedui
             { IconId::FlipV,     "flip-v" },
             { IconId::Transparency, "transparency" },
             { IconId::CornersOut, "corners-out" },
+            { IconId::Cut, "cut" },
+            { IconId::Link, "link" },
+            { IconId::Unlink, "unlink" },
+            { IconId::PowerClipEnter, "powerclip-enter" },
+            { IconId::PowerClipExit, "powerclip-exit" },
+            { IconId::PowerClipCenter, "powerclip-center" },
+            { IconId::PowerClipFit, "powerclip-fit" },
+            { IconId::PowerClipFill, "powerclip-fill" },
+            { IconId::PowerClipStretch, "powerclip-stretch" },
+            { IconId::PowerClipExtract, "powerclip-extract" },
+            { IconId::PowerClipHome, "powerclip-home" },
         };
 
         const char* kIconDirs[] = {

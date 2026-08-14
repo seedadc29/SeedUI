@@ -5,7 +5,7 @@ Os avisos de licença exigidos estão listados aqui e devem acompanhar o produto
 
 | Componente | Licença | Uso | Aviso exigido |
 |---|---|---|---|
-| [Phosphor Icons](https://github.com/phosphor-icons/core) | MIT | Ícones da interface (peso *thin*) | Manter aviso de copyright (abaixo) |
+| [Phosphor Icons](https://github.com/phosphor-icons/core) | MIT | Ícones da interface (pesos *fill* e *bold*, pacote 2.1.1) | Manter aviso de copyright (abaixo) |
 | [nanosvg](https://github.com/memononen/nanosvg) | zlib (estilo) | Rasterização de SVG (ícones e, futuramente, recursos do projeto) | Manter aviso no cabeçalho do arquivo |
 | [raylib](https://github.com/raysan5/raylib) | zlib | Gráficos/janela (vendido para dentro do SeedUI no M03) | Manter aviso de copyright |
 | [Dear ImGui](https://github.com/ocornut/imgui) | MIT | Interface do próprio editor | Manter aviso de copyright |

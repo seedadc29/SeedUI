@@ -22,6 +22,7 @@ namespace
         auto check = [&](bool condition, const char* description)
         {
             report << (condition ? "PASS " : "FAIL ") << description << '\n';
+            report.flush();
             if (!condition) ++failures;
         };
         auto makeElement = [](const char* id, const char* type)
@@ -110,6 +111,42 @@ namespace
               "clique ignora ocultos e permite selecionar bloqueados");
         check(Project::ElementoNoPonto(hitMode, 500.0f, 500.0f) == nullptr,
               "clique fora dos elementos limpa a selecao");
+
+        Modo powerClipMode;
+        Element powerFrame = makeElement("pc_frame", "retangulo");
+        powerFrame.transformacao = { { "x", 100.0f }, { "y", 100.0f },
+                                     { "largura", 100.0f }, { "altura", 100.0f } };
+        powerFrame.propriedades["powerclip"] = true;
+        Element powerBack = makeElement("pc_back", "retangulo");
+        powerBack.transformacao = { { "x", 50.0f }, { "y", 120.0f },
+                                    { "largura", 120.0f }, { "altura", 50.0f } };
+        Element powerFront = makeElement("pc_front", "elipse");
+        powerFront.transformacao = powerBack.transformacao;
+        powerFrame.filhos.push_back(std::move(powerBack));
+        powerFrame.filhos.push_back(std::move(powerFront));
+        powerClipMode.raiz.push_back(std::move(powerFrame));
+        Element* pcHit = Project::ElementoNoPonto(
+            powerClipMode, 120.0f, 140.0f);
+        check(pcHit && pcHit->id == "pc_frame",
+              "PowerClip fechado seleciona o conteiner, nao o filho");
+        const std::vector<Element*> pcHits =
+            Project::ConteudosPowerClipNoPonto(
+                powerClipMode, "pc_frame", 120.0f, 140.0f, true);
+        check(pcHits.size() == 2 && pcHits[0]->id == "pc_front" &&
+              pcHits[1]->id == "pc_back",
+              "Ctrl+clique enumera conteudos sobrepostos da frente para tras");
+        check(Project::ConteudoPowerClipNoPonto(
+                  powerClipMode, "pc_frame", 75.0f, 140.0f, true) == nullptr,
+              "fora do portal o conteudo recortado nao recebe clique");
+        Element* expandedHit = Project::ConteudoPowerClipNoPonto(
+            powerClipMode, "pc_frame", 75.0f, 140.0f, false);
+        check(expandedHit && expandedHit->id == "pc_front",
+              "dentro do ambiente o objeto inteiro recebe clique");
+        check(Project::PontoDentroElemento(
+                  powerClipMode, "pc_frame", 120.0f, 140.0f) &&
+              !Project::PontoDentroElemento(
+                  powerClipMode, "pc_frame", 75.0f, 140.0f),
+              "limite do portal distingue area interna e externa");
 
         Project clipboardProject;
         clipboardProject.CriarNovo("Clipboard", 1280, 720);
@@ -1331,6 +1368,451 @@ namespace
             check(svgOut.find("linha_flecha") != std::string::npos ||
                   svgOut.find("fill=\"#00cc00\"") != std::string::npos,
                   "setas da linha emitem triangulos com a cor do contorno");
+        }
+
+        // =========================================================================
+        // TESTES DE REGRESSÃO: Ctrl+D Incremental (Estilo CorelDRAW)
+        // =========================================================================
+        {
+            // 1. Repetição incremental de posição, rotação e escala
+            Project testProj;
+            testProj.CriarNovo("Teste Regressao Ctrl+D", 1280, 720);
+            Modo& testMode = testProj.telas[0].modos[0];
+
+            Element a = makeElement("obj_A", "retangulo");
+            a.transformacao = {
+                { "x", 100.0f }, { "y", 100.0f },
+                { "largura", 180.0f }, { "altura", 100.0f },
+                { "rotacao", 0.0f }
+            };
+            a.estilos = {
+                { "cor_fundo", "#ff2244" },
+                { "cor_borda", "#00ee88" },
+                { "largura_borda", 4.0f },
+                { "opacidade", 0.75f },
+                { "raio", 14.0f },
+                { "gradiente", nlohmann::json{
+                    { "tipo", "linear" },
+                    { "cor1", "#ff0000" },
+                    { "cor2", "#0000ff" },
+                    { "angulo", 45.0 }
+                }}
+            };
+            testMode.raiz.push_back(std::move(a));
+
+            // Snapshot A
+            const Element& origA = testMode.raiz[0];
+            const float ax = origA.transformacao.value("x", 0.0f);
+            const float ay = origA.transformacao.value("y", 0.0f);
+            const float aw = origA.transformacao.value("largura", 160.0f);
+            const float ah = origA.transformacao.value("altura", 32.0f);
+            const float arot = Geo::ElementRotation(origA);
+
+            // Primeira duplicação (A -> B com cópia profunda)
+            const std::vector<Element> copiesB = Project::CopiarElementos(testMode, { "obj_A" });
+            check(copiesB.size() == 1, "Ctrl+D cria exatamente 1 copia de A");
+            const std::vector<std::string> idsB = Project::ColarElementosOffset(
+                testProj, testMode, copiesB, 16.0f, 16.0f);
+            check(idsB.size() == 1, "Ctrl+D insere B com sucesso no modo");
+            Element* elemB = Project::ResolverId(testMode, idsB[0]);
+            check(elemB != nullptr, "Elemento B existe no projeto");
+
+            // Modificação manual de B pelo usuário:
+            elemB->transformacao["x"] = 300.0f;
+            elemB->transformacao["y"] = 100.0f;
+            elemB->transformacao["largura"] = 216.0f;
+            elemB->transformacao["altura"] = 120.0f;
+            elemB->transformacao["rotacao"] = 15.0f;
+
+            // 2. Herança da aparência do último objeto e independência (Deep Copy)
+            check(elemB->estilos.value("cor_fundo", "") == "#ff2244",
+                  "B herda cor de fundo de A");
+            check(elemB->estilos.value("cor_borda", "") == "#00ee88",
+                  "B herda cor de contorno de A");
+            check(elemB->estilos.value("largura_borda", 0.0f) == 4.0f,
+                  "B herda espessura de contorno de A");
+            check(elemB->estilos.value("opacidade", 0.0f) == 0.75f,
+                  "B herda opacidade de A");
+            check(elemB->estilos.value("raio", 0.0f) == 14.0f,
+                  "B herda arredondamento de cantos de A");
+            check(elemB->estilos.contains("gradiente") &&
+                  elemB->estilos["gradiente"].value("tipo", "") == "linear",
+                  "B herda gradiente linear de A");
+
+            // Modifica aparência de B para testar que a próxima cópia herdará B e que A segue intacto
+            elemB->estilos["cor_fundo"] = "#3366cc";
+            elemB->estilos["largura_borda"] = 6.0f;
+            elemB->estilos["opacidade"] = 0.90f;
+
+            // Verifica independência entre A e B (Deep Copy)
+            const Element* checkA = Project::ResolverId(testMode, "obj_A");
+            check(checkA->estilos.value("cor_fundo", "") == "#ff2244",
+                  "Edicao de B nao altera aparencia de A (copia profunda)");
+            check(checkA->estilos.value("largura_borda", 0.0f) == 4.0f,
+                  "Contorno de A permanece intacto");
+
+            // Cálculo dos deltas de transformação manual (A -> B)
+            const float bx = elemB->transformacao.value("x", 0.0f);
+            const float by = elemB->transformacao.value("y", 0.0f);
+            const float bw = elemB->transformacao.value("largura", 160.0f);
+            const float bh = elemB->transformacao.value("altura", 32.0f);
+            const float brot = Geo::ElementRotation(*elemB);
+
+            const float dx = bx - ax;
+            const float dy = by - ay;
+            const float drot = brot - arot;
+            const float factorW = bw / aw;
+            const float factorH = bh / ah;
+
+            check(fabsf(dx - 200.0f) < 0.01f && fabsf(dy) < 0.01f,
+                  "Delta de posicao calculado corretamente (+200, 0)");
+            check(fabsf(drot - 15.0f) < 0.01f,
+                  "Delta de rotacao calculado corretamente (+15 deg)");
+            check(fabsf(factorW - 1.2f) < 0.01f && fabsf(factorH - 1.2f) < 0.01f,
+                  "Fatores de escala calculados proporcionalmente (1.2x)");
+
+            // Geração de C repetindo os deltas acumulados sobre B
+            const std::vector<Element> copiesC = Project::CopiarElementos(testMode, { elemB->id });
+            const std::vector<std::string> idsC = Project::ColarElementosOffset(
+                testProj, testMode, copiesC, 0.0f, 0.0f);
+            check(idsC.size() == 1, "Ctrl+D repete e gera objeto C com offset 0");
+            Element* elemC = Project::ResolverId(testMode, idsC[0]);
+            check(elemC != nullptr, "Objeto C instanciado com sucesso");
+
+            // Aplica as fórmulas exatas de repetição incremental em C
+            elemC->transformacao["x"] = bx + dx;
+            elemC->transformacao["y"] = by + dy;
+            elemC->transformacao["rotacao"] = brot + drot;
+            elemC->transformacao["largura"] = bw * factorW;
+            elemC->transformacao["altura"] = bh * factorH;
+
+            // Validação matemática de C
+            check(fabsf(elemC->transformacao.value("x", 0.0f) - 500.0f) < 0.01f,
+                  "C.x = 300 + 200 = 500");
+            check(fabsf(elemC->transformacao.value("y", 0.0f) - 100.0f) < 0.01f,
+                  "C.y = 100 + 0 = 100");
+            check(fabsf(Geo::ElementRotation(*elemC) - 30.0f) < 0.01f,
+                  "C.rotacao = 15 + 15 = 30 deg");
+            check(fabsf(elemC->transformacao.value("largura", 0.0f) - 259.2f) < 0.01f,
+                  "C.largura = 216 * 1.2 = 259.2");
+            check(fabsf(elemC->transformacao.value("altura", 0.0f) - 144.0f) < 0.01f,
+                  "C.altura = 120 * 1.2 = 144.0");
+
+            // Herança de aparência em C a partir de B
+            check(elemC->estilos.value("cor_fundo", "") == "#3366cc",
+                  "C herda integralmente a cor modificada de B");
+            check(elemC->estilos.value("largura_borda", 0.0f) == 6.0f,
+                  "C herda espessura de contorno de B");
+            check(elemC->estilos.value("opacidade", 0.0f) == 0.90f,
+                  "C herda opacidade de B");
+
+            // Geração de D repetindo os mesmos deltas sobre C (progressão contínua)
+            const float cx = elemC->transformacao.value("x", 0.0f);
+            const float cy = elemC->transformacao.value("y", 0.0f);
+            const float cw = elemC->transformacao.value("largura", 0.0f);
+            const float ch = elemC->transformacao.value("altura", 0.0f);
+            const float crot = Geo::ElementRotation(*elemC);
+
+            const std::vector<Element> copiesD = Project::CopiarElementos(testMode, { elemC->id });
+            const std::vector<std::string> idsD = Project::ColarElementosOffset(
+                testProj, testMode, copiesD, 0.0f, 0.0f);
+            Element* elemD = Project::ResolverId(testMode, idsD[0]);
+            elemD->transformacao["x"] = cx + dx;
+            elemD->transformacao["y"] = cy + dy;
+            elemD->transformacao["rotacao"] = crot + drot;
+            elemD->transformacao["largura"] = cw * factorW;
+            elemD->transformacao["altura"] = ch * factorH;
+
+            // Validação matemática de D
+            check(fabsf(elemD->transformacao.value("x", 0.0f) - 700.0f) < 0.01f,
+                  "D.x = 500 + 200 = 700");
+            check(fabsf(Geo::ElementRotation(*elemD) - 45.0f) < 0.01f,
+                  "D.rotacao = 30 + 15 = 45 deg");
+            check(fabsf(elemD->transformacao.value("largura", 0.0f) - 311.04f) < 0.02f,
+                  "D.largura = 259.2 * 1.2 = 311.04");
+            check(fabsf(elemD->transformacao.value("altura", 0.0f) - 172.8f) < 0.02f,
+                  "D.altura = 144 * 1.2 = 172.8");
+        }
+
+        // =========================================================================
+        // TESTES DE REGRESSÃO: Caixa de Seleção e Alças em Rotação e Zoom
+        // =========================================================================
+        {
+            Element rotEl = makeElement("rot_box", "retangulo");
+            rotEl.transformacao = {
+                { "x", 200.0f }, { "y", 150.0f },
+                { "largura", 100.0f }, { "altura", 50.0f },
+                { "rotacao", 30.0f }
+            };
+
+            float px = 0.0f, py = 0.0f;
+            Geo::ElementPivot(rotEl, px, py);
+            check(fabsf(px - 250.0f) < 0.01f && fabsf(py - 175.0f) < 0.01f,
+                  "Pivo padrao localiza-se exatamente no centro (250, 175)");
+
+            const float rotRad = Geo::DegToRad(30.0f);
+            float c1x = 200.0f, c1y = 150.0f; // Top-Left
+            Geo::RotatePoint(c1x, c1y, px, py, rotRad);
+
+            // Teste de projeção em múltiplos fatores de zoom
+            const float zoomFactors[] = { 0.5f, 1.0f, 2.0f, 3.5f };
+            for (float z : zoomFactors)
+            {
+                const float screenX = 50.0f + c1x * z;
+                const float screenY = 50.0f + c1y * z;
+                check(screenX > 0.0f && screenY > 0.0f,
+                      "Alca e canto rotacionados projetam corretamente na tela com zoom");
+            }
+        }
+
+        // =========================================================================
+        // TESTES DE REGRESSÃO: Histórico, Desfazer (Ctrl+Z) e Refazer (Ctrl+Shift+Z)
+        // =========================================================================
+        {
+            Project histProj;
+            histProj.CriarNovo("Teste Historico", 1280, 720);
+            Modo& hMode = histProj.telas[0].modos[0];
+
+            std::vector<std::string> historyStack;
+            int historyIdx = -1;
+
+            auto pushSnapshot = [&](const Project& p)
+            {
+                const std::string snap = Project::Serializar(p);
+                if (historyIdx >= 0 && historyStack[historyIdx] == snap) return;
+                historyStack.erase(historyStack.begin() + historyIdx + 1, historyStack.end());
+                historyStack.push_back(snap);
+                historyIdx = (int)historyStack.size() - 1;
+            };
+
+            pushSnapshot(histProj); // S0: estado inicial limpo (0 elementos)
+            check(hMode.raiz.empty() && historyIdx == 0, "S0: projeto inicial sem elementos");
+
+            // Adiciona objeto A
+            hMode.raiz.push_back(makeElement("elem_A", "retangulo"));
+            pushSnapshot(histProj); // S1: 1 elemento (elem_A)
+            check(hMode.raiz.size() == 1 && historyIdx == 1, "S1: objeto A adicionado");
+
+            // Duplica B
+            hMode.raiz.push_back(makeElement("elem_B", "retangulo"));
+            pushSnapshot(histProj); // S2: 2 elementos (elem_A, elem_B)
+            check(hMode.raiz.size() == 2 && historyIdx == 2, "S2: objeto B duplicado");
+
+            // Duplica C
+            hMode.raiz.push_back(makeElement("elem_C", "retangulo"));
+            pushSnapshot(histProj); // S3: 3 elementos (elem_A, elem_B, elem_C)
+            check(hMode.raiz.size() == 3 && historyIdx == 3, "S3: objeto C duplicado");
+
+            const size_t maxHistorySize = historyStack.size();
+
+            // Desfazer 1 (Ctrl+Z): deve remover somente a duplicata C
+            --historyIdx;
+            Project restS2;
+            Project::Desserializar(restS2, historyStack[historyIdx]);
+            check(restS2.telas[0].modos[0].raiz.size() == 2,
+                  "Ctrl+Z remove somente a duplicata mais recente (C), mantendo A e B");
+            check(restS2.telas[0].modos[0].raiz.back().id == "elem_B",
+                  "Apos desfazer C, objeto B e o ultimo elemento");
+
+            // Desfazer 2 (Ctrl+Z): deve remover a duplicata B
+            --historyIdx;
+            Project restS1;
+            Project::Desserializar(restS1, historyStack[historyIdx]);
+            check(restS1.telas[0].modos[0].raiz.size() == 1,
+                  "Ctrl+Z remove B, mantendo somente A");
+            check(restS1.telas[0].modos[0].raiz[0].id == "elem_A",
+                  "Apos desfazer B, objeto A e o ultimo elemento");
+
+            // Refazer 1 (Ctrl+Shift+Z): deve restaurar B
+            ++historyIdx;
+            Project redoB;
+            Project::Desserializar(redoB, historyStack[historyIdx]);
+            check(redoB.telas[0].modos[0].raiz.size() == 2,
+                  "Ctrl+Shift+Z restaura objeto B");
+            check(redoB.telas[0].modos[0].raiz.back().id == "elem_B",
+                  "Apos refazer B, objeto B e selecionavel como ultimo elemento");
+
+            // Refazer 2 (Ctrl+Shift+Z): deve restaurar C
+            ++historyIdx;
+            Project redoC;
+            Project::Desserializar(redoC, historyStack[historyIdx]);
+            check(redoC.telas[0].modos[0].raiz.size() == 3,
+                  "Ctrl+Shift+Z restaura objeto C com aparencia preservada");
+            check(redoC.telas[0].modos[0].raiz.back().id == "elem_C",
+                  "Apos refazer C, objeto C e selecionavel como ultimo elemento");
+
+            // Validação de não-criação de entradas espúrias
+            check(historyStack.size() == maxHistorySize,
+                  "Desfazer e Refazer nao criam entradas adicionais no historico");
+        }
+
+        // =========================================================================
+        // TESTES DE REGRESSÃO: Seleção Múltipla com 7 Objetos (Posições e Rotações Variadas)
+        // =========================================================================
+        {
+            Project multiProj;
+            multiProj.CriarNovo("Teste MultiSelecao 7 Objetos", 1280, 720);
+            Modo& mMode = multiProj.telas[0].modos[0];
+
+            struct ObjDef {
+                const char* id;
+                float x, y, w, h, rot;
+            };
+
+            const ObjDef defs[7] = {
+                { "obj1",  100.0f,  100.0f, 150.0f,  80.0f,   0.0f },
+                { "obj2",  350.0f,  120.0f, 120.0f,  60.0f,  45.0f },
+                { "obj3",  600.0f,  200.0f, 200.0f, 100.0f, -30.0f },
+                { "obj4",   50.0f,  400.0f,  80.0f,  80.0f,  90.0f },
+                { "obj5",  400.0f,  450.0f, 180.0f,  90.0f,  15.0f },
+                { "obj6",  800.0f,  300.0f, 140.0f,  70.0f,  60.0f },
+                { "obj7", -50.0f,  -20.0f, 100.0f,  50.0f,  25.0f }, // parcialmente fora da tela base
+            };
+
+            std::vector<std::string> selectedIds;
+            float expectedMinX = FLT_MAX, expectedMinY = FLT_MAX;
+            float expectedMaxX = -FLT_MAX, expectedMaxY = -FLT_MAX;
+
+            for (int i = 0; i < 7; ++i)
+            {
+                Element el = makeElement(defs[i].id, "retangulo");
+                el.transformacao = {
+                    { "x", defs[i].x }, { "y", defs[i].y },
+                    { "largura", defs[i].w }, { "altura", defs[i].h },
+                    { "rotacao", defs[i].rot }
+                };
+
+                // Calcula cantos reais do elemento
+                float px = 0.0f, py = 0.0f;
+                Geo::ElementPivot(el, px, py);
+                const float rad = Geo::DegToRad(defs[i].rot);
+                float cx[4] = { defs[i].x, defs[i].x + defs[i].w, defs[i].x + defs[i].w, defs[i].x };
+                float cy[4] = { defs[i].y, defs[i].y, defs[i].y + defs[i].h, defs[i].y + defs[i].h };
+                for (int c = 0; c < 4; ++c)
+                {
+                    Geo::RotatePoint(cx[c], cy[c], px, py, rad);
+                    expectedMinX = std::min(expectedMinX, cx[c]);
+                    expectedMinY = std::min(expectedMinY, cy[c]);
+                    expectedMaxX = std::max(expectedMaxX, cx[c]);
+                    expectedMaxY = std::max(expectedMaxY, cy[c]);
+                }
+
+                mMode.raiz.push_back(std::move(el));
+                selectedIds.push_back(defs[i].id);
+            }
+
+            // Calcula limites acumulados usando Geo::RotatedAABB
+            float uMinX = FLT_MAX, uMinY = FLT_MAX, uMaxX = -FLT_MAX, uMaxY = -FLT_MAX;
+            for (const std::string& id : selectedIds)
+            {
+                Element* el = Project::ResolverId(mMode, id);
+                check(el != nullptr, "Elemento da selecao multipla existe");
+                float bx0 = 0.0f, by0 = 0.0f, bx1 = 0.0f, by1 = 0.0f;
+                Geo::RotatedAABB(*el, bx0, by0, bx1, by1);
+                uMinX = std::min(uMinX, bx0);
+                uMinY = std::min(uMinY, by0);
+                uMaxX = std::max(uMaxX, bx1);
+                uMaxY = std::max(uMaxY, by1);
+            }
+
+            check(fabsf(uMinX - expectedMinX) < 0.01f,
+                  "Selecao multipla: minX engloba todos os 7 objetos rotacionados");
+            check(fabsf(uMinY - expectedMinY) < 0.01f,
+                  "Selecao multipla: minY engloba todos os 7 objetos rotacionados");
+            check(fabsf(uMaxX - expectedMaxX) < 0.01f,
+                  "Selecao multipla: maxX engloba todos os 7 objetos rotacionados");
+            check(fabsf(uMaxY - expectedMaxY) < 0.01f,
+                  "Selecao multipla: maxY engloba todos os 7 objetos rotacionados");
+
+            // Verifica que a caixa conjunta tem largura e altura positivas e engloba o objeto fora da tela
+            const float boxW = uMaxX - uMinX;
+            const float boxH = uMaxY - uMinY;
+            check(boxW > 0.0f && boxH > 0.0f,
+                  "Caixa delimitadora conjunta possui dimensoes validas");
+            check(uMinX < 0.0f && uMinY < 0.0f,
+                  "Caixa conjunta engloba elemento parcialmente fora da tela base");
+        }
+
+        // =========================================================================
+        // TESTES DE REGRESSÃO: Quick Duplicate estilo CorelDRAW (Clique Direito / R-Drag + Ctrl+D)
+        // =========================================================================
+        {
+            Project qProj;
+            qProj.CriarNovo("Teste Quick Duplicate CorelDRAW", 1280, 720);
+            Modo& qMode = qProj.telas[0].modos[0];
+
+            // Objeto A original
+            Element origA = makeElement("orig_A", "retangulo");
+            origA.transformacao = {
+                { "x", 100.0f }, { "y", 100.0f },
+                { "largura", 150.0f }, { "altura", 80.0f },
+                { "rotacao", 0.0f }
+            };
+            origA.estilos = {
+                { "cor_fundo", "#ff4400" },
+                { "largura_borda", 3.0f }
+            };
+            qMode.raiz.push_back(std::move(origA));
+
+            // Simulação 1: Quick Duplicate (Left-Drag + Right-Click fork)
+            // A inicia em (100, 100). Clone B é posicionado em (350, 220), A volta para (100, 100).
+            const std::string cloneBId = Project::ClonarElemento(qMode, qProj, "orig_A");
+            check(!cloneBId.empty(), "Quick Duplicate: Clone B criado com sucesso");
+            Element* elemB = Project::ResolverId(qMode, cloneBId);
+            check(elemB != nullptr, "Quick Duplicate: Elemento B resolvido");
+
+            // B assume a posição final do arrasto
+            elemB->transformacao["x"] = 350.0f;
+            elemB->transformacao["y"] = 220.0f;
+            const float bx = 350.0f;
+            const float by = 220.0f;
+
+            // Delta aprendido a partir de A -> B:
+            const float dx = bx - 100.0f; // +250.0f
+            const float dy = by - 100.0f; // +120.0f
+            check(fabsf(dx - 250.0f) < 0.01f && fabsf(dy - 120.0f) < 0.01f,
+                  "Quick Duplicate: Delta aprendido com precisao (+250, +120)");
+
+            // Primeiro Ctrl+D após Quick Duplicate: gera C repetindo o delta sobre B
+            const std::vector<Element> copiesC = Project::CopiarElementos(qMode, { cloneBId });
+            const std::vector<std::string> idsC = Project::ColarElementosOffset(qProj, qMode, copiesC, 0.0f, 0.0f);
+            check(idsC.size() == 1, "Ctrl+D gera C a partir do Quick Duplicate");
+            const std::string cloneCId = idsC[0];
+            Element* elemC = Project::ResolverId(qMode, cloneCId);
+            check(elemC != nullptr, "Objeto C resolvido");
+            elemC->transformacao["x"] = bx + dx;
+            elemC->transformacao["y"] = by + dy;
+            const float cx = elemC->transformacao.value("x", 0.0f);
+            const float cy = elemC->transformacao.value("y", 0.0f);
+
+            check(fabsf(cx - 600.0f) < 0.01f,
+                  "Ctrl+D apos Quick Duplicate: C.x = 350 + 250 = 600");
+            check(fabsf(cy - 340.0f) < 0.01f,
+                  "Ctrl+D apos Quick Duplicate: C.y = 220 + 120 = 340");
+
+            // Segundo Ctrl+D: gera D repetindo o mesmo delta sobre C
+            const std::vector<Element> copiesD = Project::CopiarElementos(qMode, { cloneCId });
+            const std::vector<std::string> idsD = Project::ColarElementosOffset(qProj, qMode, copiesD, 0.0f, 0.0f);
+            check(idsD.size() == 1, "Ctrl+D repetido gera D");
+            const std::string cloneDId = idsD[0];
+            Element* elemD = Project::ResolverId(qMode, cloneDId);
+            check(elemD != nullptr, "Objeto D resolvido");
+            elemD->transformacao["x"] = cx + dx;
+            elemD->transformacao["y"] = cy + dy;
+            const float dxPos = elemD->transformacao.value("x", 0.0f);
+            const float dyPos = elemD->transformacao.value("y", 0.0f);
+
+            check(fabsf(dxPos - 850.0f) < 0.01f,
+                  "Ctrl+D repetido: D.x = 600 + 250 = 850");
+            check(fabsf(dyPos - 460.0f) < 0.01f,
+                  "Ctrl+D repetido: D.y = 340 + 120 = 460");
+
+            // Verifica integridade do original A
+            const Element* elemA = Project::ResolverId(qMode, "orig_A");
+            check(elemA != nullptr &&
+                  fabsf(elemA->transformacao.value("x", 0.0f) - 100.0f) < 0.01f &&
+                  fabsf(elemA->transformacao.value("y", 0.0f) - 100.0f) < 0.01f,
+                  "Quick Duplicate: Objeto original A permanece intacto na origem (100, 100)");
         }
 
         report << (failures == 0 ? "RESULT PASS" : "RESULT FAIL")

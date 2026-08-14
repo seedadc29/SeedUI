@@ -71,6 +71,7 @@ namespace seedui
         bool AdicionarComponente(const char* tipo, const char* nome,
                                  float projectX = -1.0f, float projectY = -1.0f);
         void CopiarElementosSelecionados();
+        void RecortarElementosSelecionados();
         void ColarElementosCopiados();
         void DuplicarSelecao();
         void EspelharSelecao(bool horizontal);
@@ -93,6 +94,16 @@ namespace seedui
         void DistribuirElementosSelecionados(bool horizontal);
         void AgruparElementosSelecionados();
         void DesagruparElementosSelecionados();
+        void CriarPowerClipSelecao();
+        void EntrarEdicaoPowerClip(const std::string& frameId = std::string());
+        void SairEdicaoPowerClip();
+        void ExtrairConteudoPowerClip();
+        void AjustarConteudoPowerClip(int modo);
+        void SelecionarConteudoPowerClip();
+        void AdicionarConteudoPowerClip(bool substituir);
+        void RemoverConteudoSelecionadoPowerClip();
+        void RemoverPowerClip();
+        std::string PowerClipContextFrameId();
         void ResetarHistorico();
         void CapturarHistorico();
         void Desfazer();
@@ -107,7 +118,7 @@ namespace seedui
         float PixelsToUnit(float px) const;
 
     public:
-        // Estruturas de duplicação incremental e repetição de transformação (Ctrl+D estilo CorelDRAW)
+        // Estrutura de duplicação e repetição de transformação estilo CorelDRAW (Ctrl+D / Ctrl+R)
         struct DuplicateTransformSnapshot
         {
             std::string id;
@@ -118,37 +129,36 @@ namespace seedui
             float h = 32.0f;
         };
 
-        struct DuplicateRepeatDelta
+        struct DuplicateSystem
         {
-            float deltaX = 0.0f;
-            float deltaY = 0.0f;
+            float deltaX = 16.0f;
+            float deltaY = 16.0f;
             float deltaRot = 0.0f;
             float factorW = 1.0f;
             float factorH = 1.0f;
-        };
 
-        struct DuplicateSequence
-        {
-            bool hasSequence = false;
-            DuplicateTransformSnapshot stateA; // Estado do objeto original (A) antes da duplicação
-            std::string lastCreatedId;         // ID da última cópia criada na sequência (B, C, D...)
-            DuplicateTransformSnapshot stateB; // Estado da primeira cópia (B) após modificação manual
+            std::string lastDuplicatedId;
+            float sourceX = 0.0f;
+            float sourceY = 0.0f;
+            float sourceRot = 0.0f;
+            float sourceW = 160.0f;
+            float sourceH = 32.0f;
+            bool hasSourceSnapshot = false;
 
-            bool hasLearnedDelta = false;
-            DuplicateRepeatDelta learnedDelta;
-
-            void Reset()
+            void ResetToDefault()
             {
-                hasSequence = false;
-                stateA = {};
-                lastCreatedId.clear();
-                stateB = {};
-                hasLearnedDelta = false;
-                learnedDelta = {};
+                deltaX = 16.0f;
+                deltaY = 16.0f;
+                deltaRot = 0.0f;
+                factorW = 1.0f;
+                factorH = 1.0f;
+                lastDuplicatedId.clear();
+                hasSourceSnapshot = false;
             }
         };
 
-        DuplicateSequence mDupSeq;
+        DuplicateSystem mDup;
+        void AtualizarDeltaDuplicacaoManual(const Element& el);
 
     private:
 
@@ -237,16 +247,19 @@ namespace seedui
         bool mCloneDragging = false;
         float mRightDragStartX = 0.0f;
         float mRightDragStartY = 0.0f;
+        DuplicateTransformSnapshot mRightDragSourceA;
         // Clone durante o arrasto (fork): mover com o botão esquerdo e, no
         // meio do arrasto, apertar o direito faz o ORIGINAL voltar ao ponto
         // de partida e o CLONE continuar seguindo o cursor até soltar.
         bool mCloneForked = false;
+        DuplicateTransformSnapshot mCloneForkSourceA;
         // Limiar de arrasto: o objeto fica FIXO ao clicar e só se move depois
         // que o mouse ultrapassa ~4px de tela (evita "arrasto acidental" no
         // clique). Trava depois de cruzado (não volta atrás no mesmo arrasto).
         bool mCanvasDragPastThreshold = false;
         std::vector<Element> mElementClipboard;
         int mElementPasteGeneration = 0;
+        bool mElementClipboardFromCut = false;
         // Ferramenta Medir: medição transitória (não entra no JSON).
         bool mMeasureDragging = false;
         float mMeasureX1 = 0.0f, mMeasureY1 = 0.0f;
@@ -264,6 +277,13 @@ namespace seedui
         float mPenSnapProjX = 0.0f;
         float mPenSnapProjY = 0.0f;
         bool mPenSnapIsClose = false;
+        bool mPenPreview = true;
+        bool mPenAutoAddDelete = true;
+        float mPenConstrainAngle = 15.0f;
+        std::string mPowerClipEditFrameId;
+        // Moldura do filho escolhido por Ctrl+clique fora do ambiente interno.
+        // Mantém o recorte ativo e permite voltar/entrar pelo botão no canvas.
+        std::string mPowerClipDirectFrameId;
         int mPathEditIndex = -1;  // nó em edição (dragMode 16 = nó, 17 = alça)
         int mAlignTarget = 0; // 0 selecao, 1 elemento principal, 2 tela
         float mHorizontalSpacing = 16.0f;

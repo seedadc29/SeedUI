@@ -17,7 +17,9 @@ namespace seedui
                     bool wireframe = false,
                     float zoom = 1.0f,
                     float panX = 0.0f, float panY = 0.0f,
-                    float unidadeEmPixels = 1.0f);
+                    float unidadeEmPixels = 1.0f,
+                    const char* powerClipEmEdicaoId = nullptr,
+                    const char* powerClipSelecaoDiretaId = nullptr);
 
     // Converte coordenadas da janela para coordenadas da tela base do projeto.
     bool CanvasScreenToProject(const Project* projeto, float screenX, float screenY,

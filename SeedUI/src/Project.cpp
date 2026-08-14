@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cfloat>
 #include <ctime>
+#include <iterator>
 
 namespace seedui
 {
@@ -92,9 +93,12 @@ namespace seedui
             OffsetElementTreeXY(element, delta, delta, canvasWidth, canvasHeight);
         }
 
-        Element* HitElement(Element& element, float x, float y)
+        Element* HitElement(Element& element, float x, float y,
+                            bool permitirConteudoPowerClip = false)
         {
             if (!element.visivel) return nullptr;
+            const bool powerClip = element.propriedades.is_object() &&
+                element.propriedades.value("powerclip", false);
             const float left = element.transformacao.value("x", 0.0f);
             const float top = element.transformacao.value("y", 0.0f);
             const float width = element.transformacao.value("largura", 160.0f);
@@ -131,8 +135,8 @@ namespace seedui
                     // o interior é transparente e o clique continua no contorno.
                     if (!inside && closed)
                     {
-                        bool hasFill = element.estilos.is_object() &&
-                            element.estilos.contains("cor_fundo");
+                        bool hasFill = powerClip || (element.estilos.is_object() &&
+                            element.estilos.contains("cor_fundo"));
                         if (hasFill)
                         {
                             bool insidePoly = false;
@@ -178,9 +182,38 @@ namespace seedui
                 inside = x >= left && x <= left + width &&
                          y >= top && y <= top + height;
             }
+            // A moldura do PowerClip usa a geometria real (elipse, polígono,
+            // caminho e rotação), não apenas sua caixa delimitadora. Isso
+            // mantém seleção e saída do portal coerentes com o recorte visual.
+            if (powerClip)
+            {
+                std::vector<ImVec2> outline;
+                Geo::OutlineProject(element, outline, 96);
+                if (outline.size() >= 3)
+                {
+                    bool insideOutline = false;
+                    size_t j = outline.size() - 1;
+                    for (size_t i = 0; i < outline.size(); ++i)
+                    {
+                        const ImVec2& a = outline[i];
+                        const ImVec2& b = outline[j];
+                        const bool cross = (a.y > y) != (b.y > y) &&
+                            x < (b.x - a.x) * (y - a.y) /
+                                ((b.y - a.y) == 0.0f ? 0.00001f : (b.y - a.y)) + a.x;
+                        if (cross) insideOutline = !insideOutline;
+                        j = i;
+                    }
+                    inside = insideOutline;
+                }
+            }
+            // O conteúdo de um PowerClip fica bloqueado para seleção direta:
+            // dentro seleciona a moldura; fora da moldura ele nem é visível.
+            if (powerClip && !permitirConteudoPowerClip)
+                return inside ? &element : nullptr;
             if (element.tipo == "grupo" && inside) return &element;
             for (auto it = element.filhos.rbegin(); it != element.filhos.rend(); ++it)
-                if (Element* hit = HitElement(*it, x, y)) return hit;
+                if (Element* hit = HitElement(*it, x, y,
+                                              permitirConteudoPowerClip)) return hit;
             return inside ? &element : nullptr;
         }
 
@@ -480,6 +513,51 @@ namespace seedui
         return nullptr;
     }
 
+    Element* Project::ConteudoPowerClipNoPonto(Modo& modo,
+                                                const std::string& frameId,
+                                                float x, float y,
+                                                bool limitarNaMascara)
+    {
+        Element* frame = ResolverId(modo, frameId);
+        if (!frame || !frame->propriedades.is_object() ||
+            !frame->propriedades.value("powerclip", false))
+            return nullptr;
+
+        // Fora da moldura o conteúdo está recortado e não pode receber clique.
+        if (limitarNaMascara && HitElement(*frame, x, y, false) != frame)
+            return nullptr;
+        for (auto it = frame->filhos.rbegin(); it != frame->filhos.rend(); ++it)
+            if (Element* hit = HitElement(*it, x, y, false)) return hit;
+        return nullptr;
+    }
+
+    std::vector<Element*> Project::ConteudosPowerClipNoPonto(
+        Modo& modo, const std::string& frameId, float x, float y,
+        bool limitarNaMascara)
+    {
+        std::vector<Element*> hits;
+        Element* frame = ResolverId(modo, frameId);
+        if (!frame || !frame->propriedades.is_object() ||
+            !frame->propriedades.value("powerclip", false))
+            return hits;
+        if (limitarNaMascara && HitElement(*frame, x, y, false) != frame)
+            return hits;
+
+        // Cada filho direto representa um objeto independente dentro do
+        // contêiner. Em grupos, HitElement devolve o descendente frontal.
+        for (auto it = frame->filhos.rbegin(); it != frame->filhos.rend(); ++it)
+            if (Element* hit = HitElement(*it, x, y, true))
+                hits.push_back(hit);
+        return hits;
+    }
+
+    bool Project::PontoDentroElemento(Modo& modo, const std::string& id,
+                                      float x, float y)
+    {
+        Element* element = ResolverId(modo, id);
+        return element && HitElement(*element, x, y, false) == element;
+    }
+
     bool Project::ExcluirElemento(Modo& modo, const std::string& id)
     {
         ElementSlot slot;
@@ -525,6 +603,27 @@ namespace seedui
         newParent = ResolverId(modo, novoPaiId);
         if (!newParent) return false;
         newParent->filhos.push_back(std::move(moved));
+        return true;
+    }
+
+    bool Project::ExtrairFilhos(Modo& modo, const std::string& paiId,
+                                std::vector<std::string>& idsExtraidos)
+    {
+        idsExtraidos.clear();
+        ElementSlot slot;
+        if (!FindElementSlot(modo.raiz, paiId, slot)) return false;
+        Element& parent = (*slot.container)[slot.index];
+        if (parent.bloqueado || parent.filhos.empty()) return false;
+
+        std::vector<Element> extracted = std::move(parent.filhos);
+        parent.filhos.clear();
+        idsExtraidos.reserve(extracted.size());
+        for (const Element& child : extracted)
+            idsExtraidos.push_back(child.id);
+
+        slot.container->insert(slot.container->begin() + slot.index + 1,
+                               std::make_move_iterator(extracted.begin()),
+                               std::make_move_iterator(extracted.end()));
         return true;
     }
 

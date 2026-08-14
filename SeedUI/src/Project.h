@@ -88,10 +88,23 @@ namespace seedui
         // nao podem ser movidos, reparentados ou excluidos.
         static Element* ResolverId(Modo& modo, const std::string& id);
         static Element* ElementoNoPonto(Modo& modo, float x, float y);
+        static Element* ConteudoPowerClipNoPonto(Modo& modo,
+                                                  const std::string& frameId,
+                                                  float x, float y,
+                                                  bool limitarNaMascara = true);
+        // Devolve os objetos internos sob o cursor, do mais frontal para o
+        // mais traseiro. Usado pelo Ctrl+clique cíclico sem abrir o PowerClip.
+        static std::vector<Element*> ConteudosPowerClipNoPonto(
+            Modo& modo, const std::string& frameId, float x, float y,
+            bool limitarNaMascara = true);
+        static bool PontoDentroElemento(Modo& modo, const std::string& id,
+                                        float x, float y);
         static bool ExcluirElemento(Modo& modo, const std::string& id);
         static bool MoverElemento(Modo& modo, const std::string& id, int delta);
         static bool ReparentearElemento(Modo& modo, const std::string& id,
                                         const std::string& novoPaiId);
+        static bool ExtrairFilhos(Modo& modo, const std::string& paiId,
+                                  std::vector<std::string>& idsExtraidos);
         static std::vector<Element> CopiarElementos(
             const Modo& modo, const std::vector<std::string>& ids);
         static std::vector<std::string> ColarElementos(

@@ -9,10 +9,71 @@
 #include <cmath>
 #include <cstdio>
 
+#if defined(_WIN32)
+// Declarações mínimas do OpenGL 1.1 exportadas por opengl32.dll. Evita
+// incluir windows.h/gl.h, cujos nomes CloseWindow/ShowCursor colidem com raylib.
+extern "C"
+{
+    __declspec(dllimport) void __stdcall glStencilMask(unsigned int mask);
+    __declspec(dllimport) void __stdcall glDisable(unsigned int capability);
+    __declspec(dllimport) void __stdcall glClearStencil(int value);
+    __declspec(dllimport) void __stdcall glClear(unsigned int mask);
+    __declspec(dllimport) void __stdcall glEnable(unsigned int capability);
+    __declspec(dllimport) void __stdcall glColorMask(unsigned char red, unsigned char green,
+                                                     unsigned char blue, unsigned char alpha);
+    __declspec(dllimport) void __stdcall glStencilFunc(unsigned int function, int reference,
+                                                       unsigned int mask);
+    __declspec(dllimport) void __stdcall glStencilOp(unsigned int stencilFail,
+                                                     unsigned int depthFail,
+                                                     unsigned int depthPass);
+}
+#endif
+
 namespace seedui
 {
     namespace
     {
+#if defined(_WIN32)
+        constexpr unsigned int kGlScissorTest = 0x0C11;
+        constexpr unsigned int kGlStencilBufferBit = 0x00000400;
+        constexpr unsigned int kGlStencilTest = 0x0B90;
+        constexpr unsigned int kGlAlways = 0x0207;
+        constexpr unsigned int kGlEqual = 0x0202;
+        constexpr unsigned int kGlKeep = 0x1E00;
+        constexpr unsigned int kGlReplace = 0x1E01;
+
+        // O ImDrawList permite comandos de GPU entre primitivas. Estes três
+        // callbacks transformam o contorno da moldura em uma máscara stencil,
+        // recortando os filhos pela forma real (inclusive rotação e Bézier).
+        void BeginPowerClipMask(const ImDrawList*, const ImDrawCmd*)
+        {
+            glStencilMask(0xFF);
+            glDisable(kGlScissorTest);
+            glClearStencil(0);
+            glClear(kGlStencilBufferBit);
+            glEnable(kGlScissorTest);
+            glEnable(kGlStencilTest);
+            glColorMask(0, 0, 0, 0);
+            glStencilFunc(kGlAlways, 1, 0xFF);
+            glStencilOp(kGlKeep, kGlKeep, kGlReplace);
+        }
+
+        void BeginPowerClipContent(const ImDrawList*, const ImDrawCmd*)
+        {
+            glColorMask(1, 1, 1, 1);
+            glStencilMask(0x00);
+            glStencilFunc(kGlEqual, 1, 0xFF);
+            glStencilOp(kGlKeep, kGlKeep, kGlKeep);
+        }
+
+        void EndPowerClip(const ImDrawList*, const ImDrawCmd*)
+        {
+            glColorMask(1, 1, 1, 1);
+            glStencilMask(0xFF);
+            glDisable(kGlStencilTest);
+        }
+#endif
+
         struct CornerRadii
         {
             float topLeft = 0.0f;
@@ -240,7 +301,8 @@ namespace seedui
 
         // Desenha um elemento e seus filhos recursivamente (versão simples do M03).
         void DrawElement(const Element& e, const ImVec2& origin, float scale,
-                         bool wireframe, ImDrawList* dl)
+                         bool wireframe, ImDrawList* dl,
+                         const char* powerClipEmEdicaoId)
         {
             if (!e.visivel) return;
 
@@ -546,8 +608,66 @@ namespace seedui
                 }
             }
 
-            for (const Element& f : e.filhos)
-                DrawElement(f, origin, scale, wireframe, dl);
+            const bool powerClip = e.propriedades.is_object() &&
+                e.propriedades.value("powerclip", false) && !e.filhos.empty();
+            if (powerClip)
+            {
+                std::vector<ImVec2> maskPoints;
+                Geo::OutlineScreen(e, origin.x, origin.y, scale, maskPoints, 96);
+                const bool editingThis = powerClipEmEdicaoId &&
+                    e.id == powerClipEmEdicaoId;
+                if (editingThis)
+                {
+                    // Ambiente interno: os filhos continuam pertencendo ao
+                    // PowerClip, mas são mostrados inteiros para edição.
+                    for (const Element& f : e.filhos)
+                        DrawElement(f, origin, scale, wireframe, dl,
+                                    powerClipEmEdicaoId);
+                    if (maskPoints.size() >= 3)
+                    {
+                        const ImU32 portal = IM_COL32(55, 170, 255, 235);
+                        dl->AddPolyline(maskPoints.data(), (int)maskPoints.size(),
+                                        portal, ImDrawFlags_Closed, 2.0f);
+                    }
+                    return;
+                }
+                if (maskPoints.size() >= 3)
+                {
+#if defined(_WIN32)
+                    dl->AddCallback(BeginPowerClipMask, nullptr);
+                    dl->AddConcavePolyFilled(maskPoints.data(),
+                                             (int)maskPoints.size(),
+                                             IM_COL32_WHITE);
+                    dl->AddCallback(BeginPowerClipContent, nullptr);
+                    for (const Element& f : e.filhos)
+                        DrawElement(f, origin, scale, wireframe, dl,
+                                    powerClipEmEdicaoId);
+                    dl->AddCallback(EndPowerClip, nullptr);
+#else
+                    dl->PushClipRect(a, b, true);
+                    for (const Element& f : e.filhos)
+                        DrawElement(f, origin, scale, wireframe, dl,
+                                    powerClipEmEdicaoId);
+                    dl->PopClipRect();
+#endif
+                    // O conteúdo deve ficar dentro da moldura, mas o contorno
+                    // da moldura permanece visível acima dele.
+                    if (outlineWidth > 0.0f && (outline & IM_COL32_A_MASK) != 0)
+                        StrokePolyline(dl, maskPoints, outline, outlineWidth, true);
+                }
+                else
+                {
+                    for (const Element& f : e.filhos)
+                        DrawElement(f, origin, scale, wireframe, dl,
+                                    powerClipEmEdicaoId);
+                }
+            }
+            else
+            {
+                for (const Element& f : e.filhos)
+                    DrawElement(f, origin, scale, wireframe, dl,
+                                powerClipEmEdicaoId);
+            }
         }
 
         // Estilo de traço do contorno: estilos.tracejado {largura_traco,
@@ -710,7 +830,9 @@ namespace seedui
                     bool exibirReguas, bool reguasBloqueadas,
                     bool exibirGrade, bool wireframe,
                     float zoom, float panX, float panY,
-                    float unidadeEmPixels)
+                    float unidadeEmPixels,
+                    const char* powerClipEmEdicaoId,
+                    const char* powerClipSelecaoDiretaId)
     {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         const ImVec2 min = ImGui::GetWindowPos();
@@ -918,7 +1040,8 @@ namespace seedui
         if (modoAtivo < 0 || modoAtivo >= (int)tela.modos.size()) return;
         const Modo& modo = tela.modos[modoAtivo];
         for (const Element& e : modo.raiz)
-            DrawElement(e, origin, viewScale, wireframe, dl);
+            DrawElement(e, origin, viewScale, wireframe, dl,
+                        powerClipEmEdicaoId);
 
         // Área de segurança: se algum elemento selecionado estiver FORA da
         // tela base, um contorno vermelho fino (como linha-guia) contorna a
@@ -948,6 +1071,42 @@ namespace seedui
                 DrawDashedRect(dl, origin,
                                ImVec2(origin.x + frame.x, origin.y + frame.y),
                                safeRed);
+            }
+        }
+
+        bool recortarAlcasNaMascara = false;
+        if (powerClipSelecaoDiretaId && powerClipSelecaoDiretaId[0])
+        {
+            const Element* selectionFrame = FindElement(
+                modo.raiz, powerClipSelecaoDiretaId);
+            if (selectionFrame)
+            {
+                std::vector<ImVec2> maskPoints;
+                Geo::OutlineScreen(*selectionFrame, origin.x, origin.y,
+                                   viewScale, maskPoints, 96);
+                if (maskPoints.size() >= 3)
+                {
+#if defined(_WIN32)
+                    dl->AddCallback(BeginPowerClipMask, nullptr);
+                    dl->AddConcavePolyFilled(maskPoints.data(),
+                                             (int)maskPoints.size(),
+                                             IM_COL32_WHITE);
+                    dl->AddCallback(BeginPowerClipContent, nullptr);
+#else
+                    float minMaskX = FLT_MAX, minMaskY = FLT_MAX;
+                    float maxMaskX = -FLT_MAX, maxMaskY = -FLT_MAX;
+                    for (const ImVec2& point : maskPoints)
+                    {
+                        minMaskX = std::min(minMaskX, point.x);
+                        minMaskY = std::min(minMaskY, point.y);
+                        maxMaskX = std::max(maxMaskX, point.x);
+                        maxMaskY = std::max(maxMaskY, point.y);
+                    }
+                    dl->PushClipRect(ImVec2(minMaskX, minMaskY),
+                                     ImVec2(maxMaskX, maxMaskY), true);
+#endif
+                    recortarAlcasNaMascara = true;
+                }
             }
         }
 
@@ -1289,6 +1448,14 @@ namespace seedui
 
             }
             }
+        }
+        if (recortarAlcasNaMascara)
+        {
+#if defined(_WIN32)
+            dl->AddCallback(EndPowerClip, nullptr);
+#else
+            dl->PopClipRect();
+#endif
         }
     }
 }

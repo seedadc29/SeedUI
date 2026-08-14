@@ -66,6 +66,17 @@ namespace seedui
         FlipV,
         Transparency,
         CornersOut,
+        Cut,
+        Link,
+        Unlink,
+        PowerClipEnter,
+        PowerClipExit,
+        PowerClipCenter,
+        PowerClipFit,
+        PowerClipFill,
+        PowerClipStretch,
+        PowerClipExtract,
+        PowerClipHome,
         Count,
     };
 
