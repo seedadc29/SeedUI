@@ -107,7 +107,7 @@ namespace seedui
         float PixelsToUnit(float px) const;
 
     public:
-        // Captura de transformação da duplicata (Etapa 2 de diagnóstico)
+        // Estruturas de duplicação incremental e repetição de transformação (Ctrl+D estilo CorelDRAW)
         struct DuplicateTransformSnapshot
         {
             std::string id;
@@ -118,32 +118,37 @@ namespace seedui
             float h = 32.0f;
         };
 
-        struct DuplicateDeltaCapture
+        struct DuplicateRepeatDelta
         {
-            bool hasInitial = false;
-            DuplicateTransformSnapshot initial;
-            DuplicateTransformSnapshot finalState;
-
             float deltaX = 0.0f;
             float deltaY = 0.0f;
             float deltaRot = 0.0f;
-            float scaleX = 1.0f;
-            float scaleY = 1.0f;
+            float factorW = 1.0f;
+            float factorH = 1.0f;
+        };
+
+        struct DuplicateSequence
+        {
+            bool hasSequence = false;
+            DuplicateTransformSnapshot stateA; // Estado do objeto original (A) antes da duplicação
+            std::string lastCreatedId;         // ID da última cópia criada na sequência (B, C, D...)
+            DuplicateTransformSnapshot stateB; // Estado da primeira cópia (B) após modificação manual
+
+            bool hasLearnedDelta = false;
+            DuplicateRepeatDelta learnedDelta;
 
             void Reset()
             {
-                hasInitial = false;
-                initial = {};
-                finalState = {};
-                deltaX = 0.0f;
-                deltaY = 0.0f;
-                deltaRot = 0.0f;
-                scaleX = 1.0f;
-                scaleY = 1.0f;
+                hasSequence = false;
+                stateA = {};
+                lastCreatedId.clear();
+                stateB = {};
+                hasLearnedDelta = false;
+                learnedDelta = {};
             }
         };
 
-        DuplicateDeltaCapture mDupCapture;
+        DuplicateSequence mDupSeq;
 
     private:
 

@@ -913,38 +913,112 @@ namespace seedui
         }
 
         Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+
+        // Verifica se há uma transformação aprendida para repetir
+        // Condição: temos delta aprendido E o elemento atualmente selecionado é o último da sequência
+        const bool repeatingSequence = mDupSeq.hasLearnedDelta &&
+                                      !mDupSeq.lastCreatedId.empty() &&
+                                      (mSelectedElementId == mDupSeq.lastCreatedId ||
+                                       (!ids.empty() && ids.front() == mDupSeq.lastCreatedId));
+
+        if (repeatingSequence)
+        {
+            // Cria a nova cópia (C, D, etc.) como clone do objeto atualmente selecionado (B, C, etc.)
+            const std::vector<Element> copies = Project::CopiarElementos(mode, ids);
+            if (copies.empty()) return;
+
+            ++mElementPasteGeneration;
+            // Deslocamento 0 para não somar o offset padrão (+16px) ao delta aprendido
+            const std::vector<std::string> pastedRootIds = Project::ColarElementosOffset(
+                mProject, mode, copies, 0.0f, 0.0f);
+
+            if (pastedRootIds.empty()) return;
+
+            // Aplica as fórmulas exatas de repetição ao novo elemento criado
+            if (Element* clone = Project::ResolverId(mode, pastedRootIds.front()))
+            {
+                // Objeto de origem (o elemento selecionado antes da duplicação, ex: B)
+                if (const Element* src = Project::ResolverId(mode, ids.front()))
+                {
+                    const float srcX = src->transformacao.value("x", 0.0f);
+                    const float srcY = src->transformacao.value("y", 0.0f);
+                    const float srcRot = Geo::ElementRotation(*src);
+                    const float srcW = src->transformacao.value("largura", 160.0f);
+                    const float srcH = src->transformacao.value("altura", 32.0f);
+
+                    const float newX = srcX + mDupSeq.learnedDelta.deltaX;
+                    const float newY = srcY + mDupSeq.learnedDelta.deltaY;
+                    const float newRot = srcRot + mDupSeq.learnedDelta.deltaRot;
+                    const float newW = std::max(1.0f, srcW * mDupSeq.learnedDelta.factorW);
+                    const float newH = std::max(1.0f, srcH * mDupSeq.learnedDelta.factorH);
+
+                    clone->transformacao["x"] = newX;
+                    clone->transformacao["y"] = newY;
+                    clone->transformacao["rotacao"] = newRot;
+                    clone->transformacao["largura"] = newW;
+                    clone->transformacao["altura"] = newH;
+                    ClampElementCornerRadii(*clone);
+
+                    // Diagnóstico detalhado: A, B, Delta, C
+                    char diagBuf[512];
+                    snprintf(diagBuf, sizeof(diagBuf),
+                             "[Ctrl+D Repetição] A(x=%.1f,y=%.1f,rot=%.1f°,w=%.1f,h=%.1f) | "
+                             "B(x=%.1f,y=%.1f,rot=%.1f°,w=%.1f,h=%.1f) | "
+                             "Delta(dx=%.1f,dy=%.1f,drot=%.1f°,fw=%.2f,fh=%.2f) -> "
+                             "Novo(x=%.1f,y=%.1f,rot=%.1f°,w=%.1f,h=%.1f)",
+                             mDupSeq.stateA.x, mDupSeq.stateA.y, mDupSeq.stateA.rot, mDupSeq.stateA.w, mDupSeq.stateA.h,
+                             mDupSeq.stateB.x, mDupSeq.stateB.y, mDupSeq.stateB.rot, mDupSeq.stateB.w, mDupSeq.stateB.h,
+                             mDupSeq.learnedDelta.deltaX, mDupSeq.learnedDelta.deltaY, mDupSeq.learnedDelta.deltaRot,
+                             mDupSeq.learnedDelta.factorW, mDupSeq.learnedDelta.factorH,
+                             newX, newY, newRot, newW, newH);
+                    mStatusMsg = diagBuf;
+                    mStatusMsgUntil = GetTime() + 10.0;
+                    TraceLog(LOG_INFO, "%s", diagBuf);
+                }
+            }
+
+            // Atualiza a cadeia: a nova cópia é selecionada e se torna a última da cadeia
+            mDupSeq.lastCreatedId = pastedRootIds.front();
+            // Mantém mDupSeq.hasLearnedDelta e mDupSeq.learnedDelta intactos para as próximas cópias (D, E, etc.)
+
+            mSelectedElementIds = pastedRootIds;
+            mSelectedElementId = pastedRootIds.back();
+            mProjectDirty = true;
+            CapturarHistorico();
+            return;
+        }
+
+        // Caso contrário: primeira duplicação (A -> B) ou duplicação simples sem delta aprendido
         const std::vector<Element> copies = Project::CopiarElementos(mode, ids);
         if (copies.empty()) return;
+
+        // Captura o estado original A antes de criar B
+        if (const Element* orig = Project::ResolverId(mode, ids.front()))
+        {
+            mDupSeq.stateA.id = orig->id;
+            mDupSeq.stateA.x = orig->transformacao.value("x", 0.0f);
+            mDupSeq.stateA.y = orig->transformacao.value("y", 0.0f);
+            mDupSeq.stateA.rot = Geo::ElementRotation(*orig);
+            mDupSeq.stateA.w = orig->transformacao.value("largura", 160.0f);
+            mDupSeq.stateA.h = orig->transformacao.value("altura", 32.0f);
+        }
 
         ++mElementPasteGeneration;
         const std::vector<std::string> pastedRootIds = Project::ColarElementosOffset(
             mProject, mode, copies, 16.0f, 16.0f);
 
+        if (pastedRootIds.empty()) return;
+
+        // Inicializa a sequência: B foi criado
+        mDupSeq.hasSequence = true;
+        mDupSeq.lastCreatedId = pastedRootIds.front();
+        mDupSeq.hasLearnedDelta = false;
+        mDupSeq.learnedDelta = {};
+
         mSelectedElementIds = pastedRootIds;
-        mSelectedElementId = pastedRootIds.empty() ? std::string() : pastedRootIds.back();
+        mSelectedElementId = pastedRootIds.back();
         mProjectDirty = true;
         CapturarHistorico();
-
-        // Captura do snapshot inicial da duplicata (Etapa 2 - Diagnóstico)
-        if (!pastedRootIds.empty())
-        {
-            if (Element* clone = Project::ResolverId(mode, pastedRootIds.front()))
-            {
-                mDupCapture.hasInitial = true;
-                mDupCapture.initial.id = clone->id;
-                mDupCapture.initial.x = clone->transformacao.value("x", 0.0f);
-                mDupCapture.initial.y = clone->transformacao.value("y", 0.0f);
-                mDupCapture.initial.rot = Geo::ElementRotation(*clone);
-                mDupCapture.initial.w = clone->transformacao.value("largura", 160.0f);
-                mDupCapture.initial.h = clone->transformacao.value("altura", 32.0f);
-                mDupCapture.finalState = mDupCapture.initial;
-                mDupCapture.deltaX = 0.0f;
-                mDupCapture.deltaY = 0.0f;
-                mDupCapture.deltaRot = 0.0f;
-                mDupCapture.scaleX = 1.0f;
-                mDupCapture.scaleY = 1.0f;
-            }
-        }
 
         mStatusMsg = std::to_string(pastedRootIds.size()) +
                      " elemento(s) duplicado(s) (Ctrl+D)";
@@ -3058,8 +3132,8 @@ namespace seedui
                 mCanvasCornerDragMask = 0;
                 if (!isSelected(hit->id))
                 {
-                    if (mDupCapture.initial.id != hit->id)
-                        mDupCapture.Reset();
+                    if (mDupSeq.lastCreatedId != hit->id)
+                        mDupSeq.Reset();
                     mSelectedElementIds.clear();
                     mSelectedElementIds.push_back(hit->id);
                 }
@@ -3071,7 +3145,7 @@ namespace seedui
                 mCanvasCornerDragMask = 0;
                 if (!additive)
                 {
-                    mDupCapture.Reset();
+                    mDupSeq.Reset();
                     mSelectedElementIds.clear();
                     mSelectedElementId.clear();
                 }
@@ -3969,32 +4043,46 @@ namespace seedui
                     mStatusMsg = "Elemento redimensionado";
                 }
 
-                // Diagnóstico da transformação manual na duplicata (Etapa 2)
-                if (mDupCapture.hasInitial && !mDupCapture.initial.id.empty())
+                // Aprendizado da transformação manual (Ctrl+D estilo CorelDRAW)
+                if (mDupSeq.hasSequence && !mDupSeq.lastCreatedId.empty())
                 {
-                    if (Element* clone = Project::ResolverId(mode, mDupCapture.initial.id))
+                    if (Element* b = Project::ResolverId(mode, mDupSeq.lastCreatedId))
                     {
-                        mDupCapture.finalState.id = clone->id;
-                        mDupCapture.finalState.x = clone->transformacao.value("x", 0.0f);
-                        mDupCapture.finalState.y = clone->transformacao.value("y", 0.0f);
-                        mDupCapture.finalState.rot = Geo::ElementRotation(*clone);
-                        mDupCapture.finalState.w = clone->transformacao.value("largura", 160.0f);
-                        mDupCapture.finalState.h = clone->transformacao.value("altura", 32.0f);
+                        mDupSeq.stateB.id = b->id;
+                        mDupSeq.stateB.x = b->transformacao.value("x", 0.0f);
+                        mDupSeq.stateB.y = b->transformacao.value("y", 0.0f);
+                        mDupSeq.stateB.rot = Geo::ElementRotation(*b);
+                        mDupSeq.stateB.w = b->transformacao.value("largura", 160.0f);
+                        mDupSeq.stateB.h = b->transformacao.value("altura", 32.0f);
 
-                        mDupCapture.deltaX = mDupCapture.finalState.x - mDupCapture.initial.x;
-                        mDupCapture.deltaY = mDupCapture.finalState.y - mDupCapture.initial.y;
-                        mDupCapture.deltaRot = mDupCapture.finalState.rot - mDupCapture.initial.rot;
-                        mDupCapture.scaleX = mDupCapture.finalState.w / std::max(0.01f, mDupCapture.initial.w);
-                        mDupCapture.scaleY = mDupCapture.finalState.h / std::max(0.01f, mDupCapture.initial.h);
+                        const float dx = mDupSeq.stateB.x - mDupSeq.stateA.x;
+                        const float dy = mDupSeq.stateB.y - mDupSeq.stateA.y;
+                        const float drot = mDupSeq.stateB.rot - mDupSeq.stateA.rot;
+                        const float fw = mDupSeq.stateB.w / std::max(0.01f, mDupSeq.stateA.w);
+                        const float fh = mDupSeq.stateB.h / std::max(0.01f, mDupSeq.stateA.h);
 
-                        char diagBuf[256];
-                        snprintf(diagBuf, sizeof(diagBuf),
-                                 "[Diagnóstico Ctrl+D] deltaX: %.1f | deltaY: %.1f | deltaRotação: %.1f° | scaleX: %.2f | scaleY: %.2f",
-                                 mDupCapture.deltaX, mDupCapture.deltaY, mDupCapture.deltaRot,
-                                 mDupCapture.scaleX, mDupCapture.scaleY);
-                        mStatusMsg = diagBuf;
-                        mStatusMsgUntil = GetTime() + 8.0;
-                        TraceLog(LOG_INFO, "%s", diagBuf);
+                        if (fabsf(dx) > 0.001f || fabsf(dy) > 0.001f || fabsf(drot) > 0.001f ||
+                            fabsf(fw - 1.0f) > 0.001f || fabsf(fh - 1.0f) > 0.001f)
+                        {
+                            mDupSeq.hasLearnedDelta = true;
+                            mDupSeq.learnedDelta.deltaX = dx;
+                            mDupSeq.learnedDelta.deltaY = dy;
+                            mDupSeq.learnedDelta.deltaRot = drot;
+                            mDupSeq.learnedDelta.factorW = fw;
+                            mDupSeq.learnedDelta.factorH = fh;
+
+                            char diagBuf[512];
+                            snprintf(diagBuf, sizeof(diagBuf),
+                                     "[Ctrl+D Aprendido] A(x=%.1f,y=%.1f,rot=%.1f°,w=%.1f,h=%.1f) -> "
+                                     "B(x=%.1f,y=%.1f,rot=%.1f°,w=%.1f,h=%.1f) | "
+                                     "Delta(dx=%.1f,dy=%.1f,drot=%.1f°,fw=%.2f,fh=%.2f)",
+                                     mDupSeq.stateA.x, mDupSeq.stateA.y, mDupSeq.stateA.rot, mDupSeq.stateA.w, mDupSeq.stateA.h,
+                                     mDupSeq.stateB.x, mDupSeq.stateB.y, mDupSeq.stateB.rot, mDupSeq.stateB.w, mDupSeq.stateB.h,
+                                     dx, dy, drot, fw, fh);
+                            mStatusMsg = diagBuf;
+                            mStatusMsgUntil = GetTime() + 10.0;
+                            TraceLog(LOG_INFO, "%s", diagBuf);
+                        }
                     }
                 }
                 else
@@ -5583,29 +5671,43 @@ namespace seedui
         if (propertyEdited)
         {
             mProjectDirty = true;
-            if (primary && mDupCapture.hasInitial && mDupCapture.initial.id == primary->id)
+            if (primary && mDupSeq.hasSequence && mDupSeq.lastCreatedId == primary->id)
             {
-                mDupCapture.finalState.id = primary->id;
-                mDupCapture.finalState.x = primary->transformacao.value("x", 0.0f);
-                mDupCapture.finalState.y = primary->transformacao.value("y", 0.0f);
-                mDupCapture.finalState.rot = Geo::ElementRotation(*primary);
-                mDupCapture.finalState.w = primary->transformacao.value("largura", 160.0f);
-                mDupCapture.finalState.h = primary->transformacao.value("altura", 32.0f);
+                mDupSeq.stateB.id = primary->id;
+                mDupSeq.stateB.x = primary->transformacao.value("x", 0.0f);
+                mDupSeq.stateB.y = primary->transformacao.value("y", 0.0f);
+                mDupSeq.stateB.rot = Geo::ElementRotation(*primary);
+                mDupSeq.stateB.w = primary->transformacao.value("largura", 160.0f);
+                mDupSeq.stateB.h = primary->transformacao.value("altura", 32.0f);
 
-                mDupCapture.deltaX = mDupCapture.finalState.x - mDupCapture.initial.x;
-                mDupCapture.deltaY = mDupCapture.finalState.y - mDupCapture.initial.y;
-                mDupCapture.deltaRot = mDupCapture.finalState.rot - mDupCapture.initial.rot;
-                mDupCapture.scaleX = mDupCapture.finalState.w / std::max(0.01f, mDupCapture.initial.w);
-                mDupCapture.scaleY = mDupCapture.finalState.h / std::max(0.01f, mDupCapture.initial.h);
+                const float dx = mDupSeq.stateB.x - mDupSeq.stateA.x;
+                const float dy = mDupSeq.stateB.y - mDupSeq.stateA.y;
+                const float drot = mDupSeq.stateB.rot - mDupSeq.stateA.rot;
+                const float fw = mDupSeq.stateB.w / std::max(0.01f, mDupSeq.stateA.w);
+                const float fh = mDupSeq.stateB.h / std::max(0.01f, mDupSeq.stateA.h);
 
-                char diagBuf[256];
-                snprintf(diagBuf, sizeof(diagBuf),
-                         "[Diagnóstico Ctrl+D] deltaX: %.1f | deltaY: %.1f | deltaRotação: %.1f° | scaleX: %.2f | scaleY: %.2f",
-                         mDupCapture.deltaX, mDupCapture.deltaY, mDupCapture.deltaRot,
-                         mDupCapture.scaleX, mDupCapture.scaleY);
-                mStatusMsg = diagBuf;
-                mStatusMsgUntil = GetTime() + 8.0;
-                TraceLog(LOG_INFO, "%s", diagBuf);
+                if (fabsf(dx) > 0.001f || fabsf(dy) > 0.001f || fabsf(drot) > 0.001f ||
+                    fabsf(fw - 1.0f) > 0.001f || fabsf(fh - 1.0f) > 0.001f)
+                {
+                    mDupSeq.hasLearnedDelta = true;
+                    mDupSeq.learnedDelta.deltaX = dx;
+                    mDupSeq.learnedDelta.deltaY = dy;
+                    mDupSeq.learnedDelta.deltaRot = drot;
+                    mDupSeq.learnedDelta.factorW = fw;
+                    mDupSeq.learnedDelta.factorH = fh;
+
+                    char diagBuf[512];
+                    snprintf(diagBuf, sizeof(diagBuf),
+                             "[Ctrl+D Aprendido] A(x=%.1f,y=%.1f,rot=%.1f°,w=%.1f,h=%.1f) -> "
+                             "B(x=%.1f,y=%.1f,rot=%.1f°,w=%.1f,h=%.1f) | "
+                             "Delta(dx=%.1f,dy=%.1f,drot=%.1f°,fw=%.2f,fh=%.2f)",
+                             mDupSeq.stateA.x, mDupSeq.stateA.y, mDupSeq.stateA.rot, mDupSeq.stateA.w, mDupSeq.stateA.h,
+                             mDupSeq.stateB.x, mDupSeq.stateB.y, mDupSeq.stateB.rot, mDupSeq.stateB.w, mDupSeq.stateB.h,
+                             dx, dy, drot, fw, fh);
+                    mStatusMsg = diagBuf;
+                    mStatusMsgUntil = GetTime() + 10.0;
+                    TraceLog(LOG_INFO, "%s", diagBuf);
+                }
             }
         }
 
