@@ -62,6 +62,7 @@ namespace game
         float mDeathTimer = 0.0f;
         float mYawDegrees = 0.0f;
         float mVisualHeight = 1.5f;
+        float mDistantUpdateAccumulator = 0.0f;
         bool mAggressive = false;
         bool mPlayerAttackLatched = false;
         bool mProvoked = false;

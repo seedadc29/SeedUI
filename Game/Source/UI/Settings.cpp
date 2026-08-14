@@ -5,6 +5,16 @@
 
 namespace game
 {
+    static bool gRetroGraphicsActive = false;
+    static bool gCrtGraphicsActive = false;
+    static int gCrtTextureLimit = 128;
+
+    static const char *SettingsFile(const Settings &settings)
+    {
+        if (settings.crtMode) return "settings_crt.ini";
+        return settings.retroMode ? "settings_retro.ini" : "settings.ini";
+    }
+
     static int ClampInt(int value, int min, int max)
     {
         if (value < min) return min;
@@ -21,7 +31,7 @@ namespace game
 
     void LoadSettings(Settings &settings)
     {
-        std::ifstream file("settings.ini");
+        std::ifstream file(SettingsFile(settings));
         if (!file.is_open()) return;
 
         std::string line;
@@ -53,6 +63,12 @@ namespace game
             else if (key == "skinHue") settings.skinHue = std::stof(value);
             else if (key == "skinSaturation") settings.skinSaturation = std::stof(value);
             else if (key == "characterLightIntensity") settings.characterLightIntensity = std::stof(value);
+            else if (key == "crtScanlines") settings.crtScanlines = (value == "1");
+            else if (key == "crtScanlineStrength") settings.crtScanlineStrength = std::stof(value);
+            else if (key == "crtScanlineSpacing") settings.crtScanlineSpacing = std::stoi(value);
+            else if (key == "crtInternalWidth") settings.crtInternalWidth = std::stoi(value);
+            else if (key == "crtAliasingStrength") settings.crtAliasingStrength = std::stof(value);
+            else if (key == "crtTextureSize") settings.crtTextureSize = std::stoi(value);
         }
 
         settings.windowWidth = ClampInt(settings.windowWidth, 640, 3840);
@@ -63,11 +79,16 @@ namespace game
         settings.skinHue = ClampFloat(settings.skinHue, 0.0f, 1.0f);
         settings.skinSaturation = ClampFloat(settings.skinSaturation, 0.0f, 1.0f);
         settings.characterLightIntensity = ClampFloat(settings.characterLightIntensity, 0.35f, 1.65f);
+        settings.crtScanlineStrength = ClampFloat(settings.crtScanlineStrength, 0.0f, 1.0f);
+        settings.crtScanlineSpacing = ClampInt(settings.crtScanlineSpacing, 1, 12);
+        settings.crtInternalWidth = ClampInt(settings.crtInternalWidth, 64, 960);
+        settings.crtAliasingStrength = ClampFloat(settings.crtAliasingStrength, 0.0f, 1.0f);
+        settings.crtTextureSize = ClampInt(settings.crtTextureSize, 32, 512);
     }
 
     void SaveSettings(const Settings &settings)
     {
-        std::ofstream file("settings.ini");
+        std::ofstream file(SettingsFile(settings));
         if (!file.is_open()) return;
 
         file << "windowWidth=" << settings.windowWidth << "\n";
@@ -81,5 +102,44 @@ namespace game
         file << "skinHue=" << settings.skinHue << "\n";
         file << "skinSaturation=" << settings.skinSaturation << "\n";
         file << "characterLightIntensity=" << settings.characterLightIntensity << "\n";
+        if (settings.crtMode)
+        {
+            file << "crtScanlines=" << (settings.crtScanlines ? 1 : 0) << "\n";
+            file << "crtScanlineStrength=" << settings.crtScanlineStrength << "\n";
+            file << "crtScanlineSpacing=" << settings.crtScanlineSpacing << "\n";
+            file << "crtInternalWidth=" << settings.crtInternalWidth << "\n";
+            file << "crtAliasingStrength=" << settings.crtAliasingStrength << "\n";
+            file << "crtTextureSize=" << settings.crtTextureSize << "\n";
+        }
+    }
+
+    void SetRetroGraphicsActive(bool active)
+    {
+        gRetroGraphicsActive = active;
+    }
+
+    bool IsRetroGraphicsActive()
+    {
+        return gRetroGraphicsActive;
+    }
+
+    void SetCrtGraphicsActive(bool active)
+    {
+        gCrtGraphicsActive = active;
+    }
+
+    bool IsCrtGraphicsActive()
+    {
+        return gCrtGraphicsActive;
+    }
+
+    void SetCrtTextureLimit(int pixels)
+    {
+        gCrtTextureLimit = ClampInt(pixels, 32, 512);
+    }
+
+    int GetCrtTextureLimit()
+    {
+        return gCrtTextureLimit;
     }
 }

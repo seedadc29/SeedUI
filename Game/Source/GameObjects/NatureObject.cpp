@@ -533,6 +533,10 @@ namespace game
     {
         const Vector3 cameraPosition = scene.GetCamera().position;
         const glm::vec3 playerPosition(cameraPosition.x, cameraPosition.y, cameraPosition.z);
+        const float loadRadius = scene.GetSettings().crtMode
+            ? 25.0f : (scene.GetSettings().retroMode ? 34.0f : 42.0f);
+        const float unloadRadius = scene.GetSettings().crtMode
+            ? 32.0f : (scene.GetSettings().retroMode ? 42.0f : 52.0f);
         bool loadedThisFrame = false;
         for (int assetIndex = 0; assetIndex < (int)mAssets.size(); ++assetIndex)
         {
@@ -545,12 +549,12 @@ namespace game
                 closestSq = std::min(closestSq, glm::dot(delta, delta));
             }
             Asset &asset = mAssets[assetIndex];
-            if (closestSq <= 42.0f * 42.0f && !asset.loaded && !loadedThisFrame)
+            if (closestSq <= loadRadius * loadRadius && !asset.loaded && !loadedThisFrame)
             {
                 LoadAsset(asset);
                 loadedThisFrame = asset.loaded;
             }
-            else if (asset.loaded && closestSq > 52.0f * 52.0f)
+            else if (asset.loaded && closestSq > unloadRadius * unloadRadius)
             {
                 UnloadAssetModel(asset);
             }
@@ -561,11 +565,13 @@ namespace game
     {
         const Vector3 cameraPosition = scene.GetCamera().position;
         const glm::vec3 playerPosition(cameraPosition.x, cameraPosition.y, cameraPosition.z);
+        const float drawRadius = scene.GetSettings().crtMode
+            ? 29.0f : (scene.GetSettings().retroMode ? 38.0f : 45.0f);
         for (const Instance &instance : mInstances)
         {
             const glm::vec2 delta(instance.position.x - playerPosition.x,
                                   instance.position.z - playerPosition.z);
-            if (glm::dot(delta, delta) > 45.0f * 45.0f) continue;
+            if (glm::dot(delta, delta) > drawRadius * drawRadius) continue;
             const Asset &asset = mAssets[instance.assetIndex];
             if (!asset.loaded) continue;
             const float baseScale = asset.desiredHeight * instance.scale / asset.sourceHeight;

@@ -39,6 +39,8 @@ namespace game
         virtual void Shutdown() {}
         virtual void Update(float deltaTime) {}
         virtual void Draw() {}
+        virtual void DrawWorld() { Draw(); }
+        virtual void DrawOverlay() {}
         virtual void DrawDebug() {}
         virtual void SpawnDamageFeedback(const glm::vec3 &, float) {}
 

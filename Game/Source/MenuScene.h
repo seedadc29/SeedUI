@@ -17,6 +17,8 @@ namespace game
         void Init() override;
         void Update(float deltaTime) override;
         void Draw() override;
+        void DrawWorld() override;
+        void DrawOverlay() override;
 
     private:
         void DrawMenu();

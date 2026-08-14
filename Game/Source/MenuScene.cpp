@@ -49,6 +49,12 @@ namespace game
 
     void MenuScene::Draw()
     {
+        DrawWorld();
+        DrawOverlay();
+    }
+
+    void MenuScene::DrawWorld()
+    {
         BeginMode3D(mOrbitCamera);
             DrawGrid(24, 1.0f);
             DrawCube({ 0, 0.75f, 0 }, 4.0f, 1.5f, 4.0f, { 46, 51, 64, 255 });
@@ -56,7 +62,10 @@ namespace game
             DrawCube({ 0, 2.25f, 0 }, 1.6f, 1.6f, 1.6f, RED);
             DrawCubeWires({ 0, 2.25f, 0 }, 1.6f, 1.6f, 1.6f, MAROON);
         EndMode3D();
+    }
 
+    void MenuScene::DrawOverlay()
+    {
         if (mShowSettings)
         {
             if (mSettingsScreen.Draw(mSettings))

@@ -1,4 +1,5 @@
 #include "Assets/TextureLoader.h"
+#include "UI/Settings.h"
 
 #include <algorithm>
 #include <string>
@@ -20,6 +21,18 @@ namespace game
         };
 
         std::unordered_map<std::string, CachedTexture> gTextureCache;
+
+        void ReduceForCrt(Image &image)
+        {
+            if (!IsCrtGraphicsActive() || !image.data) return;
+            const int limit = GetCrtTextureLimit();
+            const int largest = std::max(image.width, image.height);
+            if (largest <= limit) return;
+            const float scale = (float)limit / (float)largest;
+            const int width = std::max(1, (int)(image.width * scale + 0.5f));
+            const int height = std::max(1, (int)(image.height * scale + 0.5f));
+            ImageResizeNN(&image, width, height);
+        }
 
         std::string LowerExtension(const std::string &path)
         {
@@ -75,8 +88,9 @@ namespace game
             image.format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
 
             // LoadTextureFromImage uploads the data; it does not take ownership.
+            ReduceForCrt(image);
             Texture2D texture = LoadTextureFromImage(image);
-            MemFree(pixels);
+            UnloadImage(image);
             return texture;
         }
 
@@ -92,7 +106,13 @@ namespace game
 
             // Fall back to the engine loaders (png/jpg/etc.) when no cooked
             // .qoi exists, e.g. when running from the source asset tree.
-            return LoadTexture(path.c_str());
+            if (!IsCrtGraphicsActive()) return LoadTexture(path.c_str());
+            Image image = LoadImage(path.c_str());
+            if (!image.data) return {};
+            ReduceForCrt(image);
+            Texture2D texture = LoadTextureFromImage(image);
+            UnloadImage(image);
+            return texture;
         }
     }
 

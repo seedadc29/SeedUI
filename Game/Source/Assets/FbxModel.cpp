@@ -1,4 +1,5 @@
 #include "Assets/FbxModel.h"
+#include "UI/Settings.h"
 #include "Assets/TextureLoader.h"
 #include "raymath.h"
 #include "rlgl.h"
@@ -369,7 +370,10 @@ void main()
             if (texture.id != 0)
             {
                 GenTextureMipmaps(&texture);
-                SetTextureFilter(texture, TEXTURE_FILTER_ANISOTROPIC_8X);
+                SetTextureFilter(texture, IsCrtGraphicsActive()
+                    ? TEXTURE_FILTER_POINT
+                    : (IsRetroGraphicsActive()
+                        ? TEXTURE_FILTER_BILINEAR : TEXTURE_FILTER_ANISOTROPIC_8X));
                 textureCache[key] = texture;
                 textures.push_back(texture);
             }
@@ -1256,7 +1260,10 @@ void main()
                     if (texture.id != 0)
                     {
                         GenTextureMipmaps(&texture);
-                        SetTextureFilter(texture, TEXTURE_FILTER_ANISOTROPIC_8X);
+                        SetTextureFilter(texture, IsCrtGraphicsActive()
+                            ? TEXTURE_FILTER_POINT
+                            : (IsRetroGraphicsActive()
+                                ? TEXTURE_FILTER_BILINEAR : TEXTURE_FILTER_ANISOTROPIC_8X));
                         textureCache[key] = texture;
                         outTextures.push_back(texture);
                     }
@@ -1284,7 +1291,10 @@ void main()
                         if (texture.id != 0)
                         {
                             GenTextureMipmaps(&texture);
-                            SetTextureFilter(texture, TEXTURE_FILTER_ANISOTROPIC_8X);
+                            SetTextureFilter(texture, IsCrtGraphicsActive()
+                                ? TEXTURE_FILTER_POINT
+                                : (IsRetroGraphicsActive()
+                                    ? TEXTURE_FILTER_BILINEAR : TEXTURE_FILTER_ANISOTROPIC_8X));
                             textureCache[key] = texture;
                             outTextures.push_back(texture);
                         }

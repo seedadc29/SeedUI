@@ -123,7 +123,23 @@ namespace game
         if (!player) return;
         const float loadDistance = glm::distance(glm::vec2(player->GetPosition().x, player->GetPosition().z),
                                                  glm::vec2(mPosition.x, mPosition.z));
-        if (loadDistance <= 48.0f) EnsureModelLoaded();
+        const bool retroMode = scene.GetSettings().retroMode;
+        const float distantTickRadius = scene.GetSettings().crtMode ? 38.0f : 48.0f;
+        if (retroMode && loadDistance > distantTickRadius)
+        {
+            mDistantUpdateAccumulator = std::min(
+                mDistantUpdateAccumulator + deltaTime, 0.24f);
+            if (mDistantUpdateAccumulator < 0.16f) return;
+            deltaTime = mDistantUpdateAccumulator;
+            mDistantUpdateAccumulator = 0.0f;
+        }
+        else
+        {
+            mDistantUpdateAccumulator = 0.0f;
+        }
+        const float modelDistance = scene.GetSettings().crtMode
+            ? 32.0f : (retroMode ? 42.0f : 48.0f);
+        if (loadDistance <= modelDistance) EnsureModelLoaded();
         mModel.Update(deltaTime);
         mHitFlash = std::max(0.0f, mHitFlash - deltaTime);
         if (IsDead()) { mDeathTimer = std::max(0.0f, mDeathTimer - deltaTime); return; }
@@ -195,7 +211,9 @@ namespace game
     {
         if (IsExpired()) return;
         const glm::vec3 player = scene.GetPlayer() ? scene.GetPlayer()->GetPosition() : glm::vec3(0.0f);
-        if (glm::distance(glm::vec2(player.x, player.z), glm::vec2(mPosition.x, mPosition.z)) > 55.0f) return;
+        const float drawDistance = scene.GetSettings().crtMode
+            ? 36.0f : (scene.GetSettings().retroMode ? 46.0f : 55.0f);
+        if (glm::distance(glm::vec2(player.x, player.z), glm::vec2(mPosition.x, mPosition.z)) > drawDistance) return;
         const Vector3 position = { mPosition.x, mPosition.y + (mConfig.category == EnemyCategory::Flying ? 1.0f : 0.0f), mPosition.z };
         Color tint = WHITE;
         if (mHitFlash > 0.0f)

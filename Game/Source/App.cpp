@@ -4,6 +4,7 @@
 #include "GameScene.h"
 
 #include "raylib.h"
+#include <algorithm>
 #if !defined(NDEBUG)
 #include "imgui.h"
 #define GLFW_INCLUDE_NONE
@@ -14,27 +15,195 @@
 
 namespace game
 {
-    App::App() = default;
+    struct App::RetroPresentation
+    {
+        RenderTexture2D target = {};
+        Shader shader = {};
+        int scanlinesLocation = -1;
+        int scanlineStrengthLocation = -1;
+        int scanlineSpacingLocation = -1;
+        int aliasingStrengthLocation = -1;
+    };
+
+    namespace
+    {
+        constexpr int RetroWorldWidth = 960;
+        constexpr int RetroWorldHeight = 540;
+
+        const char *RetroFragmentShader = R"GLSL(
+#version 330
+in vec2 fragTexCoord;
+in vec4 fragColor;
+uniform sampler2D texture0;
+uniform vec4 colDiffuse;
+out vec4 finalColor;
+
+float SeedGrain(vec2 pixel)
+{
+    return fract(sin(dot(floor(pixel), vec2(12.9898, 78.233))) * 43758.5453);
+}
+
+void main()
+{
+    vec4 source = texture(texture0, fragTexCoord) * colDiffuse * fragColor;
+    vec3 color = source.rgb;
+    float light = dot(color, vec3(0.2126, 0.7152, 0.0722));
+
+    // Assinatura Bruma: sombras frias, luz levemente dourada e cor contida.
+    vec3 shadowTone = vec3(0.90, 0.96, 1.07);
+    vec3 lightTone = vec3(1.06, 1.02, 0.92);
+    color *= mix(shadowTone, lightTone, smoothstep(0.18, 0.82, light));
+    color = mix(vec3(light), color, 1.08);
+
+    // Quantizacao suave com grao estavel. Mantem leitura moderna sem imitar PS1.
+    const float levels = 28.0;
+    float grain = (SeedGrain(gl_FragCoord.xy) - 0.5) * 0.62 / levels;
+    color = floor(clamp(color + grain, 0.0, 1.0) * levels + 0.5) / levels;
+
+    vec2 centered = fragTexCoord * 2.0 - 1.0;
+    float vignette = smoothstep(1.30, 0.28, dot(centered, centered));
+    color *= mix(0.92, 1.0, vignette);
+    finalColor = vec4(color, source.a);
+}
+)GLSL";
+
+        const char *CrtFragmentShader = R"GLSL(
+#version 330
+in vec2 fragTexCoord;
+in vec4 fragColor;
+uniform sampler2D texture0;
+uniform vec4 colDiffuse;
+uniform float scanlinesEnabled;
+uniform float scanlineStrength;
+uniform float scanlineSpacing;
+uniform float aliasingStrength;
+out vec4 finalColor;
+
+void main()
+{
+    vec2 centered = fragTexCoord * 2.0 - 1.0;
+    float radius = dot(centered, centered);
+    vec2 uv = centered * (1.0 + radius * 0.055) * 0.5 + 0.5;
+    if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0)
+    {
+        finalColor = vec4(0.006, 0.008, 0.012, 1.0);
+        return;
+    }
+
+    vec2 texel = 1.0 / vec2(textureSize(texture0, 0));
+    float split = mix(0.15, 1.15, aliasingStrength);
+    vec3 color;
+    color.r = texture(texture0, uv + vec2(texel.x * split, 0.0)).r;
+    color.g = texture(texture0, uv).g;
+    color.b = texture(texture0, uv - vec2(texel.x * split, 0.0)).b;
+
+    vec3 neighborhood = (texture(texture0, uv + vec2(texel.x, 0.0)).rgb +
+                         texture(texture0, uv - vec2(texel.x, 0.0)).rgb +
+                         texture(texture0, uv + vec2(0.0, texel.y)).rgb +
+                         texture(texture0, uv - vec2(0.0, texel.y)).rgb) * 0.25;
+    color = mix(color, clamp(color + (color - neighborhood) * 0.85, 0.0, 1.0),
+                aliasingStrength);
+
+    vec3 reduced = floor(clamp(color, 0.0, 1.0) * 13.0 + 0.5) / 13.0;
+    color = mix(color, reduced, 0.48 + aliasingStrength * 0.45);
+
+    float spacing = max(1.0, scanlineSpacing);
+    float lineWave = 0.5 + 0.5 * cos(6.2831853 * gl_FragCoord.y / spacing);
+    float lineDarkening = scanlinesEnabled * scanlineStrength *
+                          mix(0.12, 0.58, lineWave);
+    color *= 1.0 - lineDarkening;
+
+    // Mascara RGB de fosforo muito sutil, separada das scanlines.
+    float phosphor = mod(floor(gl_FragCoord.x), 3.0);
+    vec3 mask = phosphor < 1.0 ? vec3(1.0, 0.94, 0.94) :
+                phosphor < 2.0 ? vec3(0.94, 1.0, 0.94) :
+                                 vec3(0.94, 0.94, 1.0);
+    color *= mix(vec3(1.0), mask, 0.34);
+    float vignette = smoothstep(1.18, 0.22, radius);
+    color *= mix(0.60, 1.0, vignette);
+    finalColor = vec4(color, 1.0) * colDiffuse * fragColor;
+}
+)GLSL";
+    }
+
+    App::App(VisualProfile profile) : mVisualProfile(profile)
+    {
+        mSettings.retroMode = profile != VisualProfile::Standard;
+        mSettings.crtMode = profile == VisualProfile::CrtLow;
+        if (mSettings.retroMode)
+        {
+            mSettings.shadowQuality = 0;
+            mRetroBadgeTime = 7.0f;
+        }
+        SetRetroGraphicsActive(mSettings.retroMode);
+        SetCrtGraphicsActive(mSettings.crtMode);
+    }
     App::~App() { Shutdown(); }
 
     void App::InitWindowAndContext()
     {
-        unsigned int flags = FLAG_MSAA_4X_HINT;
+        unsigned int flags = mVisualProfile == VisualProfile::Standard
+            ? FLAG_MSAA_4X_HINT : 0u;
         if (mSettings.vsync) flags |= FLAG_VSYNC_HINT;
 
         SetConfigFlags(flags);
-        InitWindow(mSettings.windowWidth, mSettings.windowHeight, "Eldoria");
+        const char *windowTitle = "Eldoria";
+        if (mVisualProfile == VisualProfile::Bruma)
+            windowTitle = "Eldoria - Perfil Semente // Bruma";
+        else if (mVisualProfile == VisualProfile::CrtLow)
+            windowTitle = "Eldoria - Perfil Semente // Tubo CRT";
+        InitWindow(mSettings.windowWidth, mSettings.windowHeight, windowTitle);
         SetExitKey(0);
         SetTargetFPS(60);
         SetTextureFilter(GetFontDefault().texture, TEXTURE_FILTER_BILINEAR);
 
         if (mSettings.fullscreen) ToggleFullscreen();
         mAppliedSettings = mSettings;
+
+        if (mVisualProfile != VisualProfile::Standard) InitRetroPresentation();
+    }
+
+    void App::InitRetroPresentation()
+    {
+        mRetroPresentation = new RetroPresentation();
+        RecreateRetroTarget();
+        const char *fragment = mVisualProfile == VisualProfile::CrtLow
+            ? CrtFragmentShader : RetroFragmentShader;
+        mRetroPresentation->shader = LoadShaderFromMemory(nullptr, fragment);
+        if (mVisualProfile == VisualProfile::CrtLow &&
+            mRetroPresentation->shader.id != 0)
+        {
+            mRetroPresentation->scanlinesLocation = GetShaderLocation(
+                mRetroPresentation->shader, "scanlinesEnabled");
+            mRetroPresentation->scanlineStrengthLocation = GetShaderLocation(
+                mRetroPresentation->shader, "scanlineStrength");
+            mRetroPresentation->scanlineSpacingLocation = GetShaderLocation(
+                mRetroPresentation->shader, "scanlineSpacing");
+            mRetroPresentation->aliasingStrengthLocation = GetShaderLocation(
+                mRetroPresentation->shader, "aliasingStrength");
+        }
+    }
+
+    void App::RecreateRetroTarget()
+    {
+        if (!mRetroPresentation) return;
+        if (mRetroPresentation->target.id != 0)
+            UnloadRenderTexture(mRetroPresentation->target);
+        const int width = mVisualProfile == VisualProfile::CrtLow
+            ? std::max(64, std::min(960, mSettings.crtInternalWidth))
+            : RetroWorldWidth;
+        const int height = std::max(36, (int)roundf(width * 9.0f / 16.0f));
+        mRetroPresentation->target = LoadRenderTexture(width, height);
+        if (mRetroPresentation->target.id != 0)
+            SetTextureFilter(mRetroPresentation->target.texture,
+                mVisualProfile == VisualProfile::CrtLow
+                    ? TEXTURE_FILTER_POINT : TEXTURE_FILTER_BILINEAR);
     }
 
     void App::Run()
     {
         LoadSettings(mSettings);
+        if (mSettings.crtMode) SetCrtTextureLimit(mSettings.crtTextureSize);
         InitWindowAndContext();
 
 #if !defined(NDEBUG)
@@ -73,17 +242,95 @@ namespace game
             HandleSceneRequest();
             ApplySettingsChanges();
 
-            BeginDrawing();
-            ClearBackground({ 14, 16, 22, 255 });
-            mActiveScene->Draw();
+            if (mVisualProfile != VisualProfile::Standard && mRetroPresentation &&
+                mRetroPresentation->target.id != 0)
+            {
+                if (mRetroBadgeTime > 0.0f) mRetroBadgeTime -= dt;
+                DrawRetroFrame();
+            }
+            else
+            {
+                BeginDrawing();
+                ClearBackground({ 14, 16, 22, 255 });
+                mActiveScene->Draw();
 #if !defined(NDEBUG)
-            ImGui::Render();
-            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+                ImGui::Render();
+                ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 #endif
-            EndDrawing();
+                EndDrawing();
+            }
         }
 
         Shutdown();
+    }
+
+    void App::DrawRetroFrame()
+    {
+        BeginTextureMode(mRetroPresentation->target);
+        ClearBackground({ 14, 16, 22, 255 });
+        mActiveScene->DrawWorld();
+        EndTextureMode();
+
+        BeginDrawing();
+        ClearBackground({ 8, 9, 13, 255 });
+        const int worldWidth = mRetroPresentation->target.texture.width;
+        const int worldHeight = mRetroPresentation->target.texture.height;
+        const float scaleX = (float)GetScreenWidth() / (float)worldWidth;
+        const float scaleY = (float)GetScreenHeight() / (float)worldHeight;
+        const float scale = fminf(scaleX, scaleY);
+        const Rectangle destination = {
+            ((float)GetScreenWidth() - worldWidth * scale) * 0.5f,
+            ((float)GetScreenHeight() - worldHeight * scale) * 0.5f,
+            worldWidth * scale,
+            worldHeight * scale
+        };
+        const Rectangle source = {
+            0.0f, 0.0f,
+            (float)mRetroPresentation->target.texture.width,
+            -(float)mRetroPresentation->target.texture.height
+        };
+        if (mVisualProfile == VisualProfile::CrtLow &&
+            mRetroPresentation->shader.id != 0)
+        {
+            const float scanlines = mSettings.crtScanlines ? 1.0f : 0.0f;
+            const float spacing = (float)mSettings.crtScanlineSpacing;
+            SetShaderValue(mRetroPresentation->shader,
+                           mRetroPresentation->scanlinesLocation,
+                           &scanlines, SHADER_UNIFORM_FLOAT);
+            SetShaderValue(mRetroPresentation->shader,
+                           mRetroPresentation->scanlineStrengthLocation,
+                           &mSettings.crtScanlineStrength, SHADER_UNIFORM_FLOAT);
+            SetShaderValue(mRetroPresentation->shader,
+                           mRetroPresentation->scanlineSpacingLocation,
+                           &spacing, SHADER_UNIFORM_FLOAT);
+            SetShaderValue(mRetroPresentation->shader,
+                           mRetroPresentation->aliasingStrengthLocation,
+                           &mSettings.crtAliasingStrength, SHADER_UNIFORM_FLOAT);
+        }
+        if (mRetroPresentation->shader.id != 0)
+            BeginShaderMode(mRetroPresentation->shader);
+        DrawTexturePro(mRetroPresentation->target.texture, source, destination,
+                       { 0.0f, 0.0f }, 0.0f, WHITE);
+        if (mRetroPresentation->shader.id != 0) EndShaderMode();
+
+        mActiveScene->DrawOverlay();
+        if (mRetroBadgeTime > 0.0f)
+        {
+            const char *badge = mVisualProfile == VisualProfile::CrtLow
+                ? TextFormat("PERFIL SEMENTE // TUBO CRT  %dx%d", worldWidth, worldHeight)
+                : "PERFIL SEMENTE // BRUMA  960x540";
+            const int fontSize = 13;
+            const int width = MeasureText(badge, fontSize);
+            DrawRectangle(GetScreenWidth() - width - 28, GetScreenHeight() - 34,
+                          width + 18, 24, { 10, 14, 20, 205 });
+            DrawText(badge, GetScreenWidth() - width - 19,
+                     GetScreenHeight() - 29, fontSize, { 169, 199, 207, 235 });
+        }
+#if !defined(NDEBUG)
+        ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+#endif
+        EndDrawing();
     }
 
     void App::HandleSceneRequest()
@@ -141,6 +388,10 @@ namespace game
             if (mGameScene) mGameScene->ApplySettings();
         }
 
+        if (mVisualProfile == VisualProfile::CrtLow &&
+            s.crtInternalWidth != mAppliedSettings.crtInternalWidth)
+            RecreateRetroTarget();
+
         mAppliedSettings = mSettings;
     }
 
@@ -159,6 +410,19 @@ namespace game
             mGameScene = nullptr;
         }
         mActiveScene = nullptr;
+
+        if (mRetroPresentation && mRetroPresentation->shader.id != 0)
+        {
+            UnloadShader(mRetroPresentation->shader);
+            mRetroPresentation->shader = {};
+        }
+        if (mRetroPresentation && mRetroPresentation->target.id != 0)
+        {
+            UnloadRenderTexture(mRetroPresentation->target);
+            mRetroPresentation->target = {};
+        }
+        delete mRetroPresentation;
+        mRetroPresentation = nullptr;
 
 #if !defined(NDEBUG)
         if (mImGuiInitialized)

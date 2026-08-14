@@ -155,7 +155,13 @@ namespace game
         mPhysics.Init();
         loading.Draw(0.08f, "Física");
 
-        TerrainObject *terrain = SpawnObject<TerrainObject>(128, 128, 2.0f);
+        // O perfil Tubo reduz a malha do terreno em 75%, mas preserva a mesma
+        // extensao do mundo com celulas maiores. Isso cria silhuetas mais
+        // facetadas e reduz bastante o custo geometrico.
+        const int terrainResolution = mSettings.crtMode ? 64 : 128;
+        const float terrainCellSize = mSettings.crtMode ? 4.0f : 2.0f;
+        TerrainObject *terrain = SpawnObject<TerrainObject>(
+            terrainResolution, terrainResolution, terrainCellSize);
         mTerrain = terrain;
         loading.Draw(0.30f, "Gerando terreno...");
 
@@ -406,6 +412,12 @@ namespace game
 
     void GameScene::Draw()
     {
+        DrawWorld();
+        DrawOverlay();
+    }
+
+    void GameScene::DrawWorld()
+    {
         // Day-sky backdrop. It is drawn in screen space before the 3D world so
         // areas without geometry no longer expose the application's dark clear.
         // Mesmo matiz azul, com luminancia mais alta (exposicao).
@@ -456,7 +468,10 @@ namespace game
             if (!mPaused && mShowDebugDraw) DrawDebug();
 #endif
         EndMode3D();
+    }
 
+    void GameScene::DrawOverlay()
+    {
 #if !defined(NDEBUG)
         if (!mEditorActive)
 #endif
@@ -512,7 +527,8 @@ namespace game
         number.life = 1.0f;
         mDamageNumbers.push_back(number);
 
-        for (int i = 0; i < 14; ++i)
+        const int particleCount = mSettings.crtMode ? 4 : (mSettings.retroMode ? 8 : 14);
+        for (int i = 0; i < particleCount; ++i)
         {
             BloodParticle particle;
             particle.position = position;
@@ -1982,6 +1998,118 @@ namespace game
             }
             ImGui::EndPopup();
         }
+        DrawCrtVisualPanel();
+    }
+
+    void GameScene::DrawCrtVisualPanel()
+    {
+        if (!mSettings.crtMode) return;
+
+        ImGui::SetNextWindowPos(ImVec2((float)GetScreenWidth() - 390.0f, 70.0f),
+                                ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(370.0f, 465.0f), ImGuiCond_FirstUseEver);
+        if (!ImGui::Begin("Visual CRT / Low Poly"))
+        {
+            ImGui::End();
+            return;
+        }
+
+        bool save = false;
+        ImGui::TextColored(ImVec4(0.40f, 0.82f, 0.90f, 1.0f),
+                           "PERFIL SEMENTE // TUBO");
+        ImGui::TextWrapped("O filtro afeta somente o mundo 3D. HUD, inventario e menus permanecem nitidos.");
+        ImGui::Separator();
+
+        save |= ImGui::Checkbox("Scanlines (linhas de varredura)",
+                                &mSettings.crtScanlines);
+
+        auto floatControl = [&](const char *label, const char *idSlider,
+                                const char *idInput, float &value,
+                                float minimum, float maximum)
+        {
+            ImGui::TextUnformatted(label);
+            ImGui::SetNextItemWidth(232.0f);
+            bool changed = ImGui::SliderFloat(idSlider, &value, minimum, maximum, "%.3f");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(88.0f);
+            changed |= ImGui::InputFloat(idInput, &value, 0.01f, 0.10f, "%.3f");
+            value = Clamp(value, minimum, maximum);
+            return changed;
+        };
+
+        save |= floatControl("Forca das scanlines", "##scanStrengthSlider",
+                             "##scanStrengthInput", mSettings.crtScanlineStrength,
+                             0.0f, 1.0f);
+
+        ImGui::TextUnformatted("Espacamento das scanlines (pixels)");
+        ImGui::SetNextItemWidth(232.0f);
+        save |= ImGui::SliderInt("##scanSpacingSlider", &mSettings.crtScanlineSpacing,
+                                 1, 12);
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(88.0f);
+        save |= ImGui::InputInt("##scanSpacingInput", &mSettings.crtScanlineSpacing);
+        mSettings.crtScanlineSpacing = std::max(1, std::min(12, mSettings.crtScanlineSpacing));
+
+        save |= floatControl("Serrilhamento / nitidez pixelada", "##aliasSlider",
+                             "##aliasInput", mSettings.crtAliasingStrength,
+                             0.0f, 1.0f);
+
+        ImGui::Separator();
+        static int resolutionDraft = -1;
+        if (resolutionDraft < 0) resolutionDraft = mSettings.crtInternalWidth;
+        ImGui::TextUnformatted("Resolucao interna (largura)");
+        ImGui::SetNextItemWidth(232.0f);
+        ImGui::SliderInt("##resolutionSlider", &resolutionDraft, 64, 960);
+        bool applyResolution = ImGui::IsItemDeactivatedAfterEdit();
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(88.0f);
+        ImGui::InputInt("##resolutionInput", &resolutionDraft, 1, 16);
+        applyResolution |= ImGui::IsItemDeactivatedAfterEdit();
+        resolutionDraft = std::max(64, std::min(960, resolutionDraft));
+        const int internalHeight = std::max(36,
+            (int)roundf(resolutionDraft * 9.0f / 16.0f));
+        ImGui::TextDisabled("Resultado: %d x %d (64 e o minimo experimental)",
+                            resolutionDraft, internalHeight);
+        ImGui::SameLine();
+        if (ImGui::Button("Aplicar resolucao")) applyResolution = true;
+        if (applyResolution && resolutionDraft != mSettings.crtInternalWidth)
+        {
+            mSettings.crtInternalWidth = resolutionDraft;
+            save = true;
+        }
+
+        static int textureDraft = -1;
+        if (textureDraft < 0) textureDraft = mSettings.crtTextureSize;
+        ImGui::TextUnformatted("Limite das texturas (proxima inicializacao)");
+        ImGui::SetNextItemWidth(232.0f);
+        ImGui::SliderInt("##textureSlider", &textureDraft, 32, 512);
+        bool applyTexture = ImGui::IsItemDeactivatedAfterEdit();
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(88.0f);
+        ImGui::InputInt("##textureInput", &textureDraft, 1, 16);
+        applyTexture |= ImGui::IsItemDeactivatedAfterEdit();
+        textureDraft = std::max(32, std::min(512, textureDraft));
+        if (applyTexture && textureDraft != mSettings.crtTextureSize)
+        {
+            mSettings.crtTextureSize = textureDraft;
+            save = true;
+        }
+
+        if (ImGui::Button("Restaurar perfil Tubo", ImVec2(-1.0f, 32.0f)))
+        {
+            mSettings.crtScanlines = true;
+            mSettings.crtScanlineStrength = 0.72f;
+            mSettings.crtScanlineSpacing = 3;
+            mSettings.crtAliasingStrength = 0.78f;
+            mSettings.crtInternalWidth = 480;
+            mSettings.crtTextureSize = 128;
+            resolutionDraft = 480;
+            textureDraft = 128;
+            save = true;
+        }
+
+        if (save) SaveSettings(mSettings);
+        ImGui::End();
     }
 
     int GameScene::FindEditorEntry(const glm::vec3 &position, float radius) const

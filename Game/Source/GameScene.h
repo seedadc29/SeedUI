@@ -20,6 +20,8 @@ namespace game
         void Shutdown() override;
         void Update(float deltaTime) override;
         void Draw() override;
+        void DrawWorld() override;
+        void DrawOverlay() override;
         void DrawDebug() override;
         void SpawnDamageFeedback(const glm::vec3 &position, float amount) override;
 
@@ -39,6 +41,7 @@ namespace game
         void ToggleLevelEditor();
         void UpdateLevelEditor(float deltaTime);
         void DrawLevelEditor();
+        void DrawCrtVisualPanel();
         void DrawDevTools();
         void SaveLevel();
         void LoadLevel();

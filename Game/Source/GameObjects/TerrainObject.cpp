@@ -1,4 +1,5 @@
 #include "GameObjects/TerrainObject.h"
+#include "UI/Settings.h"
 #include "Assets/TextureLoader.h"
 #include "Scene.h"
 
@@ -119,7 +120,8 @@ void main() {
             mLayerTextures[i] = TextureAcquire(path);
             if (mLayerTextures[i].id)
             {
-                SetTextureFilter(mLayerTextures[i], TEXTURE_FILTER_BILINEAR);
+                SetTextureFilter(mLayerTextures[i], IsCrtGraphicsActive()
+                    ? TEXTURE_FILTER_POINT : TEXTURE_FILTER_BILINEAR);
                 SetTextureWrap(mLayerTextures[i], TEXTURE_WRAP_REPEAT);
             }
         }
@@ -131,7 +133,8 @@ void main() {
         stencil.height = mStencilHeight; stencil.mipmaps = 1;
         stencil.format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
         mStencilTexture = LoadTextureFromImage(stencil);
-        SetTextureFilter(mStencilTexture, TEXTURE_FILTER_BILINEAR);
+        SetTextureFilter(mStencilTexture, IsCrtGraphicsActive()
+            ? TEXTURE_FILTER_POINT : TEXTURE_FILTER_BILINEAR);
         SetTextureWrap(mStencilTexture, TEXTURE_WRAP_CLAMP);
         mTerrainShader = LoadShaderFromMemory(kTerrainVertexShader, kTerrainFragmentShader);
         mMaterial.shader = mTerrainShader;
