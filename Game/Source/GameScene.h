@@ -42,6 +42,7 @@ namespace game
         void UpdateLevelEditor(float deltaTime);
         void DrawLevelEditor();
         void DrawCrtVisualPanel();
+        void DrawSynthVisualPanel();
         void DrawDevTools();
         void SaveLevel();
         void LoadLevel();

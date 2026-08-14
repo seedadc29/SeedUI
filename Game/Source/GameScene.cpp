@@ -158,8 +158,9 @@ namespace game
         // O perfil Tubo reduz a malha do terreno em 75%, mas preserva a mesma
         // extensao do mundo com celulas maiores. Isso cria silhuetas mais
         // facetadas e reduz bastante o custo geometrico.
-        const int terrainResolution = mSettings.crtMode ? 64 : 128;
-        const float terrainCellSize = mSettings.crtMode ? 4.0f : 2.0f;
+        const bool reducedGeometry = mSettings.crtMode || mSettings.synthMode;
+        const int terrainResolution = reducedGeometry ? 64 : 128;
+        const float terrainCellSize = reducedGeometry ? 4.0f : 2.0f;
         TerrainObject *terrain = SpawnObject<TerrainObject>(
             terrainResolution, terrainResolution, terrainCellSize);
         mTerrain = terrain;
@@ -430,6 +431,8 @@ namespace game
 #endif
             mCamera;
         BeginMode3D(drawCamera);
+            const bool synthWireframe = mSettings.synthMode && mSettings.synthWireframe;
+            if (synthWireframe) rlEnableWireMode();
             for (GameObject *obj : mObjects)
                 obj->Draw(*this);
 
@@ -467,6 +470,7 @@ namespace game
 #if !defined(NDEBUG)
             if (!mPaused && mShowDebugDraw) DrawDebug();
 #endif
+            if (synthWireframe) rlDisableWireMode();
         EndMode3D();
     }
 
@@ -527,7 +531,8 @@ namespace game
         number.life = 1.0f;
         mDamageNumbers.push_back(number);
 
-        const int particleCount = mSettings.crtMode ? 4 : (mSettings.retroMode ? 8 : 14);
+        const int particleCount = (mSettings.crtMode || mSettings.synthMode)
+            ? 4 : (mSettings.retroMode ? 8 : 14);
         for (int i = 0; i < particleCount; ++i)
         {
             BloodParticle particle;
@@ -1999,6 +2004,7 @@ namespace game
             ImGui::EndPopup();
         }
         DrawCrtVisualPanel();
+        DrawSynthVisualPanel();
     }
 
     void GameScene::DrawCrtVisualPanel()
@@ -2106,6 +2112,312 @@ namespace game
             resolutionDraft = 480;
             textureDraft = 128;
             save = true;
+        }
+
+        if (save) SaveSettings(mSettings);
+        ImGui::End();
+    }
+
+    void GameScene::DrawSynthVisualPanel()
+    {
+        if (!mSettings.synthMode) return;
+
+        ImGui::SetNextWindowPos(ImVec2((float)GetScreenWidth() - 455.0f, 66.0f),
+                                ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(435.0f, 620.0f), ImGuiCond_FirstUseEver);
+        if (!ImGui::Begin("SeedSynth // Sintetizador Grafico"))
+        {
+            ImGui::End();
+            return;
+        }
+
+        bool save = false;
+        const int fps = GetFPS();
+        const float frameMs = fps > 0 ? 1000.0f / (float)fps : 0.0f;
+        const float resolutionRatio = (mSettings.synthInternalWidth / 960.0f);
+        const float savedPixels = (1.0f - resolutionRatio * resolutionRatio) * 100.0f;
+        int filterCost = 0;
+        filterCost += mSettings.synthBinary ? 1 : 0;
+        filterCost += mSettings.synthEdgeStrength > 0.01f ? 2 : 0;
+        filterCost += mSettings.synthRgbSplit > 0.01f ? 2 : 0;
+        filterCost += mSettings.synthGrid ? 1 : 0;
+        filterCost += mSettings.synthScanlines ? 1 : 0;
+
+        ImGui::TextColored(ImVec4(0.35f, 0.92f, 0.72f, 1.0f),
+                           "PATCH MODULAR ATIVO");
+        ImGui::SameLine();
+        ImGui::TextDisabled("%d FPS  |  %.2f ms", fps, frameMs);
+        ImGui::Text("Resolucao 3D: %d x %d  |  pixels poupados: %.1f%%",
+                    mSettings.synthInternalWidth,
+                    std::max(36, (int)roundf(mSettings.synthInternalWidth * 9.0f / 16.0f)),
+                    std::max(0.0f, savedPixels));
+        ImGui::ProgressBar(Clamp(savedPixels / 100.0f, 0.0f, 1.0f), ImVec2(-1.0f, 8.0f));
+        ImGui::TextDisabled("Custo estimado do filtro: %s",
+            filterCost <= 2 ? "baixo" : filterCost <= 5 ? "medio" : "alto");
+
+        auto floatControl = [&](const char *label, const char *sliderId,
+                                const char *inputId, float &value,
+                                float minimum, float maximum)
+        {
+            ImGui::TextUnformatted(label);
+            ImGui::SetNextItemWidth(270.0f);
+            bool changed = ImGui::SliderFloat(sliderId, &value, minimum, maximum, "%.3f");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(92.0f);
+            changed |= ImGui::InputFloat(inputId, &value, 0.01f, 0.10f, "%.3f");
+            value = Clamp(value, minimum, maximum);
+            return changed;
+        };
+        auto intControl = [&](const char *label, const char *sliderId,
+                              const char *inputId, int &value,
+                              int minimum, int maximum)
+        {
+            ImGui::TextUnformatted(label);
+            ImGui::SetNextItemWidth(270.0f);
+            bool changed = ImGui::SliderInt(sliderId, &value, minimum, maximum);
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(92.0f);
+            changed |= ImGui::InputInt(inputId, &value, 1, 8);
+            value = std::max(minimum, std::min(maximum, value));
+            return changed;
+        };
+
+        static int resolutionDraft = -1;
+        static int textureDraft = -1;
+        if (resolutionDraft < 0) resolutionDraft = mSettings.synthInternalWidth;
+        if (textureDraft < 0) textureDraft = mSettings.synthTextureSize;
+
+        if (ImGui::BeginTabBar("##SeedSynthTabs"))
+        {
+            if (ImGui::BeginTabItem("Render"))
+            {
+                ImGui::TextUnformatted("Resolucao interna (64 a 960)");
+                ImGui::SetNextItemWidth(270.0f);
+                ImGui::SliderInt("##synthResolutionSlider", &resolutionDraft, 64, 960);
+                bool applyResolution = ImGui::IsItemDeactivatedAfterEdit();
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(92.0f);
+                ImGui::InputInt("##synthResolutionInput", &resolutionDraft, 1, 16);
+                applyResolution |= ImGui::IsItemDeactivatedAfterEdit();
+                resolutionDraft = std::max(64, std::min(960, resolutionDraft));
+                if (ImGui::Button("Aplicar resolucao", ImVec2(-1.0f, 0.0f)))
+                    applyResolution = true;
+                if (applyResolution && resolutionDraft != mSettings.synthInternalWidth)
+                {
+                    mSettings.synthInternalWidth = resolutionDraft;
+                    save = true;
+                }
+
+                save |= ImGui::Checkbox("Wireframe (geometria em linhas)",
+                                        &mSettings.synthWireframe);
+                save |= ImGui::Checkbox("Filtro pontual / pixels duros",
+                                        &mSettings.synthPointFilter);
+                save |= floatControl("Quantizacao de cor", "##quantSlider", "##quantInput",
+                                     mSettings.synthQuantizeStrength, 0.0f, 1.0f);
+                save |= intControl("Quantidade de cores por canal", "##levelsSlider",
+                                   "##levelsInput", mSettings.synthColorLevels, 2, 256);
+
+                ImGui::Separator();
+                ImGui::TextUnformatted("Limite das texturas (aplica ao reiniciar)");
+                ImGui::SetNextItemWidth(270.0f);
+                ImGui::SliderInt("##synthTextureSlider", &textureDraft, 32, 512);
+                bool applyTexture = ImGui::IsItemDeactivatedAfterEdit();
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(92.0f);
+                ImGui::InputInt("##synthTextureInput", &textureDraft, 1, 16);
+                applyTexture |= ImGui::IsItemDeactivatedAfterEdit();
+                textureDraft = std::max(32, std::min(512, textureDraft));
+                if (applyTexture && textureDraft != mSettings.synthTextureSize)
+                {
+                    mSettings.synthTextureSize = textureDraft;
+                    save = true;
+                }
+                ImGui::EndTabItem();
+            }
+
+            if (ImGui::BeginTabItem("Codigo / Grid"))
+            {
+                save |= ImGui::Checkbox("Render binario 0 / 1", &mSettings.synthBinary);
+                save |= floatControl("Mistura binaria", "##binaryMixSlider", "##binaryMixInput",
+                                     mSettings.synthBinaryStrength, 0.0f, 1.0f);
+                save |= intControl("Tamanho da celula binaria", "##binaryCellSlider",
+                                   "##binaryCellInput", mSettings.synthBinaryCellSize, 4, 48);
+                save |= floatControl("Limiar entre 0 e 1", "##binaryThresholdSlider",
+                                     "##binaryThresholdInput", mSettings.synthBinaryThreshold,
+                                     0.0f, 1.0f);
+                ImGui::Separator();
+                save |= ImGui::Checkbox("Grid modular", &mSettings.synthGrid);
+                save |= floatControl("Forca do grid", "##gridStrengthSlider", "##gridStrengthInput",
+                                     mSettings.synthGridStrength, 0.0f, 1.0f);
+                save |= intControl("Espacamento do grid", "##gridSpacingSlider",
+                                   "##gridSpacingInput", mSettings.synthGridSpacing, 2, 64);
+                ImGui::EndTabItem();
+            }
+
+            if (ImGui::BeginTabItem("Cor / Traco"))
+            {
+                save |= floatControl("Monocromia", "##monoSlider", "##monoInput",
+                                     mSettings.synthMonochromeStrength, 0.0f, 1.0f);
+                const char *palettes[] = {
+                    "Original / cinza", "Terminal verde", "Terminal ambar",
+                    "Blueprint", "Diagnostico termico", "Data Moss"
+                };
+                ImGui::TextUnformatted("Paleta sintetizada");
+                ImGui::SetNextItemWidth(-1.0f);
+                save |= ImGui::Combo("##paletteCombo", &mSettings.synthPaletteMode,
+                                     palettes, 6);
+                save |= floatControl("Mistura da paleta", "##paletteMixSlider",
+                                     "##paletteMixInput", mSettings.synthPaletteStrength,
+                                     0.0f, 1.0f);
+                save |= floatControl("Dithering", "##ditherSlider", "##ditherInput",
+                                     mSettings.synthDitherStrength, 0.0f, 1.0f);
+                save |= floatControl("Contornos / nanquim", "##edgeSlider", "##edgeInput",
+                                     mSettings.synthEdgeStrength, 0.0f, 1.0f);
+                save |= floatControl("Inverter cores", "##invertSlider", "##invertInput",
+                                     mSettings.synthInvert, 0.0f, 1.0f);
+                ImGui::EndTabItem();
+            }
+
+            if (ImGui::BeginTabItem("Tela"))
+            {
+                save |= ImGui::Checkbox("Scanlines", &mSettings.synthScanlines);
+                save |= floatControl("Forca das scanlines", "##synthScanSlider",
+                                     "##synthScanInput", mSettings.synthScanlineStrength,
+                                     0.0f, 1.0f);
+                save |= intControl("Espacamento das scanlines", "##synthScanSpaceSlider",
+                                   "##synthScanSpaceInput", mSettings.synthScanlineSpacing,
+                                   1, 12);
+                save |= floatControl("Curvatura de tubo", "##curveSlider", "##curveInput",
+                                     mSettings.synthCurvature, 0.0f, 1.0f);
+                save |= floatControl("Separacao RGB", "##rgbSlider", "##rgbInput",
+                                     mSettings.synthRgbSplit, 0.0f, 1.0f);
+                save |= floatControl("Vinheta", "##vignetteSlider", "##vignetteInput",
+                                     mSettings.synthVignette, 0.0f, 1.0f);
+                ImGui::EndTabItem();
+            }
+
+            if (ImGui::BeginTabItem("Presets"))
+            {
+                auto resetPatch = [&]()
+                {
+                    mSettings.synthWireframe = false;
+                    mSettings.synthPointFilter = true;
+                    mSettings.synthQuantizeStrength = 0.35f;
+                    mSettings.synthColorLevels = 16;
+                    mSettings.synthMonochromeStrength = 0.0f;
+                    mSettings.synthPaletteMode = 0;
+                    mSettings.synthPaletteStrength = 0.0f;
+                    mSettings.synthDitherStrength = 0.15f;
+                    mSettings.synthEdgeStrength = 0.0f;
+                    mSettings.synthBinary = false;
+                    mSettings.synthBinaryStrength = 1.0f;
+                    mSettings.synthBinaryCellSize = 12;
+                    mSettings.synthBinaryThreshold = 0.5f;
+                    mSettings.synthGrid = false;
+                    mSettings.synthGridStrength = 0.45f;
+                    mSettings.synthGridSpacing = 12;
+                    mSettings.synthScanlines = false;
+                    mSettings.synthScanlineStrength = 0.40f;
+                    mSettings.synthScanlineSpacing = 3;
+                    mSettings.synthCurvature = 0.0f;
+                    mSettings.synthRgbSplit = 0.0f;
+                    mSettings.synthVignette = 0.15f;
+                    mSettings.synthInvert = 0.0f;
+                };
+                auto presetButton = [&](const char *name)
+                {
+                    const bool pressed = ImGui::Button(name, ImVec2(190.0f, 34.0f));
+                    ImGui::SameLine();
+                    return pressed;
+                };
+
+                if (presetButton("Binario Bruto"))
+                {
+                    resetPatch(); mSettings.synthBinary = true;
+                    mSettings.synthInternalWidth = 320; mSettings.synthColorLevels = 2;
+                    mSettings.synthMonochromeStrength = 1.0f;
+                    resolutionDraft = 320; save = true;
+                }
+                if (ImGui::Button("Blueprint", ImVec2(190.0f, 34.0f)))
+                {
+                    resetPatch(); mSettings.synthGrid = true; mSettings.synthEdgeStrength = 0.85f;
+                    mSettings.synthPaletteMode = 3; mSettings.synthPaletteStrength = 1.0f;
+                    save = true;
+                }
+                if (presetButton("Nanquim 1-bit"))
+                {
+                    resetPatch(); mSettings.synthMonochromeStrength = 1.0f;
+                    mSettings.synthColorLevels = 2; mSettings.synthQuantizeStrength = 1.0f;
+                    mSettings.synthDitherStrength = 0.75f; mSettings.synthEdgeStrength = 0.8f;
+                    save = true;
+                }
+                if (ImGui::Button("Terminal Ambar", ImVec2(190.0f, 34.0f)))
+                {
+                    resetPatch(); mSettings.synthPaletteMode = 2; mSettings.synthPaletteStrength = 1.0f;
+                    mSettings.synthMonochromeStrength = 1.0f; mSettings.synthScanlines = true;
+                    save = true;
+                }
+                if (presetButton("Backend / Grid"))
+                {
+                    resetPatch(); mSettings.synthWireframe = true; mSettings.synthGrid = true;
+                    mSettings.synthPaletteMode = 4; mSettings.synthPaletteStrength = 0.8f;
+                    mSettings.synthEdgeStrength = 0.65f; save = true;
+                }
+                if (ImGui::Button("Data Moss", ImVec2(190.0f, 34.0f)))
+                {
+                    resetPatch(); mSettings.synthBinary = true; mSettings.synthBinaryStrength = 0.62f;
+                    mSettings.synthPaletteMode = 5; mSettings.synthPaletteStrength = 0.9f;
+                    mSettings.synthGrid = true; mSettings.synthRgbSplit = 0.25f; save = true;
+                }
+                if (presetButton("Tubo Vetorial"))
+                {
+                    resetPatch(); mSettings.synthWireframe = true; mSettings.synthEdgeStrength = 1.0f;
+                    mSettings.synthScanlines = true; mSettings.synthCurvature = 0.65f;
+                    mSettings.synthPaletteMode = 1; mSettings.synthPaletteStrength = 0.85f;
+                    save = true;
+                }
+                if (ImGui::Button("Visual Limpo", ImVec2(190.0f, 34.0f)))
+                {
+                    resetPatch(); mSettings.synthQuantizeStrength = 0.0f;
+                    mSettings.synthDitherStrength = 0.0f; save = true;
+                }
+
+                ImGui::Separator();
+                if (ImGui::Button("Randomizar patch", ImVec2(-1.0f, 36.0f)))
+                {
+                    resetPatch();
+                    mSettings.synthPaletteMode = GetRandomValue(0, 5);
+                    mSettings.synthPaletteStrength = GetRandomValue(20, 100) / 100.0f;
+                    mSettings.synthQuantizeStrength = GetRandomValue(20, 100) / 100.0f;
+                    mSettings.synthColorLevels = GetRandomValue(2, 40);
+                    mSettings.synthBinary = GetRandomValue(0, 1) != 0;
+                    mSettings.synthGrid = GetRandomValue(0, 1) != 0;
+                    mSettings.synthScanlines = GetRandomValue(0, 1) != 0;
+                    mSettings.synthEdgeStrength = GetRandomValue(0, 80) / 100.0f;
+                    mSettings.synthRgbSplit = GetRandomValue(0, 45) / 100.0f;
+                    mSettings.synthInvert = GetRandomValue(0, 35) / 100.0f;
+                    save = true;
+                }
+
+                static Settings patchA;
+                static bool patchAStored = false;
+                if (ImGui::Button("Capturar A", ImVec2(190.0f, 32.0f)))
+                { patchA = mSettings; patchAStored = true; }
+                ImGui::SameLine();
+                if (ImGui::Button("Alternar A / B", ImVec2(190.0f, 32.0f)) && patchAStored)
+                {
+                    Settings current = mSettings;
+                    mSettings = patchA;
+                    patchA = current;
+                    mSettings.synthMode = true;
+                    mSettings.retroMode = true;
+                    resolutionDraft = mSettings.synthInternalWidth;
+                    textureDraft = mSettings.synthTextureSize;
+                    save = true;
+                }
+                ImGui::EndTabItem();
+            }
+            ImGui::EndTabBar();
         }
 
         if (save) SaveSettings(mSettings);

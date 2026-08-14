@@ -14,6 +14,9 @@ static game::VisualProfile DetectVisualProfile()
     std::wstring name(executablePath, length);
     std::transform(name.begin(), name.end(), name.begin(),
                    [](wchar_t c) { return (wchar_t)std::towlower(c); });
+    if (name.find(L"synth") != std::wstring::npos ||
+        name.find(L"sintetizador") != std::wstring::npos)
+        return game::VisualProfile::Synth;
     if (name.find(L"crt") != std::wstring::npos ||
         name.find(L"lowpoly") != std::wstring::npos ||
         name.find(L"ps1") != std::wstring::npos ||

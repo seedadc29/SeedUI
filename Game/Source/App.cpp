@@ -23,6 +23,7 @@ namespace game
         int scanlineStrengthLocation = -1;
         int scanlineSpacingLocation = -1;
         int aliasingStrengthLocation = -1;
+        int synthLocations[21] = {};
     };
 
     namespace
@@ -124,19 +125,184 @@ void main()
     finalColor = vec4(color, 1.0) * colDiffuse * fragColor;
 }
 )GLSL";
+
+        enum SynthUniform
+        {
+            SynthQuantize = 0,
+            SynthColorLevels,
+            SynthMonochrome,
+            SynthPaletteMode,
+            SynthPaletteStrength,
+            SynthDither,
+            SynthEdges,
+            SynthBinary,
+            SynthBinaryStrength,
+            SynthBinaryCell,
+            SynthBinaryThreshold,
+            SynthGrid,
+            SynthGridStrength,
+            SynthGridSpacing,
+            SynthScanlines,
+            SynthScanlineStrength,
+            SynthScanlineSpacing,
+            SynthCurvature,
+            SynthRgbSplit,
+            SynthVignette,
+            SynthInvert,
+            SynthUniformCount
+        };
+
+        const char *SynthUniformNames[SynthUniformCount] = {
+            "quantizeStrength", "colorLevels", "monochromeStrength",
+            "paletteMode", "paletteStrength", "ditherStrength",
+            "edgeStrength", "binaryEnabled", "binaryStrength",
+            "binaryCellSize", "binaryThreshold", "gridEnabled",
+            "gridStrength", "gridSpacing", "scanlinesEnabled",
+            "scanlineStrength", "scanlineSpacing", "curvatureStrength",
+            "rgbSplitStrength", "vignetteStrength", "invertStrength"
+        };
+
+        const char *SynthFragmentShader = R"GLSL(
+#version 330
+in vec2 fragTexCoord;
+in vec4 fragColor;
+uniform sampler2D texture0;
+uniform vec4 colDiffuse;
+uniform float quantizeStrength;
+uniform float colorLevels;
+uniform float monochromeStrength;
+uniform float paletteMode;
+uniform float paletteStrength;
+uniform float ditherStrength;
+uniform float edgeStrength;
+uniform float binaryEnabled;
+uniform float binaryStrength;
+uniform float binaryCellSize;
+uniform float binaryThreshold;
+uniform float gridEnabled;
+uniform float gridStrength;
+uniform float gridSpacing;
+uniform float scanlinesEnabled;
+uniform float scanlineStrength;
+uniform float scanlineSpacing;
+uniform float curvatureStrength;
+uniform float rgbSplitStrength;
+uniform float vignetteStrength;
+uniform float invertStrength;
+out vec4 finalColor;
+
+float Luma(vec3 c)
+{
+    return dot(c, vec3(0.2126, 0.7152, 0.0722));
+}
+
+float Hash(vec2 p)
+{
+    return fract(sin(dot(floor(p), vec2(12.9898, 78.233))) * 43758.5453);
+}
+
+vec3 ApplyPalette(float value, float mode)
+{
+    if (mode < 0.5) return vec3(value);
+    if (mode < 1.5) return vec3(value * 0.16, value, value * 0.34);       // terminal verde
+    if (mode < 2.5) return vec3(value, value * 0.58, value * 0.10);       // ambar
+    if (mode < 3.5) return mix(vec3(0.01, 0.04, 0.10), vec3(0.35, 0.90, 1.0), value); // blueprint
+    if (mode < 4.5) return vec3(smoothstep(0.25, 0.75, value),
+                                smoothstep(0.0, 0.55, value) * (1.0 - smoothstep(0.68, 1.0, value)),
+                                1.0 - smoothstep(0.18, 0.62, value));    // diagnostico termico
+    return mix(vec3(0.025, 0.055, 0.035), vec3(0.45, 1.0, 0.38), value); // data moss
+}
+
+float BinaryGlyph(vec2 p, float bit)
+{
+    float outerX = step(abs(p.x - 0.5), 0.30);
+    float outerY = step(abs(p.y - 0.5), 0.40);
+    float innerX = step(abs(p.x - 0.5), 0.14);
+    float innerY = step(abs(p.y - 0.5), 0.25);
+    float zero = outerX * outerY * (1.0 - innerX * innerY);
+    float stem = step(abs(p.x - 0.52), 0.09) *
+                 step(0.12, p.y) * step(p.y, 0.86);
+    float foot = step(abs(p.x - 0.52), 0.23) *
+                 step(0.76, p.y) * step(p.y, 0.88);
+    float one = max(stem, foot);
+    return mix(zero, one, bit);
+}
+
+void main()
+{
+    vec2 centered = fragTexCoord * 2.0 - 1.0;
+    float radius = dot(centered, centered);
+    vec2 uv = centered * (1.0 + radius * curvatureStrength * 0.085) * 0.5 + 0.5;
+    if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0)
+    {
+        finalColor = vec4(0.0, 0.0, 0.0, 1.0);
+        return;
+    }
+
+    vec2 textureResolution = vec2(textureSize(texture0, 0));
+    vec2 texel = 1.0 / textureResolution;
+    float split = rgbSplitStrength * 2.5;
+    vec3 color;
+    color.r = texture(texture0, uv + vec2(texel.x * split, 0.0)).r;
+    color.g = texture(texture0, uv).g;
+    color.b = texture(texture0, uv - vec2(texel.x * split, 0.0)).b;
+    float luminance = Luma(color);
+
+    vec2 sourcePixel = uv * textureResolution;
+    float noise = (Hash(sourcePixel) - 0.5) * ditherStrength;
+    float levels = max(2.0, colorLevels);
+    vec3 quantized = floor(clamp(color + noise / levels, 0.0, 1.0) *
+                           levels + 0.5) / levels;
+    color = mix(color, quantized, quantizeStrength);
+    luminance = Luma(color);
+    color = mix(color, vec3(luminance), monochromeStrength);
+    color = mix(color, ApplyPalette(luminance, paletteMode), paletteStrength);
+
+    float left = Luma(texture(texture0, uv - vec2(texel.x, 0.0)).rgb);
+    float right = Luma(texture(texture0, uv + vec2(texel.x, 0.0)).rgb);
+    float up = Luma(texture(texture0, uv - vec2(0.0, texel.y)).rgb);
+    float down = Luma(texture(texture0, uv + vec2(0.0, texel.y)).rgb);
+    float edge = clamp((abs(right - left) + abs(down - up)) * 3.2, 0.0, 1.0);
+    color = mix(color, mix(color, vec3(0.015), edge), edgeStrength);
+
+    float cellSize = max(4.0, binaryCellSize);
+    vec2 cellIndex = floor(sourcePixel / cellSize);
+    vec2 cellUv = (cellIndex + 0.5) * cellSize / textureResolution;
+    float cellLight = Luma(texture(texture0, cellUv).rgb);
+    float bit = step(binaryThreshold, cellLight);
+    vec2 glyphUv = fract(sourcePixel / cellSize);
+    float glyph = BinaryGlyph(glyphUv, bit);
+    vec3 codeInk = ApplyPalette(max(0.35, cellLight), max(1.0, paletteMode));
+    vec3 binaryColor = mix(vec3(0.004, 0.006, 0.008), codeInk, glyph);
+    color = mix(color, binaryColor, binaryEnabled * binaryStrength);
+
+    float spacing = max(2.0, gridSpacing);
+    vec2 gridCell = mod(sourcePixel, spacing);
+    float gridLine = max(step(gridCell.x, 0.65), step(gridCell.y, 0.65));
+    color = mix(color, color * 0.20, gridLine * gridEnabled * gridStrength);
+
+    float scanSpacing = max(1.0, scanlineSpacing);
+    float scan = 0.5 + 0.5 * cos(6.2831853 * gl_FragCoord.y / scanSpacing);
+    color *= 1.0 - scanlinesEnabled * scanlineStrength * mix(0.08, 0.56, scan);
+    color *= mix(1.0, smoothstep(1.25, 0.20, radius), vignetteStrength);
+    color = mix(color, vec3(1.0) - color, invertStrength);
+    finalColor = vec4(clamp(color, 0.0, 1.0), 1.0) * colDiffuse * fragColor;
+}
+)GLSL";
     }
 
     App::App(VisualProfile profile) : mVisualProfile(profile)
     {
         mSettings.retroMode = profile != VisualProfile::Standard;
         mSettings.crtMode = profile == VisualProfile::CrtLow;
+        mSettings.synthMode = profile == VisualProfile::Synth;
         if (mSettings.retroMode)
         {
             mSettings.shadowQuality = 0;
             mRetroBadgeTime = 7.0f;
         }
         SetRetroGraphicsActive(mSettings.retroMode);
-        SetCrtGraphicsActive(mSettings.crtMode);
+        SetCrtGraphicsActive(mSettings.crtMode || mSettings.synthMode);
     }
     App::~App() { Shutdown(); }
 
@@ -152,6 +318,8 @@ void main()
             windowTitle = "Eldoria - Perfil Semente // Bruma";
         else if (mVisualProfile == VisualProfile::CrtLow)
             windowTitle = "Eldoria - Perfil Semente // Tubo CRT";
+        else if (mVisualProfile == VisualProfile::Synth)
+            windowTitle = "Eldoria - SeedSynth // Sintetizador Grafico";
         InitWindow(mSettings.windowWidth, mSettings.windowHeight, windowTitle);
         SetExitKey(0);
         SetTargetFPS(60);
@@ -167,8 +335,9 @@ void main()
     {
         mRetroPresentation = new RetroPresentation();
         RecreateRetroTarget();
-        const char *fragment = mVisualProfile == VisualProfile::CrtLow
-            ? CrtFragmentShader : RetroFragmentShader;
+        const char *fragment = RetroFragmentShader;
+        if (mVisualProfile == VisualProfile::CrtLow) fragment = CrtFragmentShader;
+        else if (mVisualProfile == VisualProfile::Synth) fragment = SynthFragmentShader;
         mRetroPresentation->shader = LoadShaderFromMemory(nullptr, fragment);
         if (mVisualProfile == VisualProfile::CrtLow &&
             mRetroPresentation->shader.id != 0)
@@ -182,6 +351,13 @@ void main()
             mRetroPresentation->aliasingStrengthLocation = GetShaderLocation(
                 mRetroPresentation->shader, "aliasingStrength");
         }
+        else if (mVisualProfile == VisualProfile::Synth &&
+                 mRetroPresentation->shader.id != 0)
+        {
+            for (int index = 0; index < SynthUniformCount; ++index)
+                mRetroPresentation->synthLocations[index] = GetShaderLocation(
+                    mRetroPresentation->shader, SynthUniformNames[index]);
+        }
     }
 
     void App::RecreateRetroTarget()
@@ -189,14 +365,17 @@ void main()
         if (!mRetroPresentation) return;
         if (mRetroPresentation->target.id != 0)
             UnloadRenderTexture(mRetroPresentation->target);
-        const int width = mVisualProfile == VisualProfile::CrtLow
-            ? std::max(64, std::min(960, mSettings.crtInternalWidth))
-            : RetroWorldWidth;
+        int width = RetroWorldWidth;
+        if (mVisualProfile == VisualProfile::CrtLow)
+            width = std::max(64, std::min(960, mSettings.crtInternalWidth));
+        else if (mVisualProfile == VisualProfile::Synth)
+            width = std::max(64, std::min(960, mSettings.synthInternalWidth));
         const int height = std::max(36, (int)roundf(width * 9.0f / 16.0f));
         mRetroPresentation->target = LoadRenderTexture(width, height);
         if (mRetroPresentation->target.id != 0)
             SetTextureFilter(mRetroPresentation->target.texture,
-                mVisualProfile == VisualProfile::CrtLow
+                (mVisualProfile == VisualProfile::CrtLow ||
+                 (mVisualProfile == VisualProfile::Synth && mSettings.synthPointFilter))
                     ? TEXTURE_FILTER_POINT : TEXTURE_FILTER_BILINEAR);
     }
 
@@ -204,6 +383,7 @@ void main()
     {
         LoadSettings(mSettings);
         if (mSettings.crtMode) SetCrtTextureLimit(mSettings.crtTextureSize);
+        if (mSettings.synthMode) SetCrtTextureLimit(mSettings.synthTextureSize);
         InitWindowAndContext();
 
 #if !defined(NDEBUG)
@@ -307,6 +487,37 @@ void main()
                            mRetroPresentation->aliasingStrengthLocation,
                            &mSettings.crtAliasingStrength, SHADER_UNIFORM_FLOAT);
         }
+        else if (mVisualProfile == VisualProfile::Synth &&
+                 mRetroPresentation->shader.id != 0)
+        {
+            auto setSynth = [&](int uniform, float value)
+            {
+                SetShaderValue(mRetroPresentation->shader,
+                               mRetroPresentation->synthLocations[uniform],
+                               &value, SHADER_UNIFORM_FLOAT);
+            };
+            setSynth(SynthQuantize, mSettings.synthQuantizeStrength);
+            setSynth(SynthColorLevels, (float)mSettings.synthColorLevels);
+            setSynth(SynthMonochrome, mSettings.synthMonochromeStrength);
+            setSynth(SynthPaletteMode, (float)mSettings.synthPaletteMode);
+            setSynth(SynthPaletteStrength, mSettings.synthPaletteStrength);
+            setSynth(SynthDither, mSettings.synthDitherStrength);
+            setSynth(SynthEdges, mSettings.synthEdgeStrength);
+            setSynth(SynthBinary, mSettings.synthBinary ? 1.0f : 0.0f);
+            setSynth(SynthBinaryStrength, mSettings.synthBinaryStrength);
+            setSynth(SynthBinaryCell, (float)mSettings.synthBinaryCellSize);
+            setSynth(SynthBinaryThreshold, mSettings.synthBinaryThreshold);
+            setSynth(SynthGrid, mSettings.synthGrid ? 1.0f : 0.0f);
+            setSynth(SynthGridStrength, mSettings.synthGridStrength);
+            setSynth(SynthGridSpacing, (float)mSettings.synthGridSpacing);
+            setSynth(SynthScanlines, mSettings.synthScanlines ? 1.0f : 0.0f);
+            setSynth(SynthScanlineStrength, mSettings.synthScanlineStrength);
+            setSynth(SynthScanlineSpacing, (float)mSettings.synthScanlineSpacing);
+            setSynth(SynthCurvature, mSettings.synthCurvature);
+            setSynth(SynthRgbSplit, mSettings.synthRgbSplit);
+            setSynth(SynthVignette, mSettings.synthVignette);
+            setSynth(SynthInvert, mSettings.synthInvert);
+        }
         if (mRetroPresentation->shader.id != 0)
             BeginShaderMode(mRetroPresentation->shader);
         DrawTexturePro(mRetroPresentation->target.texture, source, destination,
@@ -316,9 +527,11 @@ void main()
         mActiveScene->DrawOverlay();
         if (mRetroBadgeTime > 0.0f)
         {
-            const char *badge = mVisualProfile == VisualProfile::CrtLow
-                ? TextFormat("PERFIL SEMENTE // TUBO CRT  %dx%d", worldWidth, worldHeight)
-                : "PERFIL SEMENTE // BRUMA  960x540";
+            const char *badge = "PERFIL SEMENTE // BRUMA  960x540";
+            if (mVisualProfile == VisualProfile::CrtLow)
+                badge = TextFormat("PERFIL SEMENTE // TUBO CRT  %dx%d", worldWidth, worldHeight);
+            else if (mVisualProfile == VisualProfile::Synth)
+                badge = TextFormat("SEEDSYNTH // PATCH ATIVO  %dx%d", worldWidth, worldHeight);
             const int fontSize = 13;
             const int width = MeasureText(badge, fontSize);
             DrawRectangle(GetScreenWidth() - width - 28, GetScreenHeight() - 34,
@@ -390,6 +603,10 @@ void main()
 
         if (mVisualProfile == VisualProfile::CrtLow &&
             s.crtInternalWidth != mAppliedSettings.crtInternalWidth)
+            RecreateRetroTarget();
+        if (mVisualProfile == VisualProfile::Synth &&
+            (s.synthInternalWidth != mAppliedSettings.synthInternalWidth ||
+             s.synthPointFilter != mAppliedSettings.synthPointFilter))
             RecreateRetroTarget();
 
         mAppliedSettings = mSettings;

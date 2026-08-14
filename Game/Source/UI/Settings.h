@@ -31,6 +31,33 @@ namespace game
         int crtInternalWidth = 480;
         float crtAliasingStrength = 0.78f;
         int crtTextureSize = 128;
+        // SeedSynth: cadeia modular salva em settings_synth.ini.
+        bool synthMode = false;
+        int synthInternalWidth = 480;
+        int synthTextureSize = 128;
+        bool synthWireframe = false;
+        bool synthPointFilter = true;
+        float synthQuantizeStrength = 0.45f;
+        int synthColorLevels = 16;
+        float synthMonochromeStrength = 0.0f;
+        int synthPaletteMode = 0;
+        float synthPaletteStrength = 0.0f;
+        float synthDitherStrength = 0.20f;
+        float synthEdgeStrength = 0.0f;
+        bool synthBinary = false;
+        float synthBinaryStrength = 1.0f;
+        int synthBinaryCellSize = 12;
+        float synthBinaryThreshold = 0.50f;
+        bool synthGrid = false;
+        float synthGridStrength = 0.45f;
+        int synthGridSpacing = 12;
+        bool synthScanlines = false;
+        float synthScanlineStrength = 0.45f;
+        int synthScanlineSpacing = 3;
+        float synthCurvature = 0.0f;
+        float synthRgbSplit = 0.0f;
+        float synthVignette = 0.15f;
+        float synthInvert = 0.0f;
     };
 
     void LoadSettings(Settings &settings);

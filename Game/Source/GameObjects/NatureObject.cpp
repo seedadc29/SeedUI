@@ -533,9 +533,10 @@ namespace game
     {
         const Vector3 cameraPosition = scene.GetCamera().position;
         const glm::vec3 playerPosition(cameraPosition.x, cameraPosition.y, cameraPosition.z);
-        const float loadRadius = scene.GetSettings().crtMode
+        const bool reducedProfile = scene.GetSettings().crtMode || scene.GetSettings().synthMode;
+        const float loadRadius = reducedProfile
             ? 25.0f : (scene.GetSettings().retroMode ? 34.0f : 42.0f);
-        const float unloadRadius = scene.GetSettings().crtMode
+        const float unloadRadius = reducedProfile
             ? 32.0f : (scene.GetSettings().retroMode ? 42.0f : 52.0f);
         bool loadedThisFrame = false;
         for (int assetIndex = 0; assetIndex < (int)mAssets.size(); ++assetIndex)
@@ -565,7 +566,8 @@ namespace game
     {
         const Vector3 cameraPosition = scene.GetCamera().position;
         const glm::vec3 playerPosition(cameraPosition.x, cameraPosition.y, cameraPosition.z);
-        const float drawRadius = scene.GetSettings().crtMode
+        const bool reducedProfile = scene.GetSettings().crtMode || scene.GetSettings().synthMode;
+        const float drawRadius = reducedProfile
             ? 29.0f : (scene.GetSettings().retroMode ? 38.0f : 45.0f);
         for (const Instance &instance : mInstances)
         {

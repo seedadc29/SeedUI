@@ -11,6 +11,7 @@ namespace game
 
     static const char *SettingsFile(const Settings &settings)
     {
+        if (settings.synthMode) return "settings_synth.ini";
         if (settings.crtMode) return "settings_crt.ini";
         return settings.retroMode ? "settings_retro.ini" : "settings.ini";
     }
@@ -69,6 +70,31 @@ namespace game
             else if (key == "crtInternalWidth") settings.crtInternalWidth = std::stoi(value);
             else if (key == "crtAliasingStrength") settings.crtAliasingStrength = std::stof(value);
             else if (key == "crtTextureSize") settings.crtTextureSize = std::stoi(value);
+            else if (key == "synthInternalWidth") settings.synthInternalWidth = std::stoi(value);
+            else if (key == "synthTextureSize") settings.synthTextureSize = std::stoi(value);
+            else if (key == "synthWireframe") settings.synthWireframe = (value == "1");
+            else if (key == "synthPointFilter") settings.synthPointFilter = (value == "1");
+            else if (key == "synthQuantizeStrength") settings.synthQuantizeStrength = std::stof(value);
+            else if (key == "synthColorLevels") settings.synthColorLevels = std::stoi(value);
+            else if (key == "synthMonochromeStrength") settings.synthMonochromeStrength = std::stof(value);
+            else if (key == "synthPaletteMode") settings.synthPaletteMode = std::stoi(value);
+            else if (key == "synthPaletteStrength") settings.synthPaletteStrength = std::stof(value);
+            else if (key == "synthDitherStrength") settings.synthDitherStrength = std::stof(value);
+            else if (key == "synthEdgeStrength") settings.synthEdgeStrength = std::stof(value);
+            else if (key == "synthBinary") settings.synthBinary = (value == "1");
+            else if (key == "synthBinaryStrength") settings.synthBinaryStrength = std::stof(value);
+            else if (key == "synthBinaryCellSize") settings.synthBinaryCellSize = std::stoi(value);
+            else if (key == "synthBinaryThreshold") settings.synthBinaryThreshold = std::stof(value);
+            else if (key == "synthGrid") settings.synthGrid = (value == "1");
+            else if (key == "synthGridStrength") settings.synthGridStrength = std::stof(value);
+            else if (key == "synthGridSpacing") settings.synthGridSpacing = std::stoi(value);
+            else if (key == "synthScanlines") settings.synthScanlines = (value == "1");
+            else if (key == "synthScanlineStrength") settings.synthScanlineStrength = std::stof(value);
+            else if (key == "synthScanlineSpacing") settings.synthScanlineSpacing = std::stoi(value);
+            else if (key == "synthCurvature") settings.synthCurvature = std::stof(value);
+            else if (key == "synthRgbSplit") settings.synthRgbSplit = std::stof(value);
+            else if (key == "synthVignette") settings.synthVignette = std::stof(value);
+            else if (key == "synthInvert") settings.synthInvert = std::stof(value);
         }
 
         settings.windowWidth = ClampInt(settings.windowWidth, 640, 3840);
@@ -84,6 +110,26 @@ namespace game
         settings.crtInternalWidth = ClampInt(settings.crtInternalWidth, 64, 960);
         settings.crtAliasingStrength = ClampFloat(settings.crtAliasingStrength, 0.0f, 1.0f);
         settings.crtTextureSize = ClampInt(settings.crtTextureSize, 32, 512);
+        settings.synthInternalWidth = ClampInt(settings.synthInternalWidth, 64, 960);
+        settings.synthTextureSize = ClampInt(settings.synthTextureSize, 32, 512);
+        settings.synthQuantizeStrength = ClampFloat(settings.synthQuantizeStrength, 0.0f, 1.0f);
+        settings.synthColorLevels = ClampInt(settings.synthColorLevels, 2, 256);
+        settings.synthMonochromeStrength = ClampFloat(settings.synthMonochromeStrength, 0.0f, 1.0f);
+        settings.synthPaletteMode = ClampInt(settings.synthPaletteMode, 0, 5);
+        settings.synthPaletteStrength = ClampFloat(settings.synthPaletteStrength, 0.0f, 1.0f);
+        settings.synthDitherStrength = ClampFloat(settings.synthDitherStrength, 0.0f, 1.0f);
+        settings.synthEdgeStrength = ClampFloat(settings.synthEdgeStrength, 0.0f, 1.0f);
+        settings.synthBinaryStrength = ClampFloat(settings.synthBinaryStrength, 0.0f, 1.0f);
+        settings.synthBinaryCellSize = ClampInt(settings.synthBinaryCellSize, 4, 48);
+        settings.synthBinaryThreshold = ClampFloat(settings.synthBinaryThreshold, 0.0f, 1.0f);
+        settings.synthGridStrength = ClampFloat(settings.synthGridStrength, 0.0f, 1.0f);
+        settings.synthGridSpacing = ClampInt(settings.synthGridSpacing, 2, 64);
+        settings.synthScanlineStrength = ClampFloat(settings.synthScanlineStrength, 0.0f, 1.0f);
+        settings.synthScanlineSpacing = ClampInt(settings.synthScanlineSpacing, 1, 12);
+        settings.synthCurvature = ClampFloat(settings.synthCurvature, 0.0f, 1.0f);
+        settings.synthRgbSplit = ClampFloat(settings.synthRgbSplit, 0.0f, 1.0f);
+        settings.synthVignette = ClampFloat(settings.synthVignette, 0.0f, 1.0f);
+        settings.synthInvert = ClampFloat(settings.synthInvert, 0.0f, 1.0f);
     }
 
     void SaveSettings(const Settings &settings)
@@ -110,6 +156,34 @@ namespace game
             file << "crtInternalWidth=" << settings.crtInternalWidth << "\n";
             file << "crtAliasingStrength=" << settings.crtAliasingStrength << "\n";
             file << "crtTextureSize=" << settings.crtTextureSize << "\n";
+        }
+        if (settings.synthMode)
+        {
+            file << "synthInternalWidth=" << settings.synthInternalWidth << "\n";
+            file << "synthTextureSize=" << settings.synthTextureSize << "\n";
+            file << "synthWireframe=" << (settings.synthWireframe ? 1 : 0) << "\n";
+            file << "synthPointFilter=" << (settings.synthPointFilter ? 1 : 0) << "\n";
+            file << "synthQuantizeStrength=" << settings.synthQuantizeStrength << "\n";
+            file << "synthColorLevels=" << settings.synthColorLevels << "\n";
+            file << "synthMonochromeStrength=" << settings.synthMonochromeStrength << "\n";
+            file << "synthPaletteMode=" << settings.synthPaletteMode << "\n";
+            file << "synthPaletteStrength=" << settings.synthPaletteStrength << "\n";
+            file << "synthDitherStrength=" << settings.synthDitherStrength << "\n";
+            file << "synthEdgeStrength=" << settings.synthEdgeStrength << "\n";
+            file << "synthBinary=" << (settings.synthBinary ? 1 : 0) << "\n";
+            file << "synthBinaryStrength=" << settings.synthBinaryStrength << "\n";
+            file << "synthBinaryCellSize=" << settings.synthBinaryCellSize << "\n";
+            file << "synthBinaryThreshold=" << settings.synthBinaryThreshold << "\n";
+            file << "synthGrid=" << (settings.synthGrid ? 1 : 0) << "\n";
+            file << "synthGridStrength=" << settings.synthGridStrength << "\n";
+            file << "synthGridSpacing=" << settings.synthGridSpacing << "\n";
+            file << "synthScanlines=" << (settings.synthScanlines ? 1 : 0) << "\n";
+            file << "synthScanlineStrength=" << settings.synthScanlineStrength << "\n";
+            file << "synthScanlineSpacing=" << settings.synthScanlineSpacing << "\n";
+            file << "synthCurvature=" << settings.synthCurvature << "\n";
+            file << "synthRgbSplit=" << settings.synthRgbSplit << "\n";
+            file << "synthVignette=" << settings.synthVignette << "\n";
+            file << "synthInvert=" << settings.synthInvert << "\n";
         }
     }
 

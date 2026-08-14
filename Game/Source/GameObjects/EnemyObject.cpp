@@ -124,7 +124,8 @@ namespace game
         const float loadDistance = glm::distance(glm::vec2(player->GetPosition().x, player->GetPosition().z),
                                                  glm::vec2(mPosition.x, mPosition.z));
         const bool retroMode = scene.GetSettings().retroMode;
-        const float distantTickRadius = scene.GetSettings().crtMode ? 38.0f : 48.0f;
+        const bool reducedProfile = scene.GetSettings().crtMode || scene.GetSettings().synthMode;
+        const float distantTickRadius = reducedProfile ? 38.0f : 48.0f;
         if (retroMode && loadDistance > distantTickRadius)
         {
             mDistantUpdateAccumulator = std::min(
@@ -137,7 +138,7 @@ namespace game
         {
             mDistantUpdateAccumulator = 0.0f;
         }
-        const float modelDistance = scene.GetSettings().crtMode
+        const float modelDistance = reducedProfile
             ? 32.0f : (retroMode ? 42.0f : 48.0f);
         if (loadDistance <= modelDistance) EnsureModelLoaded();
         mModel.Update(deltaTime);
@@ -211,7 +212,8 @@ namespace game
     {
         if (IsExpired()) return;
         const glm::vec3 player = scene.GetPlayer() ? scene.GetPlayer()->GetPosition() : glm::vec3(0.0f);
-        const float drawDistance = scene.GetSettings().crtMode
+        const bool reducedProfile = scene.GetSettings().crtMode || scene.GetSettings().synthMode;
+        const float drawDistance = reducedProfile
             ? 36.0f : (scene.GetSettings().retroMode ? 46.0f : 55.0f);
         if (glm::distance(glm::vec2(player.x, player.z), glm::vec2(mPosition.x, mPosition.z)) > drawDistance) return;
         const Vector3 position = { mPosition.x, mPosition.y + (mConfig.category == EnemyCategory::Flying ? 1.0f : 0.0f), mPosition.z };

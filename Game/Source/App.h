@@ -9,7 +9,8 @@ namespace game
     {
         Standard = 0,
         Bruma,
-        CrtLow
+        CrtLow,
+        Synth
     };
 
     class Scene;
