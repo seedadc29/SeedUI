@@ -8,7 +8,6 @@
 #include <string>
 #include <vector>
 #include <filesystem>
-#include <cstddef>
 
 namespace physics { class Physics; }
 
@@ -93,8 +92,6 @@ namespace game
         physics::Physics *mPhysics = nullptr;
         std::vector<Asset> mAssets;
         std::vector<Instance> mInstances;
-        std::size_t mStreamingAssetCursor = 0;
-        double mNextStreamingLoadTime = 0.0;
         unsigned int mNextEditorId = 1;
     };
 }

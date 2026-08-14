@@ -531,26 +531,16 @@ namespace game
 
     void NatureObject::Update(Scene &scene, float)
     {
-        if (mAssets.empty()) return;
         const Vector3 cameraPosition = scene.GetCamera().position;
         const glm::vec3 playerPosition(cameraPosition.x, cameraPosition.y, cameraPosition.z);
         const bool reducedProfile = scene.GetSettings().crtMode || scene.GetSettings().synthMode;
         const float loadRadius = reducedProfile
-            ? 25.0f : (scene.GetSettings().retroMode ? 34.0f : 42.0f);
-        // Uma margem maior evita descarregar e reler o mesmo glTF quando o
-        // jogador oscila perto do limite de streaming.
+            ? 14.0f : (scene.GetSettings().retroMode ? 34.0f : 42.0f);
         const float unloadRadius = reducedProfile
-            ? 52.0f : (scene.GetSettings().retroMode ? 48.0f : 58.0f);
+            ? 21.0f : (scene.GetSettings().retroMode ? 42.0f : 52.0f);
         bool loadedThisFrame = false;
-        const bool streamingLoadAvailable = !reducedProfile || GetTime() >= mNextStreamingLoadTime;
-        // Perfis leves verificam apenas uma fatia do catalogo por quadro. A
-        // busca anterior fazia assets x instancias em todo quadro (dezenas de
-        // milhares de comparacoes), mesmo quando a camera estava parada.
-        const size_t checksThisFrame = reducedProfile
-            ? std::min<size_t>(6, mAssets.size()) : mAssets.size();
-        for (size_t check = 0; check < checksThisFrame; ++check)
+        for (int assetIndex = 0; assetIndex < (int)mAssets.size(); ++assetIndex)
         {
-            const int assetIndex = (int)((mStreamingAssetCursor + check) % mAssets.size());
             float closestSq = FLT_MAX;
             for (const Instance &instance : mInstances)
             {
@@ -560,20 +550,17 @@ namespace game
                 closestSq = std::min(closestSq, glm::dot(delta, delta));
             }
             Asset &asset = mAssets[assetIndex];
-            if (closestSq <= loadRadius * loadRadius && !asset.loaded && !loadedThisFrame &&
-                streamingLoadAvailable)
+            if (!scene.GetSettings().synthMode && closestSq <= loadRadius * loadRadius &&
+                !asset.loaded && !loadedThisFrame)
             {
                 LoadAsset(asset);
                 loadedThisFrame = asset.loaded;
-                if (loadedThisFrame && reducedProfile)
-                    mNextStreamingLoadTime = GetTime() + 0.075;
             }
             else if (asset.loaded && closestSq > unloadRadius * unloadRadius)
             {
                 UnloadAssetModel(asset);
             }
         }
-        mStreamingAssetCursor = (mStreamingAssetCursor + checksThisFrame) % mAssets.size();
     }
 
     void NatureObject::Draw(Scene &scene)
@@ -589,7 +576,39 @@ namespace game
                                   instance.position.z - playerPosition.z);
             if (glm::dot(delta, delta) > drawRadius * drawRadius) continue;
             const Asset &asset = mAssets[instance.assetIndex];
-            if (!asset.loaded) continue;
+            if (!asset.loaded)
+            {
+                // Representacao procedural barata enquanto o modelo detalhado
+                // esta fora do raio de memoria. Mantem a leitura do cenario e
+                // combina com o visual low-poly do SeedSynth.
+                if (!reducedProfile) continue;
+                const Vector3 base = {instance.position.x, instance.position.y, instance.position.z};
+                const float height = asset.desiredHeight * instance.scale;
+                if (asset.tree)
+                {
+                    const float trunkHeight = height * 0.42f;
+                    DrawCylinderEx(base, {base.x, base.y + trunkHeight, base.z},
+                                   height * 0.035f, height * 0.055f, 5,
+                                   Color{91, 66, 45, 255});
+                    DrawCylinderEx({base.x, base.y + trunkHeight * 0.72f, base.z},
+                                   {base.x, base.y + height, base.z},
+                                   height * 0.19f, 0.0f, 5,
+                                   Color{55, 112, 69, 255});
+                }
+                else if (Contains(asset.name, "Rock") || Contains(asset.name, "Pebble"))
+                {
+                    DrawCube({base.x, base.y + height * 0.45f, base.z},
+                             height * 1.15f, height * 0.9f, height,
+                             Color{105, 112, 114, 255});
+                }
+                else
+                {
+                    DrawCylinderEx(base, {base.x, base.y + height, base.z},
+                                   height * 0.32f, height * 0.04f, 4,
+                                   Color{66, 132, 72, 255});
+                }
+                continue;
+            }
             const float baseScale = asset.desiredHeight * instance.scale / asset.sourceHeight;
             if (!instance.editorPlaced)
             {
