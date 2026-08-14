@@ -421,170 +421,9 @@ namespace seedui
             for (Element& child : element.filhos)
                 ApplyPositionDelta(child, dx, dy);
         }
+    }
 
-        App::ElementSnapshot CaptureElementSnapshot(const Element& el)
-        {
-            App::ElementSnapshot s;
-            s.id = el.id;
-            s.x = el.transformacao.value("x", 0.0f);
-            s.y = el.transformacao.value("y", 0.0f);
-            s.w = el.transformacao.value("largura", 160.0f);
-            s.h = el.transformacao.value("altura", 32.0f);
-            s.rot = Geo::ElementRotation(el);
-            s.opacity = el.estilos.value("opacidade", 1.0f);
-            s.strokeOpacity = el.estilos.value("opacidade_borda", 1.0f);
-            s.borderWidth = el.estilos.value("espessura_borda", 1.0f);
-            s.cornerRadius = el.estilos.value("raio", 0.0f);
-            s.hasFillColor = el.estilos.contains("cor_fundo") && el.estilos["cor_fundo"] != "none";
-            if (s.hasFillColor)
-                ColorUtils::ParseHex(el.estilos.value("cor_fundo", "#ffffff"), s.fillRGB);
-            s.hasBorderColor = el.estilos.contains("cor_borda") && el.estilos["cor_borda"] != "none";
-            if (s.hasBorderColor)
-                ColorUtils::ParseHex(el.estilos.value("cor_borda", "#cfcfcf"), s.borderRGB);
-            s.fontSize = el.estilos.value("tamanho_fonte", 18.0f);
-            return s;
-        }
-
-        App::IncrementalDelta ComputeIncrementalDelta(const App::ElementSnapshot& origin, const Element& current)
-        {
-            App::IncrementalDelta d;
-            const float curX = current.transformacao.value("x", 0.0f);
-            const float curY = current.transformacao.value("y", 0.0f);
-            const float curW = current.transformacao.value("largura", 160.0f);
-            const float curH = current.transformacao.value("altura", 32.0f);
-            const float curRot = Geo::ElementRotation(current);
-            const float curOpacity = current.estilos.value("opacidade", 1.0f);
-            const float curStrokeOp = current.estilos.value("opacidade_borda", 1.0f);
-            const float curBorderWidth = current.estilos.value("espessura_borda", 1.0f);
-            const float curRadius = current.estilos.value("raio", 0.0f);
-
-            d.deltaX = curX - origin.x;
-            d.deltaY = curY - origin.y;
-            d.deltaRot = curRot - origin.rot;
-            d.scaleX = curW / std::max(0.01f, origin.w);
-            d.scaleY = curH / std::max(0.01f, origin.h);
-            d.deltaOpacity = curOpacity - origin.opacity;
-            d.deltaStrokeOpacity = curStrokeOp - origin.strokeOpacity;
-            d.deltaBorderWidth = curBorderWidth - origin.borderWidth;
-            d.deltaCornerRadius = curRadius - origin.cornerRadius;
-
-            float curFillRGB[3] = { 1.0f, 1.0f, 1.0f };
-            bool curHasFill = current.estilos.contains("cor_fundo") && current.estilos["cor_fundo"] != "none";
-            if (curHasFill)
-                ColorUtils::ParseHex(current.estilos.value("cor_fundo", "#ffffff"), curFillRGB);
-
-            if (origin.hasFillColor && curHasFill)
-            {
-                d.deltaFillRGB[0] = curFillRGB[0] - origin.fillRGB[0];
-                d.deltaFillRGB[1] = curFillRGB[1] - origin.fillRGB[1];
-                d.deltaFillRGB[2] = curFillRGB[2] - origin.fillRGB[2];
-                d.hasFillDelta = (fabsf(d.deltaFillRGB[0]) > 0.005f ||
-                                  fabsf(d.deltaFillRGB[1]) > 0.005f ||
-                                  fabsf(d.deltaFillRGB[2]) > 0.005f);
-            }
-            else
-            {
-                d.hasFillDelta = false;
-            }
-
-            float curBorderRGB[3] = { 0.8f, 0.8f, 0.8f };
-            bool curHasBorder = current.estilos.contains("cor_borda") && current.estilos["cor_borda"] != "none";
-            if (curHasBorder)
-                ColorUtils::ParseHex(current.estilos.value("cor_borda", "#cfcfcf"), curBorderRGB);
-
-            if (origin.hasBorderColor && curHasBorder)
-            {
-                d.deltaBorderRGB[0] = curBorderRGB[0] - origin.borderRGB[0];
-                d.deltaBorderRGB[1] = curBorderRGB[1] - origin.borderRGB[1];
-                d.deltaBorderRGB[2] = curBorderRGB[2] - origin.borderRGB[2];
-                d.hasBorderDelta = (fabsf(d.deltaBorderRGB[0]) > 0.005f ||
-                                    fabsf(d.deltaBorderRGB[1]) > 0.005f ||
-                                    fabsf(d.deltaBorderRGB[2]) > 0.005f);
-            }
-            else
-            {
-                d.hasBorderDelta = false;
-            }
-            return d;
-        }
-
-        void ApplyIncrementalDelta(Element& el, const App::IncrementalDelta& delta)
-        {
-            // 1. Posição numérica no sistema de coordenadas do documento
-            el.transformacao["x"] = el.transformacao.value("x", 0.0f) + delta.deltaX;
-            el.transformacao["y"] = el.transformacao.value("y", 0.0f) + delta.deltaY;
-
-            // 2. Rotação acumulativa
-            if (fabsf(delta.deltaRot) > 0.001f)
-            {
-                const float r = Geo::ElementRotation(el);
-                el.transformacao["rotacao"] = fmodf(r + delta.deltaRot, 360.0f);
-            }
-
-            // 3. Escala multiplicativa
-            if (fabsf(delta.scaleX - 1.0f) > 0.001f || fabsf(delta.scaleY - 1.0f) > 0.001f)
-            {
-                const float w = el.transformacao.value("largura", 160.0f);
-                const float h = el.transformacao.value("altura", 32.0f);
-                el.transformacao["largura"] = std::max(1.0f, w * delta.scaleX);
-                el.transformacao["altura"] = std::max(1.0f, h * delta.scaleY);
-                ClampElementCornerRadii(el);
-            }
-
-            // 4. Opacidade acumulativa
-            if (fabsf(delta.deltaOpacity) > 0.001f)
-            {
-                const float curOp = el.estilos.value("opacidade", 1.0f);
-                el.estilos["opacidade"] = std::clamp(curOp + delta.deltaOpacity, 0.0f, 1.0f);
-            }
-            if (fabsf(delta.deltaStrokeOpacity) > 0.001f)
-            {
-                const float curStOp = el.estilos.value("opacidade_borda", 1.0f);
-                el.estilos["opacidade_borda"] = std::clamp(curStOp + delta.deltaStrokeOpacity, 0.0f, 1.0f);
-            }
-
-            // 5. Espessura de contorno acumulativa
-            if (fabsf(delta.deltaBorderWidth) > 0.001f)
-            {
-                const float curBw = el.estilos.value("espessura_borda", 1.0f);
-                el.estilos["espessura_borda"] = std::max(0.0f, curBw + delta.deltaBorderWidth);
-            }
-
-            // 6. Cor de preenchimento progressiva (variação pelos canais RGB)
-            if (delta.hasFillDelta && el.estilos.contains("cor_fundo") && el.estilos["cor_fundo"] != "none")
-            {
-                float rgb[3] = { 1.0f, 1.0f, 1.0f };
-                ColorUtils::ParseHex(el.estilos.value("cor_fundo", "#ffffff"), rgb);
-                rgb[0] = std::clamp(rgb[0] + delta.deltaFillRGB[0], 0.0f, 1.0f);
-                rgb[1] = std::clamp(rgb[1] + delta.deltaFillRGB[1], 0.0f, 1.0f);
-                rgb[2] = std::clamp(rgb[2] + delta.deltaFillRGB[2], 0.0f, 1.0f);
-                el.estilos["cor_fundo"] = ColorUtils::ToHex(rgb[0], rgb[1], rgb[2]);
-            }
-
-            // 7. Cor de contorno progressiva
-            if (delta.hasBorderDelta && el.estilos.contains("cor_borda") && el.estilos["cor_borda"] != "none")
-            {
-                float rgb[3] = { 0.8f, 0.8f, 0.8f };
-                ColorUtils::ParseHex(el.estilos.value("cor_borda", "#cfcfcf"), rgb);
-                rgb[0] = std::clamp(rgb[0] + delta.deltaBorderRGB[0], 0.0f, 1.0f);
-                rgb[1] = std::clamp(rgb[1] + delta.deltaBorderRGB[1], 0.0f, 1.0f);
-                rgb[2] = std::clamp(rgb[2] + delta.deltaBorderRGB[2], 0.0f, 1.0f);
-                el.estilos["cor_borda"] = ColorUtils::ToHex(rgb[0], rgb[1], rgb[2]);
-            }
-
-            // 8. Cantos arredondados acumulativos
-            if (fabsf(delta.deltaCornerRadius) > 0.001f)
-            {
-                const float curR = el.estilos.value("raio", 0.0f);
-                const float newR = std::max(0.0f, curR + delta.deltaCornerRadius);
-                el.estilos["raio"] = newR;
-                for (int m = 10; m <= 13; ++m)
-                    SetElementCornerRadius(el, m, newR);
-                ClampElementCornerRadii(el);
-            }
-        }
-
-    }    void App::Run(bool captureAfterBoot)
+    void App::Run(bool captureAfterBoot)
     {
         mCaptureAfterBoot = captureAfterBoot;
         if (captureAfterBoot) setvbuf(stdout, nullptr, _IONBF, 0);
@@ -1074,75 +913,19 @@ namespace seedui
         }
 
         Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
-        Element* sourceEl = Project::ResolverId(mode, ids.front());
-        if (!sourceEl) return;
-
-        // Máquina de 3 Estados para Duplicação Incremental (estilo CorelDRAW):
-        // 1. Estado A: Objeto original antes da primeira duplicação
-        // 2. Estado B: Primeira cópia após o usuário modificá-la
-        // 3. Delta A->B: Diferença completa entre A e B aplicada cumulativamente nas próximas cópias (C, D, E...)
-        if (mIncDup.phase == IncrementalDupPhase::FirstDuplicated &&
-            mIncDup.currentCloneId == sourceEl->id)
-        {
-            // Calcula o Delta A->B completo comparando o Estado A guardado com o Estado B modificado:
-            mIncDup.fixedDelta = ComputeIncrementalDelta(mIncDup.stateA, *sourceEl);
-            // Se o usuário não deslocou B, utiliza o deslocamento padrão (mDuplicateDX/DY):
-            if (fabsf(mIncDup.fixedDelta.deltaX) < 0.001f && fabsf(mIncDup.fixedDelta.deltaY) < 0.001f)
-            {
-                mIncDup.fixedDelta.deltaX = mDuplicateDX;
-                mIncDup.fixedDelta.deltaY = mDuplicateDY;
-            }
-            mIncDup.phase = IncrementalDupPhase::RunningChain;
-        }
-        else if (mIncDup.phase == IncrementalDupPhase::RunningChain &&
-                 mIncDup.currentCloneId == sourceEl->id)
-        {
-            // Continuando a cadeia de repetição: mantém o fixedDelta inalterado
-        }
-        else
-        {
-            // Nova sequência: captura o Estado A
-            mIncDup.stateA = CaptureElementSnapshot(*sourceEl);
-            mIncDup.fixedDelta.deltaX = mDuplicateDX;
-            mIncDup.fixedDelta.deltaY = mDuplicateDY;
-            mIncDup.fixedDelta.deltaRot = (mLastAction.kind == ActionKind::Rotate) ? mLastAction.rotateDelta : 0.0f;
-            mIncDup.fixedDelta.scaleX = (mLastAction.kind == ActionKind::Scale) ? mLastAction.scaleFactorX : 1.0f;
-            mIncDup.fixedDelta.scaleY = (mLastAction.kind == ActionKind::Scale) ? mLastAction.scaleFactorY : 1.0f;
-            mIncDup.fixedDelta.deltaOpacity = 0.0f;
-            mIncDup.fixedDelta.deltaStrokeOpacity = 0.0f;
-            mIncDup.fixedDelta.deltaBorderWidth = 0.0f;
-            mIncDup.fixedDelta.deltaCornerRadius = 0.0f;
-            mIncDup.fixedDelta.hasFillDelta = false;
-            mIncDup.fixedDelta.hasBorderDelta = false;
-            mIncDup.phase = IncrementalDupPhase::FirstDuplicated;
-        }
-
         const std::vector<Element> copies = Project::CopiarElementos(mode, ids);
         if (copies.empty()) return;
 
         ++mElementPasteGeneration;
-        // Cola a nova cópia com offset 0 (o deslocamento e todas as transformações são aplicados numericamente em ApplyIncrementalDelta)
         const std::vector<std::string> pastedRootIds = Project::ColarElementosOffset(
-            mProject, mode, copies, 0.0f, 0.0f);
-
-        // Aplica o Delta A->B sobre cada novo elemento clonado
-        for (const std::string& pid : pastedRootIds)
-        {
-            if (Element* el = Project::ResolverId(mode, pid))
-            {
-                ApplyIncrementalDelta(*el, mIncDup.fixedDelta);
-            }
-        }
-
-        // Atualiza a referência da cadeia para a nova cópia criada
-        mIncDup.currentCloneId = pastedRootIds.front();
+            mProject, mode, copies, 16.0f, 16.0f);
 
         mSelectedElementIds = pastedRootIds;
         mSelectedElementId = pastedRootIds.empty() ? std::string() : pastedRootIds.back();
         mProjectDirty = true;
         CapturarHistorico();
         mStatusMsg = std::to_string(pastedRootIds.size()) +
-                     " elemento(s) duplicado(s) incrementalmente (Ctrl+D)";
+                     " elemento(s) duplicado(s) (Ctrl+D)";
         mStatusMsgUntil = GetTime() + 4.0;
     }
 
@@ -3424,8 +3207,6 @@ namespace seedui
                 {
                     mSelectedElementIds.clear();
                     mSelectedElementIds.push_back(hit->id);
-                    if (mIncDup.currentCloneId != hit->id)
-                        mIncDup.Reset();
                 }
                 mSelectedElementId = hit->id;
             }
@@ -3437,7 +3218,6 @@ namespace seedui
                 {
                     mSelectedElementIds.clear();
                     mSelectedElementId.clear();
-                    mIncDup.Reset();
                 }
                 mCanvasMarquee = true;
                 mCanvasMarqueeAdditive = additive;

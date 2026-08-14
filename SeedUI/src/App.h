@@ -137,66 +137,6 @@ namespace seedui
 
         LastActionData mLastAction;
         void RepetirUltimaAcao(); // Ctrl+R: repete a última ação aplicada no elemento selecionado
-    public:
-        enum class IncrementalDupPhase
-        {
-            Idle,
-            FirstDuplicated,
-            RunningChain
-        };
-
-        // Estrutura de Snapshot para Duplicação Incremental (estilo CorelDRAW)
-        struct ElementSnapshot
-        {
-            std::string id;
-            float x = 0.0f;
-            float y = 0.0f;
-            float w = 160.0f;
-            float h = 32.0f;
-            float rot = 0.0f;
-            float opacity = 1.0f;
-            float strokeOpacity = 1.0f;
-            float borderWidth = 1.0f;
-            float cornerRadius = 0.0f;
-            bool hasFillColor = false;
-            float fillRGB[3] = { 1.0f, 1.0f, 1.0f };
-            bool hasBorderColor = false;
-            float borderRGB[3] = { 0.8f, 0.8f, 0.8f };
-            float fontSize = 18.0f;
-        };
-
-        struct IncrementalDelta
-        {
-            float deltaX = 16.0f;
-            float deltaY = 16.0f;
-            float deltaRot = 0.0f;
-            float scaleX = 1.0f;
-            float scaleY = 1.0f;
-            float deltaOpacity = 0.0f;
-            float deltaStrokeOpacity = 0.0f;
-            float deltaBorderWidth = 0.0f;
-            float deltaCornerRadius = 0.0f;
-            float deltaFillRGB[3] = { 0.0f, 0.0f, 0.0f };
-            bool hasFillDelta = false;
-            float deltaBorderRGB[3] = { 0.0f, 0.0f, 0.0f };
-            bool hasBorderDelta = false;
-        };
-
-        struct IncrementalDuplicateManager
-        {
-            IncrementalDupPhase phase = IncrementalDupPhase::Idle;
-            std::string currentCloneId;
-            ElementSnapshot stateA;
-            IncrementalDelta fixedDelta;
-
-            void Reset()
-            {
-                phase = IncrementalDupPhase::Idle;
-                currentCloneId.clear();
-            }
-        };
-
-        IncrementalDuplicateManager mIncDup;
         float mCanvasLastRotDelta = 0.0f;
 
     private:
