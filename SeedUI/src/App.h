@@ -106,6 +106,45 @@ namespace seedui
         float UnitToPixels() const;     // fator da unidade atual -> px
         float PixelsToUnit(float px) const;
 
+    public:
+        // Captura de transformação da duplicata (Etapa 2 de diagnóstico)
+        struct DuplicateTransformSnapshot
+        {
+            std::string id;
+            float x = 0.0f;
+            float y = 0.0f;
+            float rot = 0.0f;
+            float w = 160.0f;
+            float h = 32.0f;
+        };
+
+        struct DuplicateDeltaCapture
+        {
+            bool hasInitial = false;
+            DuplicateTransformSnapshot initial;
+            DuplicateTransformSnapshot finalState;
+
+            float deltaX = 0.0f;
+            float deltaY = 0.0f;
+            float deltaRot = 0.0f;
+            float scaleX = 1.0f;
+            float scaleY = 1.0f;
+
+            void Reset()
+            {
+                hasInitial = false;
+                initial = {};
+                finalState = {};
+                deltaX = 0.0f;
+                deltaY = 0.0f;
+                deltaRot = 0.0f;
+                scaleX = 1.0f;
+                scaleY = 1.0f;
+            }
+        };
+
+        DuplicateDeltaCapture mDupCapture;
+
     private:
 
         float SnapTol(float basePx) const;

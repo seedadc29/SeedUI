@@ -924,6 +924,28 @@ namespace seedui
         mSelectedElementId = pastedRootIds.empty() ? std::string() : pastedRootIds.back();
         mProjectDirty = true;
         CapturarHistorico();
+
+        // Captura do snapshot inicial da duplicata (Etapa 2 - Diagnóstico)
+        if (!pastedRootIds.empty())
+        {
+            if (Element* clone = Project::ResolverId(mode, pastedRootIds.front()))
+            {
+                mDupCapture.hasInitial = true;
+                mDupCapture.initial.id = clone->id;
+                mDupCapture.initial.x = clone->transformacao.value("x", 0.0f);
+                mDupCapture.initial.y = clone->transformacao.value("y", 0.0f);
+                mDupCapture.initial.rot = Geo::ElementRotation(*clone);
+                mDupCapture.initial.w = clone->transformacao.value("largura", 160.0f);
+                mDupCapture.initial.h = clone->transformacao.value("altura", 32.0f);
+                mDupCapture.finalState = mDupCapture.initial;
+                mDupCapture.deltaX = 0.0f;
+                mDupCapture.deltaY = 0.0f;
+                mDupCapture.deltaRot = 0.0f;
+                mDupCapture.scaleX = 1.0f;
+                mDupCapture.scaleY = 1.0f;
+            }
+        }
+
         mStatusMsg = std::to_string(pastedRootIds.size()) +
                      " elemento(s) duplicado(s) (Ctrl+D)";
         mStatusMsgUntil = GetTime() + 4.0;
@@ -3036,6 +3058,8 @@ namespace seedui
                 mCanvasCornerDragMask = 0;
                 if (!isSelected(hit->id))
                 {
+                    if (mDupCapture.initial.id != hit->id)
+                        mDupCapture.Reset();
                     mSelectedElementIds.clear();
                     mSelectedElementIds.push_back(hit->id);
                 }
@@ -3047,6 +3071,7 @@ namespace seedui
                 mCanvasCornerDragMask = 0;
                 if (!additive)
                 {
+                    mDupCapture.Reset();
                     mSelectedElementIds.clear();
                     mSelectedElementId.clear();
                 }
@@ -3943,7 +3968,39 @@ namespace seedui
                 {
                     mStatusMsg = "Elemento redimensionado";
                 }
-                mStatusMsgUntil = GetTime() + 4.0;
+
+                // Diagnóstico da transformação manual na duplicata (Etapa 2)
+                if (mDupCapture.hasInitial && !mDupCapture.initial.id.empty())
+                {
+                    if (Element* clone = Project::ResolverId(mode, mDupCapture.initial.id))
+                    {
+                        mDupCapture.finalState.id = clone->id;
+                        mDupCapture.finalState.x = clone->transformacao.value("x", 0.0f);
+                        mDupCapture.finalState.y = clone->transformacao.value("y", 0.0f);
+                        mDupCapture.finalState.rot = Geo::ElementRotation(*clone);
+                        mDupCapture.finalState.w = clone->transformacao.value("largura", 160.0f);
+                        mDupCapture.finalState.h = clone->transformacao.value("altura", 32.0f);
+
+                        mDupCapture.deltaX = mDupCapture.finalState.x - mDupCapture.initial.x;
+                        mDupCapture.deltaY = mDupCapture.finalState.y - mDupCapture.initial.y;
+                        mDupCapture.deltaRot = mDupCapture.finalState.rot - mDupCapture.initial.rot;
+                        mDupCapture.scaleX = mDupCapture.finalState.w / std::max(0.01f, mDupCapture.initial.w);
+                        mDupCapture.scaleY = mDupCapture.finalState.h / std::max(0.01f, mDupCapture.initial.h);
+
+                        char diagBuf[256];
+                        snprintf(diagBuf, sizeof(diagBuf),
+                                 "[Diagnóstico Ctrl+D] deltaX: %.1f | deltaY: %.1f | deltaRotação: %.1f° | scaleX: %.2f | scaleY: %.2f",
+                                 mDupCapture.deltaX, mDupCapture.deltaY, mDupCapture.deltaRot,
+                                 mDupCapture.scaleX, mDupCapture.scaleY);
+                        mStatusMsg = diagBuf;
+                        mStatusMsgUntil = GetTime() + 8.0;
+                        TraceLog(LOG_INFO, "%s", diagBuf);
+                    }
+                }
+                else
+                {
+                    mStatusMsgUntil = GetTime() + 4.0;
+                }
                 TraceLog(LOG_INFO, "M05 selecao: transformacao alterada (%s)",
                          mSelectedElementId.c_str());
             }
@@ -5523,7 +5580,34 @@ namespace seedui
             propertyEdited = true;
         }
 
-        if (propertyEdited) mProjectDirty = true;
+        if (propertyEdited)
+        {
+            mProjectDirty = true;
+            if (primary && mDupCapture.hasInitial && mDupCapture.initial.id == primary->id)
+            {
+                mDupCapture.finalState.id = primary->id;
+                mDupCapture.finalState.x = primary->transformacao.value("x", 0.0f);
+                mDupCapture.finalState.y = primary->transformacao.value("y", 0.0f);
+                mDupCapture.finalState.rot = Geo::ElementRotation(*primary);
+                mDupCapture.finalState.w = primary->transformacao.value("largura", 160.0f);
+                mDupCapture.finalState.h = primary->transformacao.value("altura", 32.0f);
+
+                mDupCapture.deltaX = mDupCapture.finalState.x - mDupCapture.initial.x;
+                mDupCapture.deltaY = mDupCapture.finalState.y - mDupCapture.initial.y;
+                mDupCapture.deltaRot = mDupCapture.finalState.rot - mDupCapture.initial.rot;
+                mDupCapture.scaleX = mDupCapture.finalState.w / std::max(0.01f, mDupCapture.initial.w);
+                mDupCapture.scaleY = mDupCapture.finalState.h / std::max(0.01f, mDupCapture.initial.h);
+
+                char diagBuf[256];
+                snprintf(diagBuf, sizeof(diagBuf),
+                         "[Diagnóstico Ctrl+D] deltaX: %.1f | deltaY: %.1f | deltaRotação: %.1f° | scaleX: %.2f | scaleY: %.2f",
+                         mDupCapture.deltaX, mDupCapture.deltaY, mDupCapture.deltaRot,
+                         mDupCapture.scaleX, mDupCapture.scaleY);
+                mStatusMsg = diagBuf;
+                mStatusMsgUntil = GetTime() + 8.0;
+                TraceLog(LOG_INFO, "%s", diagBuf);
+            }
+        }
 
         // Separador
         ImGui::SameLine(0, 12);
