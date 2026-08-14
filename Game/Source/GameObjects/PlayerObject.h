@@ -108,6 +108,7 @@ namespace game
         float mSkinHue = 0.06f;
         float mSkinSaturation = 0.72f;
         float mLightIntensity = 1.0f;
+        float mPolygonRatio = 1.0f;
         float mFacingYawDegrees = 180.0f;
         float mHorizontalSpeed = 0.0f;
         float mVisualHeight = 1.78f;

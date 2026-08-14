@@ -82,7 +82,7 @@ namespace game
             JPH::BodyID bodyId;
         };
 
-        void LoadAsset(Asset &asset);
+        void LoadAsset(Asset &asset, float polygonRatio = 1.0f);
         void UnloadAssetModel(Asset &asset);
         void LoadImportedAssets();
         void RebuildEditorCollision(Instance &instance);

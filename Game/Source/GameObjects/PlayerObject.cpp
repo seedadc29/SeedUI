@@ -53,6 +53,9 @@ namespace game
 
         mShape = capsule;
 
+        mPolygonRatio = scene.GetSettings().synthMode
+            ? scene.GetSettings().synthPlayerPolygonRatio : 1.0f;
+
         ApplyCharacterAppearance(scene.GetSettings().characterGender,
                                  scene.GetSettings().skinHue,
                                  scene.GetSettings().skinSaturation,
@@ -83,6 +86,8 @@ namespace game
 
         if (!mPlayerModel.Load(modelPath, animationPath))
             TraceLog(LOG_WARNING, "PLAYER: %s. Falling back to debug cube.", mPlayerModel.GetLastError().c_str());
+        else if (mPolygonRatio < 0.999f)
+            mPlayerModel.ReduceTriangles(mPolygonRatio);
         RefreshOutfitModel();
     }
 
@@ -110,6 +115,8 @@ namespace game
             animationPath = "Game/Assets/Kit assets/Universal Animation Library[Standard]/Unity/UAL1_Standard.fbx";
         if (!mOutfitModel.Load(outfitPath, animationPath))
             TraceLog(LOG_WARNING, "PLAYER: Could not load equipped outfit: %s", mOutfitModel.GetLastError().c_str());
+        else if (mPolygonRatio < 0.999f)
+            mOutfitModel.ReduceTriangles(mPolygonRatio);
     }
 
     void PlayerObject::RefreshWeaponModel()
@@ -124,6 +131,8 @@ namespace game
             modelPath = std::string("Game/Assets/UltimateRPg Items Pack/FBX/") + GetItemModelFile(mEquippedWeapon.type);
         if (!mWeaponModel.Load(modelPath, std::string()))
             TraceLog(LOG_WARNING, "PLAYER: Could not load equipped weapon: %s", mWeaponModel.GetLastError().c_str());
+        else if (mPolygonRatio < 0.999f)
+            mWeaponModel.ReduceTriangles(mPolygonRatio);
     }
 
     void PlayerObject::HandleInput()

@@ -10,10 +10,17 @@
 
 namespace game
 {
+    static int gSynthDetailedEnemyModels = 0;
+    static constexpr int MaxSynthDetailedEnemyModels = 3;
     static float RandomUnit() { return (float)GetRandomValue(0, 10000) / 10000.0f; }
     static const char *CategoryName(EnemyCategory category)
     {
         return category == EnemyCategory::Big ? "Big" : category == EnemyCategory::Flying ? "Flying" : "Blob";
+    }
+
+    EnemyObject::~EnemyObject()
+    {
+        ReleaseDetailedModelSlot();
     }
 
     EnemyObject::EnemyObject(const glm::vec3 &spawnPosition, const EnemyConfig &config, float groundHeight)
@@ -34,16 +41,28 @@ namespace game
     {
     }
 
-    void EnemyObject::EnsureModelLoaded()
+    void EnemyObject::ReleaseDetailedModelSlot()
     {
-        if (mLoadAttempted) return;
+        if (!mDetailedModelSlot) return;
+        mDetailedModelSlot = false;
+        gSynthDetailedEnemyModels = std::max(0, gSynthDetailedEnemyModels - 1);
+    }
+
+    bool EnemyObject::EnsureModelLoaded(float polygonRatio)
+    {
+        if (mLoadAttempted) return mModel.IsLoaded();
         mLoadAttempted = true;
         std::string path = std::string("Assets/Enemies/") + CategoryName(mConfig.category) + "/" + mConfig.modelName + ".gltf";
         if (!FileExists(path.c_str()))
             path = std::string("Game/Assets/Kit assets/Ultimate Monsters/") + CategoryName(mConfig.category) + "/glTF/" + mConfig.modelName + ".gltf";
         if (!mModel.Load(path, path))
+        {
             TraceLog(LOG_WARNING, "ENEMY: %s", mModel.GetLastError().c_str());
+            return false;
+        }
+        if (polygonRatio < 0.999f) mModel.ReduceTriangles(polygonRatio);
         mModel.PlayFirstAnimationContaining("idle", true);
+        return true;
     }
 
     void EnemyObject::SetState(EnemyState state)
@@ -147,12 +166,24 @@ namespace game
         {
             mModel.Unload();
             mLoadAttempted = false;
+            ReleaseDetailedModelSlot();
         }
-        // O SeedSynth usa a representacao geometrica low-poly do Draw(). Cada
-        // glTF animado possui uma copia grande de malhas e animacoes por
-        // inimigo; desativa-los neste perfil mantem a RAM limitada.
-        if (!scene.GetSettings().synthMode && loadDistance <= modelDistance)
-            EnsureModelLoaded();
+        if (loadDistance <= modelDistance && !mModel.IsLoaded())
+        {
+            if (scene.GetSettings().synthMode)
+            {
+                if (!mLoadAttempted && !mDetailedModelSlot &&
+                    gSynthDetailedEnemyModels < MaxSynthDetailedEnemyModels)
+                {
+                    mDetailedModelSlot = true;
+                    ++gSynthDetailedEnemyModels;
+                }
+                if (!mLoadAttempted && mDetailedModelSlot &&
+                    !EnsureModelLoaded(scene.GetSettings().synthEnemyPolygonRatio))
+                    ReleaseDetailedModelSlot();
+            }
+            else EnsureModelLoaded();
+        }
         mModel.Update(deltaTime);
         mHitFlash = std::max(0.0f, mHitFlash - deltaTime);
         if (IsDead()) { mDeathTimer = std::max(0.0f, mDeathTimer - deltaTime); return; }

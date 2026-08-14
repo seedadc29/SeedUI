@@ -609,6 +609,21 @@ void main()
              s.synthPointFilter != mAppliedSettings.synthPointFilter))
             RecreateRetroTarget();
 
+        const bool synthGeometryChanged = mVisualProfile == VisualProfile::Synth &&
+            (s.synthEnemyPolygonRatio != mAppliedSettings.synthEnemyPolygonRatio ||
+             s.synthPlayerPolygonRatio != mAppliedSettings.synthPlayerPolygonRatio ||
+             s.synthScenePolygonRatio != mAppliedSettings.synthScenePolygonRatio ||
+             s.synthTextureSize != mAppliedSettings.synthTextureSize);
+        if (synthGeometryChanged && mGameScene && mActiveScene == mGameScene)
+        {
+            // A reducao modifica buffers de vertices/indices e a resolucao do
+            // terreno. Recriar a cena garante aplicacao atomica e evita malhas
+            // parcialmente atualizadas durante um quadro.
+            mGameScene->Shutdown();
+            SetCrtTextureLimit(s.synthTextureSize);
+            mGameScene->Init();
+        }
+
         mAppliedSettings = mSettings;
     }
 

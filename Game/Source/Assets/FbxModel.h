@@ -15,6 +15,11 @@ namespace game
     bool LoadStaticFbxModel(const std::string &modelPath, Model &outModel,
                             std::vector<Texture2D> &outTextures, std::string &error);
 
+    // Reducao por agrupamento espacial: colapsa vertices proximos e remove
+    // triangulos degenerados, preservando os atributos e dados de animacao.
+    // Retorna a quantidade final de triangulos do Model.
+    int ReduceModelTriangles(Model &model, float ratio);
+
     class FbxModel
     {
     public:
@@ -23,6 +28,8 @@ namespace game
 
         bool Load(const std::string &modelPath, const std::string &animationPath);
         void Unload();
+        int ReduceTriangles(float ratio);
+        int GetTriangleCount() const;
 
         void PlayAnimation(const char *animationName, bool loop, float playbackSpeed = 1.0f);
         bool PlayFirstAnimationContaining(const char *fragment, bool loop,

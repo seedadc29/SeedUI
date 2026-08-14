@@ -8,6 +8,7 @@
 #include "raymath.h"
 #include <algorithm>
 #include <cfloat>
+#include <climits>
 #include <cmath>
 #include <chrono>
 #include <filesystem>
@@ -484,7 +485,7 @@ namespace game
         }
     }
 
-    void NatureObject::LoadAsset(Asset &asset)
+    void NatureObject::LoadAsset(Asset &asset, float polygonRatio)
     {
         if (asset.loaded) return;
         std::string path = asset.path.string();
@@ -511,6 +512,8 @@ namespace game
         }
         if (asset.loaded)
         {
+            if (polygonRatio < 0.999f)
+                ReduceModelTriangles(asset.model, polygonRatio);
             const BoundingBox bounds = GetModelBoundingBox(asset.model);
             asset.sourceHeight = std::max(0.001f, bounds.max.y - bounds.min.y);
             // Props importados preservam o tamanho nativo do arquivo original.
@@ -539,6 +542,9 @@ namespace game
         const float unloadRadius = reducedProfile
             ? 21.0f : (scene.GetSettings().retroMode ? 42.0f : 52.0f);
         bool loadedThisFrame = false;
+        int loadedAssetCount = 0;
+        for (const Asset &asset : mAssets) if (asset.loaded) ++loadedAssetCount;
+        const int detailedAssetBudget = scene.GetSettings().synthMode ? 2 : INT_MAX;
         for (int assetIndex = 0; assetIndex < (int)mAssets.size(); ++assetIndex)
         {
             float closestSq = FLT_MAX;
@@ -550,15 +556,18 @@ namespace game
                 closestSq = std::min(closestSq, glm::dot(delta, delta));
             }
             Asset &asset = mAssets[assetIndex];
-            if (!scene.GetSettings().synthMode && closestSq <= loadRadius * loadRadius &&
-                !asset.loaded && !loadedThisFrame)
+            if (closestSq <= loadRadius * loadRadius && !asset.loaded && !loadedThisFrame &&
+                loadedAssetCount < detailedAssetBudget)
             {
-                LoadAsset(asset);
+                LoadAsset(asset, scene.GetSettings().synthMode
+                    ? scene.GetSettings().synthScenePolygonRatio : 1.0f);
                 loadedThisFrame = asset.loaded;
+                if (asset.loaded) ++loadedAssetCount;
             }
             else if (asset.loaded && closestSq > unloadRadius * unloadRadius)
             {
                 UnloadAssetModel(asset);
+                --loadedAssetCount;
             }
         }
     }

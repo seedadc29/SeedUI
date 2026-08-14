@@ -14,11 +14,15 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cfloat>
+#include <climits>
 #include <cmath>
 #include <cstring>
 #include <filesystem>
 #include <limits>
+#include <cstdint>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace game
@@ -747,6 +751,171 @@ void main()
         }
     };
 
+    namespace
+    {
+        struct PolygonClusterKey
+        {
+            int x = 0, y = 0, z = 0;
+            unsigned short bone = 0xffff;
+            unsigned char normalOctant = 0;
+
+            bool operator==(const PolygonClusterKey &other) const
+            {
+                return x == other.x && y == other.y && z == other.z &&
+                       bone == other.bone && normalOctant == other.normalOctant;
+            }
+        };
+
+        struct PolygonClusterHash
+        {
+            size_t operator()(const PolygonClusterKey &key) const
+            {
+                size_t value = (size_t)(unsigned int)key.x * 73856093u;
+                value ^= (size_t)(unsigned int)key.y * 19349663u;
+                value ^= (size_t)(unsigned int)key.z * 83492791u;
+                value ^= (size_t)key.bone * 2654435761u;
+                value ^= (size_t)key.normalOctant * 97531u;
+                return value;
+            }
+        };
+
+        unsigned short SourceIndex(const Mesh &mesh, int triangle, int corner)
+        {
+            return mesh.indices ? mesh.indices[triangle * 3 + corner]
+                                : (unsigned short)(triangle * 3 + corner);
+        }
+
+        std::vector<unsigned short> BuildClusteredIndices(
+            const Mesh &mesh, int divisions, const std::vector<unsigned short> *primaryBones)
+        {
+            if (!mesh.vertices || mesh.vertexCount <= 0 || mesh.vertexCount > 65535)
+                return {};
+
+            Vector3 minimum = { FLT_MAX, FLT_MAX, FLT_MAX };
+            Vector3 maximum = { -FLT_MAX, -FLT_MAX, -FLT_MAX };
+            for (int vertex = 0; vertex < mesh.vertexCount; ++vertex)
+            {
+                const float *p = mesh.vertices + vertex * 3;
+                minimum.x = std::min(minimum.x, p[0]);
+                minimum.y = std::min(minimum.y, p[1]);
+                minimum.z = std::min(minimum.z, p[2]);
+                maximum.x = std::max(maximum.x, p[0]);
+                maximum.y = std::max(maximum.y, p[1]);
+                maximum.z = std::max(maximum.z, p[2]);
+            }
+            const Vector3 extent = {
+                std::max(0.00001f, maximum.x - minimum.x),
+                std::max(0.00001f, maximum.y - minimum.y),
+                std::max(0.00001f, maximum.z - minimum.z)
+            };
+
+            std::unordered_map<PolygonClusterKey, unsigned short, PolygonClusterHash> clusters;
+            clusters.reserve((size_t)mesh.vertexCount);
+            std::vector<unsigned short> remap((size_t)mesh.vertexCount);
+            for (int vertex = 0; vertex < mesh.vertexCount; ++vertex)
+            {
+                const float *p = mesh.vertices + vertex * 3;
+                PolygonClusterKey key;
+                key.x = std::clamp((int)((p[0] - minimum.x) / extent.x * divisions), 0, divisions - 1);
+                key.y = std::clamp((int)((p[1] - minimum.y) / extent.y * divisions), 0, divisions - 1);
+                key.z = std::clamp((int)((p[2] - minimum.z) / extent.z * divisions), 0, divisions - 1);
+                if (mesh.normals)
+                {
+                    const float *normal = mesh.normals + vertex * 3;
+                    key.normalOctant = (normal[0] >= 0.0f ? 1 : 0) |
+                                       (normal[1] >= 0.0f ? 2 : 0) |
+                                       (normal[2] >= 0.0f ? 4 : 0);
+                }
+                if (primaryBones && vertex < (int)primaryBones->size())
+                    key.bone = (*primaryBones)[vertex];
+                else if (mesh.boneIndices)
+                    key.bone = mesh.boneIndices[vertex * 4];
+
+                auto inserted = clusters.emplace(key, (unsigned short)vertex);
+                remap[(size_t)vertex] = inserted.first->second;
+            }
+
+            std::vector<unsigned short> indices;
+            indices.reserve((size_t)mesh.triangleCount * 3);
+            std::unordered_set<std::uint64_t> uniqueTriangles;
+            uniqueTriangles.reserve((size_t)mesh.triangleCount);
+            for (int triangle = 0; triangle < mesh.triangleCount; ++triangle)
+            {
+                const unsigned short a = remap[SourceIndex(mesh, triangle, 0)];
+                const unsigned short b = remap[SourceIndex(mesh, triangle, 1)];
+                const unsigned short c = remap[SourceIndex(mesh, triangle, 2)];
+                if (a == b || b == c || a == c) continue;
+                unsigned short sorted[3] = { a, b, c };
+                std::sort(sorted, sorted + 3);
+                const std::uint64_t identity = (std::uint64_t)sorted[0] |
+                    ((std::uint64_t)sorted[1] << 16) | ((std::uint64_t)sorted[2] << 32);
+                if (!uniqueTriangles.insert(identity).second) continue;
+                indices.push_back(a); indices.push_back(b); indices.push_back(c);
+            }
+            return indices;
+        }
+
+        int ReduceMeshTriangles(Mesh &mesh, float ratio,
+                                const std::vector<unsigned short> *primaryBones = nullptr)
+        {
+            ratio = std::clamp(ratio, 0.05f, 1.0f);
+            const int originalTriangles = mesh.triangleCount;
+            const int targetTriangles = std::max(1, (int)roundf(originalTriangles * ratio));
+            if (ratio >= 0.999f || originalTriangles <= 4 || mesh.vertexCount > 65535)
+                return originalTriangles;
+
+            std::vector<unsigned short> best;
+            int bestDifference = INT_MAX;
+            int low = 1, high = 512;
+            while (low <= high)
+            {
+                const int divisions = low + (high - low) / 2;
+                std::vector<unsigned short> candidate =
+                    BuildClusteredIndices(mesh, divisions, primaryBones);
+                const int triangles = (int)candidate.size() / 3;
+                const int difference = abs(triangles - targetTriangles);
+                if (triangles > 0 && difference < bestDifference)
+                {
+                    bestDifference = difference;
+                    best = std::move(candidate);
+                }
+                if (triangles < targetTriangles) low = divisions + 1;
+                else if (triangles > targetTriangles) high = divisions - 1;
+                else break;
+            }
+            if (best.empty() || (int)best.size() / 3 >= originalTriangles)
+                return originalTriangles;
+
+            const unsigned int indexBytes = (unsigned int)(best.size() * sizeof(unsigned short));
+            unsigned short *newIndices = (unsigned short *)MemAlloc(indexBytes);
+            if (!newIndices) return originalTriangles;
+            std::memcpy(newIndices, best.data(), best.size() * sizeof(unsigned short));
+
+            if (mesh.vboId)
+            {
+                constexpr int IndexBufferSlot = 6;
+                rlEnableVertexArray(mesh.vaoId);
+                if (mesh.vboId[IndexBufferSlot] != 0)
+                    rlUnloadVertexBuffer(mesh.vboId[IndexBufferSlot]);
+                mesh.vboId[IndexBufferSlot] = rlLoadVertexBufferElement(
+                    newIndices, (int)indexBytes, true);
+                rlDisableVertexArray();
+            }
+            if (mesh.indices) MemFree(mesh.indices);
+            mesh.indices = newIndices;
+            mesh.triangleCount = (int)best.size() / 3;
+            return mesh.triangleCount;
+        }
+    }
+
+    int ReduceModelTriangles(Model &model, float ratio)
+    {
+        int total = 0;
+        for (int meshIndex = 0; meshIndex < model.meshCount; ++meshIndex)
+            total += ReduceMeshTriangles(model.meshes[meshIndex], ratio);
+        return total;
+    }
+
     FbxModel::FbxModel() = default;
 
     FbxModel::~FbxModel()
@@ -855,6 +1024,51 @@ void main()
         if (mImpl->modelScene) aiReleaseImport(mImpl->modelScene);
         delete mImpl;
         mImpl = nullptr;
+    }
+
+    int FbxModel::GetTriangleCount() const
+    {
+        if (!mImpl || !mImpl->loaded) return 0;
+        int triangles = 0;
+        for (int meshIndex = 0; meshIndex < mImpl->model.meshCount; ++meshIndex)
+            triangles += mImpl->model.meshes[meshIndex].triangleCount;
+        return triangles;
+    }
+
+    int FbxModel::ReduceTriangles(float ratio)
+    {
+        if (!mImpl || !mImpl->loaded) return 0;
+        ratio = std::clamp(ratio, 0.05f, 1.0f);
+        const int before = GetTriangleCount();
+        int after = 0;
+        for (int meshIndex = 0; meshIndex < mImpl->model.meshCount; ++meshIndex)
+        {
+            std::vector<unsigned short> primaryBones;
+            const std::vector<unsigned short> *primaryBonesPtr = nullptr;
+            if (!mImpl->raylibAnimation && meshIndex < (int)mImpl->meshSkinData.size())
+            {
+                const MeshSkinData &skin = mImpl->meshSkinData[meshIndex];
+                primaryBones.resize(skin.influences.size(), 0xffff);
+                for (size_t vertex = 0; vertex < skin.influences.size(); ++vertex)
+                {
+                    float strongestWeight = 0.0f;
+                    for (int slot = 0; slot < 4; ++slot)
+                    {
+                        if (skin.influences[vertex].boneWeights[slot] > strongestWeight)
+                        {
+                            strongestWeight = skin.influences[vertex].boneWeights[slot];
+                            primaryBones[vertex] = (unsigned short)std::max(
+                                0, skin.influences[vertex].boneIndices[slot]);
+                        }
+                    }
+                }
+                primaryBonesPtr = &primaryBones;
+            }
+            after += ReduceMeshTriangles(mImpl->model.meshes[meshIndex], ratio, primaryBonesPtr);
+        }
+        TraceLog(LOG_INFO, "POLYGONS: reduced animated model from %i to %i triangles (ratio %.2f)",
+                 before, after, ratio);
+        return after;
     }
 
     void FbxModel::PlayAnimation(const char *animationName, bool loop, float playbackSpeed)

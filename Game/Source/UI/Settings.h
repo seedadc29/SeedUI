@@ -58,6 +58,10 @@ namespace game
         float synthRgbSplit = 0.0f;
         float synthVignette = 0.15f;
         float synthInvert = 0.0f;
+        // Razao de triangulos preservada pelo redutor geometrico (0.05..1.0).
+        float synthEnemyPolygonRatio = 0.25f;
+        float synthPlayerPolygonRatio = 0.45f;
+        float synthScenePolygonRatio = 0.25f;
     };
 
     void LoadSettings(Settings &settings);

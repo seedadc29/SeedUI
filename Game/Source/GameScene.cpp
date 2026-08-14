@@ -159,8 +159,16 @@ namespace game
         // extensao do mundo com celulas maiores. Isso cria silhuetas mais
         // facetadas e reduz bastante o custo geometrico.
         const bool reducedGeometry = mSettings.crtMode || mSettings.synthMode;
-        const int terrainResolution = reducedGeometry ? 64 : 128;
-        const float terrainCellSize = reducedGeometry ? 4.0f : 2.0f;
+        int terrainResolution = reducedGeometry ? 64 : 128;
+        if (mSettings.synthMode)
+        {
+            // A quantidade de triangulos do grid cresce aproximadamente com o
+            // quadrado da resolucao; sqrt converte a razao desejada em largura.
+            terrainResolution = std::clamp(
+                (int)roundf(64.0f * sqrtf(mSettings.synthScenePolygonRatio)), 16, 64);
+        }
+        const float terrainCellSize = reducedGeometry
+            ? 256.0f / (float)terrainResolution : 2.0f;
         TerrainObject *terrain = SpawnObject<TerrainObject>(
             terrainResolution, terrainResolution, terrainCellSize);
         mTerrain = terrain;
@@ -1295,6 +1303,9 @@ namespace game
             target.synthRgbSplit = source.synthRgbSplit;
             target.synthVignette = source.synthVignette;
             target.synthInvert = source.synthInvert;
+            target.synthEnemyPolygonRatio = source.synthEnemyPolygonRatio;
+            target.synthPlayerPolygonRatio = source.synthPlayerPolygonRatio;
+            target.synthScenePolygonRatio = source.synthScenePolygonRatio;
             target.synthMode = true;
             target.retroMode = true;
         }
@@ -1362,6 +1373,9 @@ namespace game
             SAVE_SYNTH_VALUE(synthRgbSplit);
             SAVE_SYNTH_VALUE(synthVignette);
             SAVE_SYNTH_VALUE(synthInvert);
+            SAVE_SYNTH_VALUE(synthEnemyPolygonRatio);
+            SAVE_SYNTH_VALUE(synthPlayerPolygonRatio);
+            SAVE_SYNTH_VALUE(synthScenePolygonRatio);
 #undef SAVE_SYNTH_VALUE
             if (!file) { error = "Falha ao gravar o arquivo."; return false; }
             return true;
@@ -1421,6 +1435,9 @@ namespace game
                     LOAD_SYNTH_FLOAT(synthRgbSplit);
                     LOAD_SYNTH_FLOAT(synthVignette);
                     LOAD_SYNTH_FLOAT(synthInvert);
+                    LOAD_SYNTH_FLOAT(synthEnemyPolygonRatio);
+                    LOAD_SYNTH_FLOAT(synthPlayerPolygonRatio);
+                    LOAD_SYNTH_FLOAT(synthScenePolygonRatio);
 #undef LOAD_SYNTH_INT
 #undef LOAD_SYNTH_FLOAT
 #undef LOAD_SYNTH_BOOL
@@ -1437,7 +1454,9 @@ namespace game
                 patch.synthEdgeStrength, patch.synthBinaryStrength,
                 patch.synthBinaryThreshold, patch.synthGridStrength,
                 patch.synthScanlineStrength, patch.synthCurvature,
-                patch.synthRgbSplit, patch.synthVignette, patch.synthInvert
+                patch.synthRgbSplit, patch.synthVignette, patch.synthInvert,
+                patch.synthEnemyPolygonRatio, patch.synthPlayerPolygonRatio,
+                patch.synthScenePolygonRatio
             };
             for (float value : importedFloats)
                 if (!std::isfinite(value))
@@ -1463,6 +1482,9 @@ namespace game
             patch.synthRgbSplit = std::clamp(patch.synthRgbSplit, 0.0f, 1.0f);
             patch.synthVignette = std::clamp(patch.synthVignette, 0.0f, 1.0f);
             patch.synthInvert = std::clamp(patch.synthInvert, 0.0f, 1.0f);
+            patch.synthEnemyPolygonRatio = std::clamp(patch.synthEnemyPolygonRatio, 0.05f, 1.0f);
+            patch.synthPlayerPolygonRatio = std::clamp(patch.synthPlayerPolygonRatio, 0.05f, 1.0f);
+            patch.synthScenePolygonRatio = std::clamp(patch.synthScenePolygonRatio, 0.05f, 1.0f);
             CopySynthPatch(settings, patch);
             return true;
         }
@@ -2383,8 +2405,14 @@ namespace game
 
         static int resolutionDraft = -1;
         static int textureDraft = -1;
+        static float enemyPolygonDraft = -1.0f;
+        static float playerPolygonDraft = -1.0f;
+        static float scenePolygonDraft = -1.0f;
         if (resolutionDraft < 0) resolutionDraft = mSettings.synthInternalWidth;
         if (textureDraft < 0) textureDraft = mSettings.synthTextureSize;
+        if (enemyPolygonDraft < 0.0f) enemyPolygonDraft = mSettings.synthEnemyPolygonRatio;
+        if (playerPolygonDraft < 0.0f) playerPolygonDraft = mSettings.synthPlayerPolygonRatio;
+        if (scenePolygonDraft < 0.0f) scenePolygonDraft = mSettings.synthScenePolygonRatio;
 
         if (ImGui::BeginTabBar("##SeedSynthTabs"))
         {
@@ -2492,6 +2520,45 @@ namespace game
                                      mSettings.synthRgbSplit, 0.0f, 1.0f);
                 save |= floatControl("Vinheta", "##vignetteSlider", "##vignetteInput",
                                      mSettings.synthVignette, 0.0f, 1.0f);
+                ImGui::EndTabItem();
+            }
+
+            if (ImGui::BeginTabItem("Geometria"))
+            {
+                ImGui::TextColored(ImVec4(0.35f, 0.92f, 0.72f, 1.0f),
+                                   "REDUTOR DE POLIGONOS");
+                ImGui::TextWrapped("Funciona como um Decimate por razao: 1.0 preserva a malha; "
+                                   "0.25 busca manter aproximadamente 25%% dos triangulos.");
+                ImGui::Separator();
+                floatControl("Inimigos", "##enemyPolySlider", "##enemyPolyInput",
+                             enemyPolygonDraft, 0.05f, 1.0f);
+                ImGui::TextDisabled("Estimativa: %.0f%% dos triangulos / %.0f%% removidos",
+                                    enemyPolygonDraft * 100.0f,
+                                    (1.0f - enemyPolygonDraft) * 100.0f);
+                ImGui::Separator();
+                floatControl("Player + roupa + arma", "##playerPolySlider", "##playerPolyInput",
+                             playerPolygonDraft, 0.05f, 1.0f);
+                ImGui::TextDisabled("Estimativa: %.0f%% dos triangulos / %.0f%% removidos",
+                                    playerPolygonDraft * 100.0f,
+                                    (1.0f - playerPolygonDraft) * 100.0f);
+                ImGui::Separator();
+                floatControl("Cenario + terreno", "##scenePolySlider", "##scenePolyInput",
+                             scenePolygonDraft, 0.05f, 1.0f);
+                ImGui::TextDisabled("Estimativa: %.0f%% dos triangulos / %.0f%% removidos",
+                                    scenePolygonDraft * 100.0f,
+                                    (1.0f - scenePolygonDraft) * 100.0f);
+                ImGui::Spacing();
+                ImGui::TextWrapped("A aplicacao recarrega a cena para reconstruir terreno e modelos. "
+                                   "Os inimigos detalhados mais proximos voltam; os demais usam LOD procedural.");
+                if (ImGui::Button("Aplicar geometria e recarregar", ImVec2(-1.0f, 40.0f)))
+                {
+                    mSettings.synthEnemyPolygonRatio = enemyPolygonDraft;
+                    mSettings.synthPlayerPolygonRatio = playerPolygonDraft;
+                    mSettings.synthScenePolygonRatio = scenePolygonDraft;
+                    std::snprintf(mSynthPatchStatus, sizeof(mSynthPatchStatus),
+                                  "Geometria aplicada. Recarregando a cena...");
+                    save = true;
+                }
                 ImGui::EndTabItem();
             }
 
@@ -2612,6 +2679,9 @@ namespace game
                     mSettings.retroMode = true;
                     resolutionDraft = mSettings.synthInternalWidth;
                     textureDraft = mSettings.synthTextureSize;
+                    enemyPolygonDraft = mSettings.synthEnemyPolygonRatio;
+                    playerPolygonDraft = mSettings.synthPlayerPolygonRatio;
+                    scenePolygonDraft = mSettings.synthScenePolygonRatio;
                     save = true;
                 }
 
@@ -2622,6 +2692,9 @@ namespace game
                     ResetSynthPatch(mSettings);
                     resolutionDraft = mSettings.synthInternalWidth;
                     textureDraft = mSettings.synthTextureSize;
+                    enemyPolygonDraft = mSettings.synthEnemyPolygonRatio;
+                    playerPolygonDraft = mSettings.synthPlayerPolygonRatio;
+                    scenePolygonDraft = mSettings.synthScenePolygonRatio;
                     std::snprintf(mSynthPatchStatus, sizeof(mSynthPatchStatus),
                                   "Patch restaurado para o padrao.");
                     save = true;
@@ -2652,6 +2725,9 @@ namespace game
                         {
                             resolutionDraft = mSettings.synthInternalWidth;
                             textureDraft = mSettings.synthTextureSize;
+                            enemyPolygonDraft = mSettings.synthEnemyPolygonRatio;
+                            playerPolygonDraft = mSettings.synthPlayerPolygonRatio;
+                            scenePolygonDraft = mSettings.synthScenePolygonRatio;
                             std::snprintf(mSynthPatchStatus, sizeof(mSynthPatchStatus),
                                           "Importado: %s", path.filename().string().c_str());
                             save = true;

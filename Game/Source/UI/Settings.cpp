@@ -95,6 +95,9 @@ namespace game
             else if (key == "synthRgbSplit") settings.synthRgbSplit = std::stof(value);
             else if (key == "synthVignette") settings.synthVignette = std::stof(value);
             else if (key == "synthInvert") settings.synthInvert = std::stof(value);
+            else if (key == "synthEnemyPolygonRatio") settings.synthEnemyPolygonRatio = std::stof(value);
+            else if (key == "synthPlayerPolygonRatio") settings.synthPlayerPolygonRatio = std::stof(value);
+            else if (key == "synthScenePolygonRatio") settings.synthScenePolygonRatio = std::stof(value);
         }
 
         settings.windowWidth = ClampInt(settings.windowWidth, 640, 3840);
@@ -130,6 +133,9 @@ namespace game
         settings.synthRgbSplit = ClampFloat(settings.synthRgbSplit, 0.0f, 1.0f);
         settings.synthVignette = ClampFloat(settings.synthVignette, 0.0f, 1.0f);
         settings.synthInvert = ClampFloat(settings.synthInvert, 0.0f, 1.0f);
+        settings.synthEnemyPolygonRatio = ClampFloat(settings.synthEnemyPolygonRatio, 0.05f, 1.0f);
+        settings.synthPlayerPolygonRatio = ClampFloat(settings.synthPlayerPolygonRatio, 0.05f, 1.0f);
+        settings.synthScenePolygonRatio = ClampFloat(settings.synthScenePolygonRatio, 0.05f, 1.0f);
     }
 
     void SaveSettings(const Settings &settings)
@@ -184,6 +190,9 @@ namespace game
             file << "synthRgbSplit=" << settings.synthRgbSplit << "\n";
             file << "synthVignette=" << settings.synthVignette << "\n";
             file << "synthInvert=" << settings.synthInvert << "\n";
+            file << "synthEnemyPolygonRatio=" << settings.synthEnemyPolygonRatio << "\n";
+            file << "synthPlayerPolygonRatio=" << settings.synthPlayerPolygonRatio << "\n";
+            file << "synthScenePolygonRatio=" << settings.synthScenePolygonRatio << "\n";
         }
     }
 

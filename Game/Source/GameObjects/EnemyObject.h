@@ -31,6 +31,7 @@ namespace game
     {
     public:
         EnemyObject(const glm::vec3 &spawnPosition, const EnemyConfig &config, float groundHeight);
+        ~EnemyObject() override;
         void OnSpawn(Scene &scene) override;
         void Update(Scene &scene, float deltaTime) override;
         void Draw(Scene &scene) override;
@@ -48,7 +49,8 @@ namespace game
         void MoveTowards(const glm::vec3 &target, float speed, float deltaTime);
         float TakeDamage(float amount, class PlayerObject &player, Scene &scene);
         void PlayStateAnimation();
-        void EnsureModelLoaded();
+        bool EnsureModelLoaded(float polygonRatio = 1.0f);
+        void ReleaseDetailedModelSlot();
 
         EnemyConfig mConfig;
         glm::vec3 mSpawnPosition;
@@ -68,6 +70,7 @@ namespace game
         bool mProvoked = false;
         bool mRewardGranted = false;
         bool mLoadAttempted = false;
+        bool mDetailedModelSlot = false;
         glm::vec3 mEditorRotation = glm::vec3(0.0f);
         glm::vec3 mEditorScale = glm::vec3(1.0f);
     };
