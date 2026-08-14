@@ -10,6 +10,8 @@ namespace seedui
 
     std::string AbrirDialogoProjeto();
     std::string SalvarDialogoProjeto(const std::string& nomeSugerido);
+    // Diálogo de exportação SVG (*.svg).
+    std::string SalvarDialogoSVG(const std::string& nomeSugerido);
 }
 
 #endif // SEEDUI_FILEDIALOGS_H

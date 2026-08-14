@@ -25,8 +25,8 @@
 | 01 | Fundação: documentação, formato, identidade visual | Em andamento |
 | 02 | Esqueleto executável do editor | Concluído |
 | 03 | Modelo de dados e salvamento (`projeto.ui.json`) | Concluído |
-| 04 | Hierarquia e biblioteca de componentes | Em andamento |
-| 05 | Canvas interativo (seleção, transformação, undo/redo) | Planejado |
+| 04 | Hierarquia e biblioteca de componentes | Concluído |
+| 05 | Canvas interativo (seleção, transformação, undo/redo) | Em andamento |
 | 06 | Inspetor e diretrizes | Planejado |
 | 07 | Texto e fontes | Planejado |
 | 08 | Recursos externos (PNG/JPG/WebP/SVG) | Planejado |
@@ -311,6 +311,32 @@ Primeira leva da especificação "interface CorelDRAW" (commit 72b9701 antes):
   seletores próprios (regra "não recriar o que existe"); telas sem UI de
   criação ficam para M10.
 
+### Fecho do M04 — lote autônomo de design gráfico (2026-08-13, madrugada)
+
+As 5 etapas de validação do Painel estão **completas**; o M04 está
+**concluído**. Rastreio detalhado em `CHECKLIST_M04_PAINEL.md`. Novidades
+nesta rodada (todas com autoteste; 131 PASS):
+
+- **Cores no Inspetor** (completa a Etapa 1): seção Cores com swatches de
+  preenchimento e contorno que abrem o seletor de 3 modelos no alvo certo
+  (`mColorPickerTarget`: preenchimento/contorno/cor do texto) e aplicam na
+  seleção inteira; botão × remove a cor.
+- **Cantos no Inspetor**: raio uniforme + 4 cantos com valores numéricos
+  (limitados a min(largura,altura)/2), complementando as alças do canvas.
+- **Setas nas linhas**: estilos.setas {inicio, fim, tamanho} com triângulos
+  preenchidos nas pontas (seguem a rotação) e controles no Inspetor.
+- **Ferramenta Texto (T)**: clique cria texto, arrastar define a caixa de
+  quebra; o canvas renderiza o conteúdo com tamanho (unidades de projeto) e
+  cor; o Inspetor edita conteúdo, tamanho e cor. (Tipografia completa com
+  fontes = M07.)
+- **Converter em caminho (Ctrl+Q)** — "Convert to Curves": formas viram
+  caminhos com nós amostrados de Geo::OutlineLocal (retângulo 4 pontos,
+  elipse 16, polígono `lados`, estrela `lados*2`), preservando
+  posição/tamanho/rotação/cores/espelhamento; depois é editável pela caneta.
+- **Exportação SVG mais fiel**: texto com cor_texto + font-size real;
+  gradientes como `<defs>` (linear/radial, referenciados por url(#id));
+  setas das linhas; números limpos; geração em `App::GerarSVG` (testável).
+
 ## Milestone 05 — Canvas interativo
 
 **Objetivo**: manipulação visual direta dos elementos.
@@ -512,3 +538,21 @@ com plano próprio e sem alterar silenciosamente o comportamento atual da engine
 | 2026-08-12 | **Previsão exata (correção da assertividade)**: alvos são os VALORES EXATOS da referência (removido o arredondamento de 0,5 — uma referência de 32,4 agora prevê 32,4, não 32,5); a previsão **vence a grade de 8px** no eixo em que engatou (a grade não desfaz mais o encaixe exato); re-afirmação por último; rótulos com **1 decimal** ("32.0"). Simulação do encadeamento grade+previsão com referência 32 prova que o pouso é exatamente 32 em qualquer posição bruta (nunca 31/33). Autoteste com **59 PASS**. |
 | 2026-08-12 | **Correção da assertividade VERTICAL**: as ramificações "seleção à esquerda do vizinho" (eixo X) e "seleção acima do vizinho" (eixo Y) do `SmartGuides::ApplySpacing` corrigiam o deslocamento na direção **invertida** (erro de sinal), fazendo o encaixe vertical cair em 31/33 em vez de 32. Sinais corrigidos nas 4 direções e testes novos cobrindo **vertical abaixo**, **vertical acima** e **horizontal direita** (a esquerda já era coberta) — todos pousam EXATAMENTE em 32. Autoteste com **61 PASS**. |
 | 2026-08-12 | **Pacote de refinamento UX (diretrizes 12/08)**: (1) novo alvo de alinhamento **"Conjunto"** (`AlignUtils.h`, testável): a referência passa a ser o **bounding box dos vizinhos** (elementos visíveis fora da seleção) — centralizar H+V coloca a forma exatamente no centro do conjunto com **distâncias uniformes nos 4 lados** (ex.: forma vermelha no centro dos quadros cinza); (2) **paleta de cores centralizada verticalmente** na faixa; (3) **bloco de debug/exportar movido do rodapé para o menu bar** do topo (nada mais sufoca a barra inferior); (4) **ponto de sangria do topo-esquerda alinhado** com a régua da coluna de ferramentas; (5) **painel direito convertido em abas** (Hierarquia / Inspetor / Biblioteca / Diretrizes / Recursos / Histórico — uma seção por vez, sem pilhas confusas). Autoteste com **65 PASS**. |
+| 2026-08-12 | **Pacote de ferramentas de design gráfico (foco CorelDRAW/Illustrator)** — Etapas A/B/C:
+  - **Duplicar (Ctrl+D)** com repetição do último deslocamento (`ColarElementosOffset` X/Y independentes);
+  - **Espelhar H/V real** (`transformacao.espelhado_h/v`, geometria espelhada no `Geo`, posição invertida em torno do centro do grupo, botões FlipH/FlipV);
+  - **Ferramenta Medir** (distância na unidade atual + ângulo, rótulo no canvas, transitória);
+  - **Sombra** (`estilos.sombra`: cor, desloc. X/Y, desfoque — camadas baratas sem GPU);
+  - **Contorno tracejado** (`estilos.tracejado`: traço/espaço, `DrawDashedClosedPolyline` sobre a tesselação);
+  - **Elemento Linha** (`linha`, clique por distância ao segmento);
+  - **Polígono/Estrela configurável** (`lados`, `estrela`, `raio_interno`; estrelas côncavas via `AddConcavePolyFilled`);
+  - **Caneta Bezier** (`caminho` com `pontos {x,y,cx2,cy2,curva}`, alça de entrada espelhada; clique=ponto, arraste=curva, clique no 1º fecha, Enter abre, Esc cancela; nós e alças editáveis na Seleção; Delete remove nó);
+  - **Modo wireframe** (só contornos, sem preenchimento/sombra);
+  - **Gradientes** (`estilos.gradiente`: linear H/V/diagonal + radial por anéis, controle no Inspetor);
+  - **Zoom 100% / Ajustar à tela / Ajustar à seleção** (Ctrl+1/0/9) e **Selecionar tudo** (Ctrl+A);
+  - **Exportar SVG** (Arquivo → Exportar SVG…, Ctrl+Shift+E: formas/linhas/caminhos/texto como `<path>`/`<text>` com fill/stroke/dash/opacidade);
+  - **Aba Camadas** no painel direito (lista plana topo→fundo, olho/cadeado por camada, trazer ao topo/enviar ao fundo).
+  Autoteste com **115 PASS**.
+- **Caneta — correção do artefato retangular (M04)**: caminhos passam a ser elementos de **traço** por padrão (contorno `#cfcfcf` visível, **sem preenchimento**) — fechar um caminho não cria mais um bloco; o preenchimento só aparece quando o usuário aplicar uma cor de fundo explicitamente (estilos.cor_fundo). Além disso, a **caixa do caminho** agora cobre o mín/máx de TODOS os pontos (re-ancoragem da origem quando o desenho sai à esquerda/acima do primeiro clique), então a caixa de seleção e o hit abraçam exatamente a curva — inclusive após arrastar nós ou remover nós com Delete.
+  Autoteste com **117 PASS**.
+| 2026-08-13 | **M04 concluído — lote autônomo de design gráfico** (madrugada): (1) seção **Cores no Inspetor** (swatches preenchimento/contorno + alvo do seletor `mColorPickerTarget`, aplicação na seleção inteira, × para remover) — completa a Etapa 1; (2) seção **Cantos** (raio uniforme + 4 cantos numéricos); (3) **setas nas linhas** (`estilos.setas`, triângulos seguindo a rotação); (4) **ferramenta Texto (T)** funcional — clique cria, arrasto define a caixa, canvas renderiza com tamanho/cor em unidades de projeto, Inspetor edita conteúdo/tamanho/cor (tipografia completa = M07); (5) **Converter em caminho (Ctrl+Q)** estilo "Convert to Curves" — formas viram caminhos editáveis por nós; (6) **Exportação SVG mais fiel** — texto com cor/tamanho reais, gradientes como `<defs>` (linear/radial), setas das linhas, números limpos, geração testável em `App::GerarSVG`. Autoteste com **134 PASS**. |

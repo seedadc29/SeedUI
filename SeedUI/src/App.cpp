@@ -40,6 +40,7 @@ extern "C"
 #include <cstdio>
 #include <ctime>
 #include <direct.h>
+#include <functional>
 
 namespace seedui
 {
@@ -62,11 +63,28 @@ namespace seedui
             printf("%s\n", buf);
         }
 
+        // Limites visíveis de uma subárvore (para ajustar o zoom à seleção).
+        void CollectVisibleBounds(Element& e, float& left, float& top,
+                                  float& right, float& bottom)
+        {
+            if (!e.visivel) return;
+            const float x = e.transformacao.value("x", 0.0f);
+            const float y = e.transformacao.value("y", 0.0f);
+            const float w = e.transformacao.value("largura", 160.0f);
+            const float h = e.transformacao.value("altura", 32.0f);
+            left = std::min(left, x);
+            top = std::min(top, y);
+            right = std::max(right, x + w);
+            bottom = std::max(bottom, y + h);
+            for (Element& c : e.filhos)
+                CollectVisibleBounds(c, left, top, right, bottom);
+        }
+
         constexpr float kToolbarWidth = 50.0f;
         constexpr float kActionBarHeight = 42.0f;
         constexpr float kPropertyBarHeight = 30.0f; // barra contextual (CorelDRAW)
-        constexpr float kStatusBarHeight = 34.0f;
-        constexpr float kColorBarHeight = 34.0f; // paleta de cores inferior (CorelDRAW)
+        constexpr float kStatusBarHeight = 30.0f;
+        constexpr float kColorBarHeight = 32.0f; // paleta de cores inferior (CorelDRAW)
         constexpr float kToolButtonSize = 32.0f;
         constexpr float kRightPanelMinWidth = 260.0f;
         constexpr float kRightPanelMaxWidth = 520.0f;
@@ -402,6 +420,168 @@ namespace seedui
                 element.transformacao.value("y", 0.0f) + dy;
             for (Element& child : element.filhos)
                 ApplyPositionDelta(child, dx, dy);
+        }
+
+        App::ElementSnapshot CaptureElementSnapshot(const Element& el)
+        {
+            App::ElementSnapshot s;
+            s.id = el.id;
+            s.x = el.transformacao.value("x", 0.0f);
+            s.y = el.transformacao.value("y", 0.0f);
+            s.w = el.transformacao.value("largura", 160.0f);
+            s.h = el.transformacao.value("altura", 32.0f);
+            s.rot = Geo::ElementRotation(el);
+            s.opacity = el.estilos.value("opacidade", 1.0f);
+            s.strokeOpacity = el.estilos.value("opacidade_borda", 1.0f);
+            s.borderWidth = el.estilos.value("espessura_borda", 1.0f);
+            s.cornerRadius = el.estilos.value("raio", 0.0f);
+            s.hasFillColor = el.estilos.contains("cor_fundo") && el.estilos["cor_fundo"] != "none";
+            if (s.hasFillColor)
+                ColorUtils::ParseHex(el.estilos.value("cor_fundo", "#ffffff"), s.fillRGB);
+            s.hasBorderColor = el.estilos.contains("cor_borda") && el.estilos["cor_borda"] != "none";
+            if (s.hasBorderColor)
+                ColorUtils::ParseHex(el.estilos.value("cor_borda", "#cfcfcf"), s.borderRGB);
+            s.fontSize = el.estilos.value("tamanho_fonte", 18.0f);
+            return s;
+        }
+
+        App::IncrementalDelta ComputeIncrementalDelta(const App::ElementSnapshot& origin, const Element& current)
+        {
+            App::IncrementalDelta d;
+            const float curX = current.transformacao.value("x", 0.0f);
+            const float curY = current.transformacao.value("y", 0.0f);
+            const float curW = current.transformacao.value("largura", 160.0f);
+            const float curH = current.transformacao.value("altura", 32.0f);
+            const float curRot = Geo::ElementRotation(current);
+            const float curOpacity = current.estilos.value("opacidade", 1.0f);
+            const float curStrokeOp = current.estilos.value("opacidade_borda", 1.0f);
+            const float curBorderWidth = current.estilos.value("espessura_borda", 1.0f);
+            const float curRadius = current.estilos.value("raio", 0.0f);
+
+            d.deltaX = curX - origin.x;
+            d.deltaY = curY - origin.y;
+            d.deltaRot = curRot - origin.rot;
+            d.scaleX = curW / std::max(0.01f, origin.w);
+            d.scaleY = curH / std::max(0.01f, origin.h);
+            d.deltaOpacity = curOpacity - origin.opacity;
+            d.deltaStrokeOpacity = curStrokeOp - origin.strokeOpacity;
+            d.deltaBorderWidth = curBorderWidth - origin.borderWidth;
+            d.deltaCornerRadius = curRadius - origin.cornerRadius;
+
+            float curFillRGB[3] = { 1.0f, 1.0f, 1.0f };
+            bool curHasFill = current.estilos.contains("cor_fundo") && current.estilos["cor_fundo"] != "none";
+            if (curHasFill)
+                ColorUtils::ParseHex(current.estilos.value("cor_fundo", "#ffffff"), curFillRGB);
+
+            if (origin.hasFillColor && curHasFill)
+            {
+                d.deltaFillRGB[0] = curFillRGB[0] - origin.fillRGB[0];
+                d.deltaFillRGB[1] = curFillRGB[1] - origin.fillRGB[1];
+                d.deltaFillRGB[2] = curFillRGB[2] - origin.fillRGB[2];
+                d.hasFillDelta = (fabsf(d.deltaFillRGB[0]) > 0.005f ||
+                                  fabsf(d.deltaFillRGB[1]) > 0.005f ||
+                                  fabsf(d.deltaFillRGB[2]) > 0.005f);
+            }
+            else
+            {
+                d.hasFillDelta = false;
+            }
+
+            float curBorderRGB[3] = { 0.8f, 0.8f, 0.8f };
+            bool curHasBorder = current.estilos.contains("cor_borda") && current.estilos["cor_borda"] != "none";
+            if (curHasBorder)
+                ColorUtils::ParseHex(current.estilos.value("cor_borda", "#cfcfcf"), curBorderRGB);
+
+            if (origin.hasBorderColor && curHasBorder)
+            {
+                d.deltaBorderRGB[0] = curBorderRGB[0] - origin.borderRGB[0];
+                d.deltaBorderRGB[1] = curBorderRGB[1] - origin.borderRGB[1];
+                d.deltaBorderRGB[2] = curBorderRGB[2] - origin.borderRGB[2];
+                d.hasBorderDelta = (fabsf(d.deltaBorderRGB[0]) > 0.005f ||
+                                    fabsf(d.deltaBorderRGB[1]) > 0.005f ||
+                                    fabsf(d.deltaBorderRGB[2]) > 0.005f);
+            }
+            else
+            {
+                d.hasBorderDelta = false;
+            }
+            return d;
+        }
+
+        void ApplyIncrementalDelta(Element& el, const App::IncrementalDelta& delta)
+        {
+            // 1. Posição numérica no sistema de coordenadas do documento
+            el.transformacao["x"] = el.transformacao.value("x", 0.0f) + delta.deltaX;
+            el.transformacao["y"] = el.transformacao.value("y", 0.0f) + delta.deltaY;
+
+            // 2. Rotação acumulativa
+            if (fabsf(delta.deltaRot) > 0.001f)
+            {
+                const float r = Geo::ElementRotation(el);
+                el.transformacao["rotacao"] = fmodf(r + delta.deltaRot, 360.0f);
+            }
+
+            // 3. Escala multiplicativa
+            if (fabsf(delta.scaleX - 1.0f) > 0.001f || fabsf(delta.scaleY - 1.0f) > 0.001f)
+            {
+                const float w = el.transformacao.value("largura", 160.0f);
+                const float h = el.transformacao.value("altura", 32.0f);
+                el.transformacao["largura"] = std::max(1.0f, w * delta.scaleX);
+                el.transformacao["altura"] = std::max(1.0f, h * delta.scaleY);
+                ClampElementCornerRadii(el);
+            }
+
+            // 4. Opacidade acumulativa
+            if (fabsf(delta.deltaOpacity) > 0.001f)
+            {
+                const float curOp = el.estilos.value("opacidade", 1.0f);
+                el.estilos["opacidade"] = std::clamp(curOp + delta.deltaOpacity, 0.0f, 1.0f);
+            }
+            if (fabsf(delta.deltaStrokeOpacity) > 0.001f)
+            {
+                const float curStOp = el.estilos.value("opacidade_borda", 1.0f);
+                el.estilos["opacidade_borda"] = std::clamp(curStOp + delta.deltaStrokeOpacity, 0.0f, 1.0f);
+            }
+
+            // 5. Espessura de contorno acumulativa
+            if (fabsf(delta.deltaBorderWidth) > 0.001f)
+            {
+                const float curBw = el.estilos.value("espessura_borda", 1.0f);
+                el.estilos["espessura_borda"] = std::max(0.0f, curBw + delta.deltaBorderWidth);
+            }
+
+            // 6. Cor de preenchimento progressiva (variação pelos canais RGB)
+            if (delta.hasFillDelta && el.estilos.contains("cor_fundo") && el.estilos["cor_fundo"] != "none")
+            {
+                float rgb[3] = { 1.0f, 1.0f, 1.0f };
+                ColorUtils::ParseHex(el.estilos.value("cor_fundo", "#ffffff"), rgb);
+                rgb[0] = std::clamp(rgb[0] + delta.deltaFillRGB[0], 0.0f, 1.0f);
+                rgb[1] = std::clamp(rgb[1] + delta.deltaFillRGB[1], 0.0f, 1.0f);
+                rgb[2] = std::clamp(rgb[2] + delta.deltaFillRGB[2], 0.0f, 1.0f);
+                el.estilos["cor_fundo"] = ColorUtils::ToHex(rgb[0], rgb[1], rgb[2]);
+            }
+
+            // 7. Cor de contorno progressiva
+            if (delta.hasBorderDelta && el.estilos.contains("cor_borda") && el.estilos["cor_borda"] != "none")
+            {
+                float rgb[3] = { 0.8f, 0.8f, 0.8f };
+                ColorUtils::ParseHex(el.estilos.value("cor_borda", "#cfcfcf"), rgb);
+                rgb[0] = std::clamp(rgb[0] + delta.deltaBorderRGB[0], 0.0f, 1.0f);
+                rgb[1] = std::clamp(rgb[1] + delta.deltaBorderRGB[1], 0.0f, 1.0f);
+                rgb[2] = std::clamp(rgb[2] + delta.deltaBorderRGB[2], 0.0f, 1.0f);
+                el.estilos["cor_borda"] = ColorUtils::ToHex(rgb[0], rgb[1], rgb[2]);
+            }
+
+            // 8. Cantos arredondados acumulativos
+            if (fabsf(delta.deltaCornerRadius) > 0.001f)
+            {
+                const float curR = el.estilos.value("raio", 0.0f);
+                const float newR = std::max(0.0f, curR + delta.deltaCornerRadius);
+                el.estilos["raio"] = newR;
+                for (int m = 10; m <= 13; ++m)
+                    SetElementCornerRadius(el, m, newR);
+                ClampElementCornerRadii(el);
+            }
         }
 
     }    void App::Run(bool captureAfterBoot)
@@ -894,35 +1074,245 @@ namespace seedui
         }
 
         Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
-        Element* first = Project::ResolverId(mode, ids.front());
-        if (!first) return;
-        const float srcX = first->transformacao.value("x", 0.0f);
-        const float srcY = first->transformacao.value("y", 0.0f);
+        Element* sourceEl = Project::ResolverId(mode, ids.front());
+        if (!sourceEl) return;
+
+        // Máquina de 3 Estados para Duplicação Incremental (estilo CorelDRAW):
+        // 1. Estado A: Objeto original antes da primeira duplicação
+        // 2. Estado B: Primeira cópia após o usuário modificá-la
+        // 3. Delta A->B: Diferença completa entre A e B aplicada cumulativamente nas próximas cópias (C, D, E...)
+        if (mIncDup.phase == IncrementalDupPhase::FirstDuplicated &&
+            mIncDup.currentCloneId == sourceEl->id)
+        {
+            // Calcula o Delta A->B completo comparando o Estado A guardado com o Estado B modificado:
+            mIncDup.fixedDelta = ComputeIncrementalDelta(mIncDup.stateA, *sourceEl);
+            // Se o usuário não deslocou B, utiliza o deslocamento padrão (mDuplicateDX/DY):
+            if (fabsf(mIncDup.fixedDelta.deltaX) < 0.001f && fabsf(mIncDup.fixedDelta.deltaY) < 0.001f)
+            {
+                mIncDup.fixedDelta.deltaX = mDuplicateDX;
+                mIncDup.fixedDelta.deltaY = mDuplicateDY;
+            }
+            mIncDup.phase = IncrementalDupPhase::RunningChain;
+        }
+        else if (mIncDup.phase == IncrementalDupPhase::RunningChain &&
+                 mIncDup.currentCloneId == sourceEl->id)
+        {
+            // Continuando a cadeia de repetição: mantém o fixedDelta inalterado
+        }
+        else
+        {
+            // Nova sequência: captura o Estado A
+            mIncDup.stateA = CaptureElementSnapshot(*sourceEl);
+            mIncDup.fixedDelta.deltaX = mDuplicateDX;
+            mIncDup.fixedDelta.deltaY = mDuplicateDY;
+            mIncDup.fixedDelta.deltaRot = (mLastAction.kind == ActionKind::Rotate) ? mLastAction.rotateDelta : 0.0f;
+            mIncDup.fixedDelta.scaleX = (mLastAction.kind == ActionKind::Scale) ? mLastAction.scaleFactorX : 1.0f;
+            mIncDup.fixedDelta.scaleY = (mLastAction.kind == ActionKind::Scale) ? mLastAction.scaleFactorY : 1.0f;
+            mIncDup.fixedDelta.deltaOpacity = 0.0f;
+            mIncDup.fixedDelta.deltaStrokeOpacity = 0.0f;
+            mIncDup.fixedDelta.deltaBorderWidth = 0.0f;
+            mIncDup.fixedDelta.deltaCornerRadius = 0.0f;
+            mIncDup.fixedDelta.hasFillDelta = false;
+            mIncDup.fixedDelta.hasBorderDelta = false;
+            mIncDup.phase = IncrementalDupPhase::FirstDuplicated;
+        }
 
         const std::vector<Element> copies = Project::CopiarElementos(mode, ids);
         if (copies.empty()) return;
 
         ++mElementPasteGeneration;
-        // Ctrl+D repete o ÚLTIMO deslocamento aplicado (estilo CorelDRAW):
-        // a primeira duplicação usa 16px, as seguintes usam o mesmo passo.
+        // Cola a nova cópia com offset 0 (o deslocamento e todas as transformações são aplicados numericamente em ApplyIncrementalDelta)
         const std::vector<std::string> pastedRootIds = Project::ColarElementosOffset(
-            mProject, mode, copies, mDuplicateDX, mDuplicateDY);
+            mProject, mode, copies, 0.0f, 0.0f);
 
-        Element* pasted = pastedRootIds.empty()
-            ? nullptr : Project::ResolverId(mode, pastedRootIds.front());
-        if (pasted)
+        // Aplica o Delta A->B sobre cada novo elemento clonado
+        for (const std::string& pid : pastedRootIds)
         {
-            mDuplicateDX = pasted->transformacao.value("x", 0.0f) - srcX;
-            mDuplicateDY = pasted->transformacao.value("y", 0.0f) - srcY;
+            if (Element* el = Project::ResolverId(mode, pid))
+            {
+                ApplyIncrementalDelta(*el, mIncDup.fixedDelta);
+            }
         }
+
+        // Atualiza a referência da cadeia para a nova cópia criada
+        mIncDup.currentCloneId = pastedRootIds.front();
 
         mSelectedElementIds = pastedRootIds;
         mSelectedElementId = pastedRootIds.empty() ? std::string() : pastedRootIds.back();
         mProjectDirty = true;
         CapturarHistorico();
         mStatusMsg = std::to_string(pastedRootIds.size()) +
-                     " elemento(s) duplicado(s)";
+                     " elemento(s) duplicado(s) incrementalmente (Ctrl+D)";
         mStatusMsgUntil = GetTime() + 4.0;
+    }
+
+    void App::RepetirUltimaAcao()
+    {
+        if (!PossuiModoAtivo())
+        {
+            mStatusMsg = "Nenhum modo ativo para repetir ação";
+            mStatusMsgUntil = GetTime() + 4.0;
+            return;
+        }
+
+        std::vector<std::string> ids = mSelectedElementIds;
+        if (!mSelectedElementId.empty() &&
+            std::find(ids.begin(), ids.end(), mSelectedElementId) == ids.end())
+            ids.push_back(mSelectedElementId);
+        if (ids.empty())
+        {
+            mStatusMsg = "Selecione um elemento para aplicar a repetição (Ctrl+R)";
+            mStatusMsgUntil = GetTime() + 4.0;
+            return;
+        }
+
+        Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+        bool changed = false;
+
+        switch (mLastAction.kind)
+        {
+            case ActionKind::FillColor:
+            {
+                bool blocked = false;
+                int count = ApplyStyleToSelection(mode, ids, "cor_fundo", mLastAction.fillColor, blocked);
+                if (count > 0)
+                {
+                    changed = true;
+                    mStatusMsg = "Cor de preenchimento repetida: " + mLastAction.fillColor;
+                }
+                break;
+            }
+            case ActionKind::BorderColor:
+            {
+                bool blocked = false;
+                int count = ApplyStyleToSelection(mode, ids, "cor_borda", mLastAction.borderColor, blocked);
+                if (count > 0)
+                {
+                    changed = true;
+                    mStatusMsg = "Cor de contorno repetida: " + mLastAction.borderColor;
+                }
+                break;
+            }
+            case ActionKind::BorderWidth:
+            {
+                for (const std::string& id : ids)
+                {
+                    if (Element* el = Project::ResolverId(mode, id))
+                    {
+                        if (el->bloqueado) continue;
+                        el->estilos["espessura_borda"] = mLastAction.borderWidth;
+                        changed = true;
+                    }
+                }
+                if (changed)
+                    mStatusMsg = "Espessura de contorno repetida: " + std::to_string((int)mLastAction.borderWidth) + "px";
+                break;
+            }
+            case ActionKind::Opacity:
+            {
+                for (const std::string& id : ids)
+                {
+                    if (Element* el = Project::ResolverId(mode, id))
+                    {
+                        if (el->bloqueado) continue;
+                        el->estilos["opacidade"] = mLastAction.opacity;
+                        changed = true;
+                    }
+                }
+                if (changed)
+                    mStatusMsg = "Opacidade repetida: " + std::to_string((int)(mLastAction.opacity * 100.0f)) + "%";
+                break;
+            }
+            case ActionKind::CornerRadius:
+            {
+                for (const std::string& id : ids)
+                {
+                    if (Element* el = Project::ResolverId(mode, id))
+                    {
+                        if (el->bloqueado) continue;
+                        SetElementCornerRadius(*el, 10, mLastAction.cornerRadius);
+                        SetElementCornerRadius(*el, 11, mLastAction.cornerRadius);
+                        SetElementCornerRadius(*el, 12, mLastAction.cornerRadius);
+                        SetElementCornerRadius(*el, 13, mLastAction.cornerRadius);
+                        ClampElementCornerRadii(*el);
+                        changed = true;
+                    }
+                }
+                if (changed)
+                    mStatusMsg = "Raio dos cantos repetido: " + std::to_string((int)mLastAction.cornerRadius) + "px";
+                break;
+            }
+            case ActionKind::Rotate:
+            {
+                for (const std::string& id : ids)
+                {
+                    if (Element* el = Project::ResolverId(mode, id))
+                    {
+                        if (el->bloqueado) continue;
+                        const float curRot = Geo::ElementRotation(*el);
+                        el->transformacao["rotacao"] = fmodf(curRot + mLastAction.rotateDelta, 360.0f);
+                        changed = true;
+                    }
+                }
+                if (changed)
+                {
+                    char buf[32];
+                    snprintf(buf, sizeof(buf), "%.1f°", mLastAction.rotateDelta);
+                    mStatusMsg = std::string("Rotação repetida: ") + buf;
+                }
+                break;
+            }
+            case ActionKind::Scale:
+            {
+                for (const std::string& id : ids)
+                {
+                    if (Element* el = Project::ResolverId(mode, id))
+                    {
+                        if (el->bloqueado) continue;
+                        const float w = el->transformacao.value("largura", 160.0f);
+                        const float h = el->transformacao.value("altura", 32.0f);
+                        const float newW = std::max(1.0f, (mLastAction.scaleFactorX > 0.001f) ? (w * mLastAction.scaleFactorX) : (w + mLastAction.deltaW));
+                        const float newH = std::max(1.0f, (mLastAction.scaleFactorY > 0.001f) ? (h * mLastAction.scaleFactorY) : (h + mLastAction.deltaH));
+                        el->transformacao["largura"] = newW;
+                        el->transformacao["altura"] = newH;
+                        ClampElementCornerRadii(*el);
+                        changed = true;
+                    }
+                }
+                if (changed)
+                    mStatusMsg = "Redimensionamento repetido";
+                break;
+            }
+            case ActionKind::Move:
+            {
+                for (const std::string& id : ids)
+                {
+                    if (Element* el = Project::ResolverId(mode, id))
+                    {
+                        if (el->bloqueado) continue;
+                        ApplyPositionDelta(*el, mLastAction.moveDX, mLastAction.moveDY);
+                        changed = true;
+                    }
+                }
+                if (changed)
+                    mStatusMsg = "Deslocamento repetido";
+                break;
+            }
+            default:
+                mStatusMsg = "Nenhuma ação anterior registrada para repetir (Ctrl+R)";
+                break;
+        }
+
+        if (changed)
+        {
+            mProjectDirty = true;
+            CapturarHistorico();
+            mStatusMsgUntil = GetTime() + 4.0;
+        }
+        else
+        {
+            mStatusMsgUntil = GetTime() + 3.0;
+        }
     }
 
     void App::EspelharSelecao(bool horizontal)
@@ -950,6 +1340,78 @@ namespace seedui
         mStatusMsg = horizontal ? "Espelhado horizontalmente"
                                 : "Espelhado verticalmente";
         mStatusMsgUntil = GetTime() + 4.0;
+    }
+
+    void App::ConverterEmCaminho()
+    {
+        // "Converter em caminho" (Ctrl+Q, estilo CorelDRAW "Convert to
+        // Curves"): transforma formas (retângulo, elipse, polígono/estrela,
+        // painel, botão...) em um caminho editável por nós — o contorno é
+        // amostrado e virado transformacao.pontos, preservando posição,
+        // tamanho, rotação, cores e espelhamento. Depois da conversão o
+        // elemento é editado com as ferramentas da caneta (nós e alças).
+        if (!PossuiModoAtivo())
+        {
+            mStatusMsg = "Nenhum modo ativo para converter";
+            mStatusMsgUntil = GetTime() + 4.0;
+            return;
+        }
+        std::vector<std::string> ids = mSelectedElementIds;
+        if (!mSelectedElementId.empty() &&
+            std::find(ids.begin(), ids.end(), mSelectedElementId) == ids.end())
+            ids.push_back(mSelectedElementId);
+        if (ids.empty())
+        {
+            mStatusMsg = "Selecione uma forma para converter";
+            mStatusMsgUntil = GetTime() + 4.0;
+            return;
+        }
+
+        Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+        int converted = 0;
+        for (const std::string& id : ids)
+        {
+            Element* element = Project::ResolverId(mode, id);
+            if (!element || element->bloqueado) continue;
+            // Já é caminho/linha/texto ou não tem corpo: nada a converter.
+            const std::string& tipo = element->tipo;
+            if (tipo == "caminho" || tipo == "linha" || tipo == "texto" ||
+                tipo == "grupo")
+                continue;
+
+            // Amostra o contorno local (retângulo com quinas, elipse,
+            // polígono/estrela configurável — tudo via Geo::OutlineLocal).
+            std::vector<ImVec2> outline;
+            const int segments = tipo == "elipse" ? 16 : 48;
+            Geo::OutlineLocal(*element, outline, segments);
+            if (outline.size() < 3) continue;
+
+            nlohmann::json pontos = nlohmann::json::array();
+            for (const ImVec2& p : outline)
+            {
+                pontos.push_back(nlohmann::json{
+                    { "x", p.x }, { "y", p.y },
+                    { "cx2", 0.0f }, { "cy2", 0.0f }, { "curva", 0.0f }
+                });
+            }
+            element->tipo = "caminho";
+            element->transformacao["pontos"] = std::move(pontos);
+            element->transformacao["fechado"] = 1.0f;
+            ++converted;
+        }
+        if (converted)
+        {
+            mProjectDirty = true;
+            CapturarHistorico();
+            mStatusMsg = std::to_string(converted) +
+                         " forma(s) convertida(s) em caminho — edite os nós";
+            mStatusMsgUntil = GetTime() + 5.0;
+        }
+        else
+        {
+            mStatusMsg = "Nenhuma forma selecionada pôde ser convertida";
+            mStatusMsgUntil = GetTime() + 4.0;
+        }
     }
 
     void App::HandleMeasureTool(bool canvasHovered)
@@ -1039,15 +1501,43 @@ namespace seedui
         const float by = path.transformacao.value("y", 0.0f);
         const float lx = projectX - bx;
         const float ly = projectY - by;
-        const float w = path.transformacao.value("largura", 1.0f);
-        const float h = path.transformacao.value("altura", 1.0f);
         path.transformacao["pontos"].push_back(nlohmann::json{
             { "x", lx }, { "y", ly },
             { "cx2", handleDX }, { "cy2", handleDY },
             { "curva", curved ? 1.0f : 0.0f }
         });
-        path.transformacao["largura"] = std::max(w, lx + 2.0f);
-        path.transformacao["altura"] = std::max(h, ly + 2.0f);
+        RecalcularCaixaCaminho(path);
+    }
+
+    // Caixa exata do caminho a partir do MÍN/MÁX de TODOS os pontos. Como o
+    // desenho pode sair em qualquer direção (inclusive à esquerda/acima do
+    // primeiro clique), a origem é re-ancorada no canto mínimo da caixa — a
+    // caixa de seleção e o hit passam a cobrir exatamente a curva.
+    void App::RecalcularCaixaCaminho(Element& path)
+    {
+        if (!path.transformacao.is_object() ||
+            !path.transformacao.contains("pontos") ||
+            !path.transformacao["pontos"].is_array())
+            return;
+        auto& pts = path.transformacao["pontos"];
+        if (pts.empty()) return;
+        float minX = 0.0f, minY = 0.0f, maxX = 0.0f, maxY = 0.0f;
+        if (!Geo::PathBounds(path, minX, minY, maxX, maxY)) return;
+        const bool shift = minX < 0.0f || minY < 0.0f;
+        if (shift)
+        {
+            path.transformacao["x"] =
+                path.transformacao.value("x", 0.0f) + minX;
+            path.transformacao["y"] =
+                path.transformacao.value("y", 0.0f) + minY;
+            for (auto& p : pts)
+            {
+                p["x"] = p.value("x", 0.0f) - minX;
+                p["y"] = p.value("y", 0.0f) - minY;
+            }
+        }
+        path.transformacao["largura"] = std::max(1.0f, maxX - minX);
+        path.transformacao["altura"] = std::max(1.0f, maxY - minY);
     }
 
     void App::HandlePenTool(bool canvasHovered)
@@ -1057,8 +1547,178 @@ namespace seedui
         const bool inside = CanvasScreenToProject(&mProject, mouse.x, mouse.y,
             px, py, false, mCanvasZoom, mCanvasPanX, mCanvasPanY);
 
+        mPenMouseProjectX = px;
+        mPenMouseProjectY = py;
+        mPenHoverSegmentIndex = -1;
+
         if (!mPenDrawing)
         {
+            // Verifica hover sobre segmentos de um caminho selecionado para inserção de nó (+).
+            if (PossuiModoAtivo() && !mSelectedElementId.empty())
+            {
+                Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+                Element* sel = Project::ResolverId(mode, mSelectedElementId);
+                if (sel && sel->tipo == "caminho" && !sel->bloqueado &&
+                    sel->transformacao.contains("pontos") &&
+                    sel->transformacao["pontos"].is_array() &&
+                    sel->transformacao["pontos"].size() >= 2)
+                {
+                    const float sbx = sel->transformacao.value("x", 0.0f);
+                    const float sby = sel->transformacao.value("y", 0.0f);
+                    const float localX = px - sbx;
+                    const float localY = py - sby;
+                    const float tol = 9.0f / std::max(0.25f, mCanvasZoom);
+                    float projX = 0.0f, projY = 0.0f;
+                    int segIdx = -1;
+                    float segT = 0.0f;
+                    if (Geo::FindSegmentOnPath(*sel, localX, localY, tol, segIdx, segT, projX, projY))
+                    {
+                        mPenHoverSegmentIndex = segIdx;
+                        mPenHoverT = segT;
+                        mPenHoverProjX = sbx + projX;
+                        mPenHoverProjY = sby + projY;
+
+                        // CLIQUE NO SEGMENTO: subdivide a curva usando De Casteljau (sem deformar o formato visual!)
+                        if (canvasHovered && inside && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+                        {
+                            auto& pts = sel->transformacao["pontos"];
+                            const int n = (int)pts.size();
+                            const int j = (segIdx + 1) % n;
+                            const auto& pa = pts[segIdx];
+                            const auto& pb = pts[j];
+                            const float ax = pa.value("x", 0.0f);
+                            const float ay = pa.value("y", 0.0f);
+                            const float bx = pb.value("x", 0.0f);
+                            const float by = pb.value("y", 0.0f);
+                            const bool curved = pa.value("curva", 0.0f) > 0.5f || pb.value("curva", 0.0f) > 0.5f;
+
+                            nlohmann::json newPt;
+                            if (curved)
+                            {
+                                const float c2x = ax + pa.value("cx2", 0.0f);
+                                const float c2y = ay + pa.value("cy2", 0.0f);
+                                float c1x = 0.0f, c1y = 0.0f;
+                                if (pb.value("quebrado", 0.0f) > 0.5f)
+                                {
+                                    c1x = bx + pb.value("cx1", 0.0f);
+                                    c1y = by + pb.value("cy1", 0.0f);
+                                }
+                                else
+                                {
+                                    c1x = bx - pb.value("cx2", 0.0f);
+                                    c1y = by - pb.value("cy2", 0.0f);
+                                }
+                                ImVec2 Q[4], R[4];
+                                Geo::SplitCubic(ImVec2(ax, ay), ImVec2(c2x, c2y),
+                                                ImVec2(c1x, c1y), ImVec2(bx, by),
+                                                segT, Q, R);
+
+                                pts[segIdx]["cx2"] = Q[1].x - ax;
+                                pts[segIdx]["cy2"] = Q[1].y - ay;
+                                pts[segIdx]["curva"] = 1.0f;
+
+                                newPt["x"] = Q[3].x;
+                                newPt["y"] = Q[3].y;
+                                newPt["cx1"] = Q[2].x - Q[3].x;
+                                newPt["cy1"] = Q[2].y - Q[3].y;
+                                newPt["cx2"] = R[1].x - R[0].x;
+                                newPt["cy2"] = R[1].y - R[0].y;
+                                newPt["curva"] = 1.0f;
+                                newPt["quebrado"] = 1.0f;
+
+                                pts[j]["cx1"] = R[2].x - bx;
+                                pts[j]["cy1"] = R[2].y - by;
+                                pts[j]["quebrado"] = 1.0f;
+                            }
+                            else
+                            {
+                                newPt["x"] = projX;
+                                newPt["y"] = projY;
+                                newPt["cx1"] = 0.0f;
+                                newPt["cy1"] = 0.0f;
+                                newPt["cx2"] = 0.0f;
+                                newPt["cy2"] = 0.0f;
+                                newPt["curva"] = 0.0f;
+                                newPt["quebrado"] = 0.0f;
+                            }
+                            pts.insert(pts.begin() + segIdx + 1, std::move(newPt));
+                            RecalcularCaixaCaminho(*sel);
+                            mProjectDirty = true;
+                            CapturarHistorico();
+                            mStatusMsg = "Nó adicionado à curva (subdivisão exata De Casteljau)";
+                            mStatusMsgUntil = GetTime() + 4.0;
+                            return;
+                        }
+                    }
+                }
+            }
+
+            // CONTINUAR CONTORNO: se houver um caminho selecionado e o clique
+            // for no ÚLTIMO ponto (ponto solto), retoma o desenho a partir
+            // dele — os próximos cliques adicionam pontos ao mesmo caminho.
+            if (canvasHovered && inside &&
+                ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            {
+                Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+                Element* sel = Project::ResolverId(mode, mSelectedElementId);
+                if (sel && sel->tipo == "caminho" && !sel->bloqueado &&
+                    sel->transformacao.contains("pontos") &&
+                    sel->transformacao["pontos"].is_array() &&
+                    sel->transformacao["pontos"].size() >= 2 &&
+                    sel->transformacao.value("fechado", 0.0f) < 0.5f)
+                {
+                    const auto& spts = sel->transformacao["pontos"];
+                    const float sbx = sel->transformacao.value("x", 0.0f);
+                    const float sby = sel->transformacao.value("y", 0.0f);
+                    const int last = (int)spts.size() - 1;
+                    const float lx = sbx + spts[last].value("x", 0.0f);
+                    const float ly = sby + spts[last].value("y", 0.0f);
+                    const float ddx = px - lx, ddy = py - ly;
+                    if (ddx * ddx + ddy * ddy <= 256.0f)
+                    {
+                        // Retoma o desenho no caminho existente.
+                        mPenDrawing = true;
+                        mStatusMsg = "Contorno em continuação — clique p/ adicionar";
+                        mStatusMsgUntil = GetTime() + 4.0;
+                        return;
+                    }
+                }
+            }
+            // EXCLUIR PONTO: clicar em um NÓ existente com a caneta remove
+            // o ponto da forma (mantém o caminho com 2+ pontos).
+            if (canvasHovered && inside &&
+                ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            {
+                Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+                Element* sel = Project::ResolverId(mode, mSelectedElementId);
+                if (sel && sel->tipo == "caminho" && !sel->bloqueado &&
+                    sel->transformacao.contains("pontos") &&
+                    sel->transformacao["pontos"].is_array() &&
+                    sel->transformacao["pontos"].size() > 2)
+                {
+                    auto& spts = sel->transformacao["pontos"];
+                    const float sbx = sel->transformacao.value("x", 0.0f);
+                    const float sby = sel->transformacao.value("y", 0.0f);
+                    const float nodeTol = 7.0f / std::max(0.25f, mCanvasZoom);
+                    const float nodeTolSq = nodeTol * nodeTol;
+                    for (int i = 0; i < (int)spts.size(); ++i)
+                    {
+                        const float nx = sbx + spts[i].value("x", 0.0f);
+                        const float ny = sby + spts[i].value("y", 0.0f);
+                        const float dx = px - nx, dy = py - ny;
+                        if (dx * dx + dy * dy <= nodeTolSq)
+                        {
+                            spts.erase(spts.begin() + i);
+                            RecalcularCaixaCaminho(*sel);
+                            mProjectDirty = true;
+                            CapturarHistorico();
+                            mStatusMsg = "Ponto removido da forma";
+                            mStatusMsgUntil = GetTime() + 4.0;
+                            return;
+                        }
+                    }
+                }
+            }
             // Primeiro clique: cria o caminho com o primeiro ponto.
             if (canvasHovered && inside &&
                 ImGui::IsMouseClicked(ImGuiMouseButton_Left))
@@ -1080,14 +1740,23 @@ namespace seedui
                     { "fechado", 0.0f },
                     { "pontos", nlohmann::json::array({ nlohmann::json{
                           { "x", 0.0f }, { "y", 0.0f },
-                          { "cx2", 0.0f }, { "cy2", 0.0f }, { "curva", 0.0f } } }) }
+                          { "cx1", 0.0f }, { "cy1", 0.0f },
+                          { "cx2", 0.0f }, { "cy2", 0.0f },
+                          { "curva", 0.0f }, { "quebrado", 0.0f } } }) }
+                };
+                e.estilos = {
+                    { "cor_borda", "#cfcfcf" },
+                    { "espessura_borda", 1.5f }
                 };
                 mode.raiz.push_back(std::move(e));
                 mSelectedElementId = id;
                 mSelectedElementIds = { id };
                 mPenDrawing = true;
+                mPenDragging = true;
+                mPenDragStartX = mPenDragX = px;
+                mPenDragStartY = mPenDragY = py;
                 mProjectDirty = true;
-                mStatusMsg = "Caneta: clique adiciona ponto · arraste cria curva";
+                mStatusMsg = "Caneta: clique adiciona ponto · arraste cria curva · Alt quebra alça · Espaço move nó";
                 mStatusMsgUntil = GetTime() + 6.0;
             }
             ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
@@ -1104,7 +1773,6 @@ namespace seedui
 
         if (ImGui::IsKeyPressed(ImGuiKey_Escape))
         {
-            // Cancela: remove o caminho em construção.
             auto it = std::find_if(mode.raiz.begin(), mode.raiz.end(),
                 [&](const Element& el) { return el.id == path->id; });
             if (it != mode.raiz.end()) mode.raiz.erase(it);
@@ -1130,50 +1798,151 @@ namespace seedui
         const float bx = path->transformacao.value("x", 0.0f);
         const float by = path->transformacao.value("y", 0.0f);
 
-        // Fechar: clique perto do primeiro ponto (com 3+ pontos).
-        if (canvasHovered && inside &&
-            ImGui::IsMouseClicked(ImGuiMouseButton_Left) && pts.size() >= 3)
+        // Snap magnético suave (14px de raio na tela)
+        float unusedX = 0.0f, unusedY = 0.0f, viewScale = 1.0f;
+        CanvasProjectToScreen(&mProject, 0.0f, 0.0f, unusedX, unusedY, viewScale,
+                              mCanvasZoom, mCanvasPanX, mCanvasPanY);
+        const float snapScreenDist = 14.0f;
+        const float snapTol = snapScreenDist / std::max(0.001f, viewScale);
+        const float snapTolSq = snapTol * snapTol;
+
+        mPenSnapActive = false;
+        mPenSnapProjX = 0.0f;
+        mPenSnapProjY = 0.0f;
+        mPenSnapIsClose = false;
+
+        // 1. Fechamento de elo no primeiro ponto do caminho (se houver 3+ pontos)
+        if (pts.size() >= 3)
         {
             const float fpx = bx + pts[0].value("x", 0.0f);
             const float fpy = by + pts[0].value("y", 0.0f);
             const float ddx = px - fpx, ddy = py - fpy;
-            if (ddx * ddx + ddy * ddy <= 144.0f)
+            if (ddx * ddx + ddy * ddy <= snapTolSq)
             {
-                path->transformacao["fechado"] = 1.0f;
-                mPenDrawing = false;
-                mProjectDirty = true;
-                mStatusMsg = "Caminho fechado";
-                mStatusMsgUntil = GetTime() + 4.0;
-                return;
+                mPenSnapActive = true;
+                mPenSnapProjX = fpx;
+                mPenSnapProjY = fpy;
+                mPenSnapIsClose = true;
+                px = fpx;
+                py = fpy;
+                mPenMouseProjectX = fpx;
+                mPenMouseProjectY = fpy;
             }
         }
 
-        // Clique / arrasto adiciona ponto.
+        // 2. Conexão / snap em outros nós de caminhos ou extremidades
+        if (!mPenSnapActive)
+        {
+            for (size_t i = 0; i < pts.size(); ++i)
+            {
+                const float nx = bx + pts[i].value("x", 0.0f);
+                const float ny = by + pts[i].value("y", 0.0f);
+                const float ddx = px - nx, ddy = py - ny;
+                if (ddx * ddx + ddy * ddy <= snapTolSq)
+                {
+                    mPenSnapActive = true;
+                    mPenSnapProjX = nx;
+                    mPenSnapProjY = ny;
+                    mPenSnapIsClose = (i == 0 && pts.size() >= 3);
+                    px = nx;
+                    py = ny;
+                    mPenMouseProjectX = nx;
+                    mPenMouseProjectY = ny;
+                    break;
+                }
+            }
+        }
+
+        // Fechar: clique com snap no primeiro ponto (com 3+ pontos).
+        if (canvasHovered && inside &&
+            ImGui::IsMouseClicked(ImGuiMouseButton_Left) && mPenSnapIsClose)
+        {
+            path->transformacao["fechado"] = 1.0f;
+            mPenDrawing = false;
+            mPenSnapActive = false;
+            mProjectDirty = true;
+            CapturarHistorico();
+            mStatusMsg = "Caminho fechado com sucesso";
+            mStatusMsgUntil = GetTime() + 4.0;
+            return;
+        }
+
+        // Clique / arrasto adiciona ponto AO VIVO (estilo Illustrator / CorelDRAW)
         if (canvasHovered && inside &&
             ImGui::IsMouseClicked(ImGuiMouseButton_Left))
         {
+            AddPenPoint(*path, px, py, 0.0f, 0.0f, false);
             mPenDragging = true;
             mPenDragStartX = mPenDragX = px;
             mPenDragStartY = mPenDragY = py;
+            mProjectDirty = true;
         }
         if (mPenDragging && ImGui::IsMouseDown(ImGuiMouseButton_Left))
         {
             mPenDragX = px;
             mPenDragY = py;
+
+            auto& ptsArr = path->transformacao["pontos"];
+            if (ptsArr.is_array() && !ptsArr.empty())
+            {
+                auto& last = ptsArr.back();
+
+                // ESPAÇO durante o clique: reposiciona o ponto antes de soltar!
+                if (ImGui::IsKeyDown(ImGuiKey_Space))
+                {
+                    const float moveDx = px - mPenDragStartX;
+                    const float moveDy = py - mPenDragStartY;
+                    last["x"] = last.value("x", 0.0f) + moveDx;
+                    last["y"] = last.value("y", 0.0f) + moveDy;
+                    mPenDragStartX = px;
+                    mPenDragStartY = py;
+                }
+                else
+                {
+                    float ddx = mPenDragX - mPenDragStartX;
+                    float ddy = mPenDragY - mPenDragStartY;
+
+                    // SHIFT: trava a inclinação da alça em incrementos de 45°
+                    if (ImGui::GetIO().KeyShift)
+                    {
+                        const float angle = atan2f(ddy, ddx);
+                        const float snappedAngle = roundf(angle / 0.785398163f) * 0.785398163f;
+                        const float len = sqrtf(ddx * ddx + ddy * ddy);
+                        ddx = len * cosf(snappedAngle);
+                        ddy = len * sinf(snappedAngle);
+                    }
+
+                    if (ddx * ddx + ddy * ddy > 4.0f)
+                    {
+                        // ALT: quebra a alça de saída independentemente
+                        if (ImGui::GetIO().KeyAlt)
+                        {
+                            last["quebrado"] = 1.0f;
+                            last["cx2"] = ddx;
+                            last["cy2"] = ddy;
+                            last["curva"] = 1.0f;
+                        }
+                        else
+                        {
+                            last["cx2"] = ddx;
+                            last["cy2"] = ddy;
+                            last["cx1"] = -ddx;
+                            last["cy1"] = -ddy;
+                            last["curva"] = 1.0f;
+                        }
+                    }
+                    else
+                    {
+                        last["cx2"] = 0.0f;
+                        last["cy2"] = 0.0f;
+                        last["curva"] = 0.0f;
+                    }
+                }
+            }
+            mProjectDirty = true;
         }
         if (mPenDragging && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
         {
-            const float ddx = mPenDragX - mPenDragStartX;
-            const float ddy = mPenDragY - mPenDragStartY;
-            if (ddx * ddx + ddy * ddy > 16.0f)
-            {
-                AddPenPoint(*path, mPenDragX, mPenDragY,
-                            ddx * 0.4f, ddy * 0.4f, true);
-            }
-            else
-            {
-                AddPenPoint(*path, mPenDragX, mPenDragY, 0.0f, 0.0f, false);
-            }
             mPenDragging = false;
             mProjectDirty = true;
         }
@@ -1199,13 +1968,378 @@ namespace seedui
         mStatusMsgUntil = GetTime() + 4.0;
     }
 
+    // Ajusta o zoom/pan para que o ponto (centerX, centerY) do projeto fique
+    // no centro do viewport, com a escala alvo (px de tela por unidade).
+    void App::ZoomPara(float targetScale, float centerX, float centerY)
+    {
+        if (!mHasProject) return;
+        const ImVec2 min = ImGui::GetWindowPos();
+        const ImVec2 max(min.x + ImGui::GetWindowWidth(),
+                         min.y + ImGui::GetWindowHeight());
+        const float ruler = 24.0f, viewportPadding = 44.0f;
+        const ImVec2 contentMin(min.x + ruler + viewportPadding,
+                                min.y + ruler + viewportPadding);
+        const ImVec2 contentMax(max.x - viewportPadding, max.y - viewportPadding);
+        const float availW = contentMax.x - contentMin.x;
+        const float availH = contentMax.y - contentMin.y;
+        const float baseW = (float)mProject.telaBaseLargura;
+        const float baseH = (float)mProject.telaBaseAltura;
+        if (baseW <= 0.0f || baseH <= 0.0f) return;
+        const float baseFit = std::max(0.25f, std::min(1.0f,
+            std::min(availW / baseW, availH / baseH)));
+        mCanvasZoom = std::max(0.001f, std::min(10000.0f, targetScale / baseFit));
+        const float scale = baseFit * mCanvasZoom;
+        const ImVec2 frame(baseW * scale, baseH * scale);
+        const ImVec2 origin(contentMin.x + (availW - frame.x) * 0.5f,
+                            contentMin.y + (availH - frame.y) * 0.5f);
+        mCanvasPanX = (contentMin.x + availW * 0.5f) - origin.x - centerX * scale;
+        mCanvasPanY = (contentMin.y + availH * 0.5f) - origin.y - centerY * scale;
+    }
+
+    void App::Zoom100()
+    {
+        // 100%: zoom nominal 1.0 com a moldura centralizada.
+        mCanvasZoom = 1.0f;
+        mCanvasPanX = 0.0f;
+        mCanvasPanY = 0.0f;
+        mStatusMsg = "Zoom 100%";
+        mStatusMsgUntil = GetTime() + 3.0;
+    }
+
+    void App::ZoomFit()
+    {
+        // Ajusta a tela-base inteira ao viewport (zoom nominal 1 + centrado).
+        ZoomPara(1.0f, (float)mProject.telaBaseLargura * 0.5f,
+                 (float)mProject.telaBaseAltura * 0.5f);
+        mStatusMsg = "Ajustar à tela";
+        mStatusMsgUntil = GetTime() + 3.0;
+    }
+
+    void App::ZoomFitSelection()
+    {
+        if (!mHasProject) return;
+        Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+        float left = FLT_MAX, top = FLT_MAX, right = -FLT_MAX, bottom = -FLT_MAX;
+        bool found = false;
+        for (Element& e : mode.raiz)
+        {
+            if (std::find(mSelectedElementIds.begin(), mSelectedElementIds.end(),
+                          e.id) != mSelectedElementIds.end() ||
+                e.id == mSelectedElementId)
+            {
+                CollectVisibleBounds(e, left, top, right, bottom);
+                found = true;
+            }
+        }
+        if (!found)
+        {
+            mStatusMsg = "Selecione um elemento para ajustar";
+            mStatusMsgUntil = GetTime() + 4.0;
+            return;
+        }
+        const ImVec2 min = ImGui::GetWindowPos();
+        const ImVec2 max(min.x + ImGui::GetWindowWidth(),
+                         min.y + ImGui::GetWindowHeight());
+        const float availW = max.x - min.x - 2.0f * 44.0f - 24.0f;
+        const float availH = max.y - min.y - 2.0f * 44.0f - 24.0f;
+        const float selW = std::max(1.0f, right - left);
+        const float selH = std::max(1.0f, bottom - top);
+        const float target = std::max(0.1f, std::min(32.0f,
+            std::min(availW / selW * 0.9f, availH / selH * 0.9f)));
+        ZoomPara(target, (left + right) * 0.5f, (top + bottom) * 0.5f);
+        mStatusMsg = "Ajustar à seleção";
+        mStatusMsgUntil = GetTime() + 3.0;
+    }
+
+    void App::SelecionarTodos()
+    {
+        if (!PossuiModoAtivo()) return;
+        Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+        mSelectedElementIds.clear();
+        for (const Element& e : mode.raiz)
+            mSelectedElementIds.push_back(e.id);
+        mSelectedElementId = mSelectedElementIds.empty()
+            ? std::string() : mSelectedElementIds.back();
+        if (!mSelectedElementIds.empty())
+        {
+            mStatusMsg = std::to_string(mSelectedElementIds.size()) +
+                         " elemento(s) selecionado(s)";
+            mStatusMsgUntil = GetTime() + 4.0;
+        }
+    }
+
+    namespace
+    {
+        // Escapa caracteres XML (& < > " ') para o texto dos elementos.
+        std::string XmlEscape(const std::string& in)
+        {
+            std::string out;
+            out.reserve(in.size());
+            for (char c : in)
+            {
+                switch (c)
+                {
+                    case '&': out += "&amp;"; break;
+                    case '<': out += "&lt;"; break;
+                    case '>': out += "&gt;"; break;
+                    case '"': out += "&quot;"; break;
+                    case '\'': out += "&apos;"; break;
+                    default: out += c;
+                }
+            }
+            return out;
+        }
+
+        // Número SVG limpo ("28" em vez de "28.000000").
+        std::string FmtSvgNum(float v)
+        {
+            char buf[32];
+            snprintf(buf, sizeof buf, "%.3f", v);
+            std::string s = buf;
+            while (s.size() > 1 && s.back() == '0') s.pop_back();
+            if (s.size() > 1 && s.back() == '.') s.pop_back();
+            return s;
+        }
+
+        // ID sanitizado para <defs> do SVG (o id do elemento é único).
+        std::string SanitizeSvgId(const std::string& in)
+        {
+            std::string out;
+            for (char c : in)
+                out += (isalnum((unsigned char)c) || c == '_' || c == '-') ? c
+                                                                           : '_';
+            if (out.empty()) out = "x";
+            return out;
+        }
+
+        // Coleta os gradientes da árvore como <defs> (linear/radial com
+        // cores e ângulo), referenciados por fill="url(#id)".
+        void CollectGradientDefs(const Element& e, std::string& defs)
+        {
+            if (e.estilos.is_object() && e.estilos.contains("gradiente") &&
+                e.estilos["gradiente"].is_object())
+            {
+                const auto& g = e.estilos["gradiente"];
+                const std::string id = "g_" + SanitizeSvgId(e.id);
+                const std::string c1 = g.value("cor1", "#2b2b2b");
+                const std::string c2 = g.value("cor2", "#000000");
+                const bool radial = g.value("tipo", "linear") == "radial";
+                if (radial)
+                {
+                    defs += "  <radialGradient id=\"" + id + "\">\n";
+                }
+                else
+                {
+                    const float angle = g.value("angulo", 0.0f) *
+                        (float)(3.14159265358979323846 / 180.0);
+                    // 0° = horizontal, 90° = vertical, 45° = diagonal.
+                    defs += "  <linearGradient id=\"" + id +
+                            "\" x1=\"0\" y1=\"0\" x2=\"" +
+                            FmtSvgNum(cosf(angle)) + "\" y2=\"" +
+                            FmtSvgNum(sinf(angle)) +
+                            "\" gradientUnits=\"objectBoundingBox\">\n";
+                }
+                defs += "    <stop offset=\"0%\" stop-color=\"" + c1 +
+                        "\"/>\n";
+                defs += "    <stop offset=\"100%\" stop-color=\"" + c2 +
+                        "\"/>\n";
+                defs += radial ? "  </radialGradient>\n"
+                               : "  </linearGradient>\n";
+            }
+            for (const Element& c : e.filhos)
+                CollectGradientDefs(c, defs);
+        }
+
+        // Emite um elemento como SVG (contorno tessellado → path).
+        void EmitElementSVG(std::string& svg, const Element& e, float indentDepth)
+        {
+            if (!e.visivel) return;
+            const std::string indent((size_t)indentDepth, ' ');
+            std::string fill = e.estilos.is_object() &&
+                e.estilos.contains("cor_fundo")
+                ? e.estilos["cor_fundo"].get<std::string>() : std::string("none");
+            // Gradiente: o preenchimento vira referência ao <defs>.
+            if (e.estilos.is_object() && e.estilos.contains("gradiente") &&
+                e.estilos["gradiente"].is_object())
+                fill = "url(#g_" + SanitizeSvgId(e.id) + ")";
+            const std::string stroke = e.estilos.is_object() &&
+                e.estilos.contains("cor_borda")
+                ? e.estilos["cor_borda"].get<std::string>() : std::string("none");
+            const float strokeWidth = e.estilos.is_object()
+                ? e.estilos.value("espessura_borda", 0.0f) : 0.0f;
+            const float opacity = e.estilos.is_object()
+                ? std::max(0.0f, std::min(1.0f, e.estilos.value("opacidade", 1.0f)))
+                : 1.0f;
+            std::string attrs;
+            if (strokeWidth > 0.0f)
+            {
+                attrs += " stroke=\"" + stroke + "\" stroke-width=\"" +
+                         FmtSvgNum(strokeWidth) + "\"";
+                if (e.estilos.contains("tracejado") &&
+                    e.estilos["tracejado"].is_object())
+                {
+                    const auto& t = e.estilos["tracejado"];
+                    attrs += " stroke-dasharray=\"" +
+                             FmtSvgNum(t.value("largura_traco", 6.0f)) + " " +
+                             FmtSvgNum(t.value("largura_espaco", 4.0f)) + "\"";
+                }
+            }
+            if (opacity < 1.0f)
+                attrs += " fill-opacity=\"" + std::to_string(opacity) +
+                         "\" stroke-opacity=\"" + std::to_string(opacity) + "\"";
+
+            if (e.tipo == "grupo")
+            {
+                for (const Element& c : e.filhos)
+                    EmitElementSVG(svg, c, indentDepth + 2);
+                return;
+            }
+            if (e.tipo == "texto" || e.tipo == "botao")
+            {
+                const float x = e.transformacao.value("x", 0.0f);
+                const float y = e.transformacao.value("y", 0.0f);
+                const float fontSize = std::max(4.0f,
+                    e.estilos.value("tamanho_fonte", 18.0f));
+                const std::string label = e.propriedades.contains("texto") &&
+                    e.propriedades["texto"].is_string()
+                    ? e.propriedades["texto"].get<std::string>()
+                    : (e.nome.empty() ? e.id : e.nome);
+                // Texto: cor própria (cor_texto) e tamanho real; o y do SVG
+                // é a linha de base (~tamanho da fonte abaixo do topo).
+                const std::string textFill = e.tipo == "texto" &&
+                    e.estilos.is_object() && e.estilos.contains("cor_texto")
+                    ? e.estilos["cor_texto"].get<std::string>()
+                    : fill;
+                svg += indent + "<text x=\"" + FmtSvgNum(x) +
+                       "\" y=\"" + FmtSvgNum(y + fontSize) +
+                       "\" fill=\"" + textFill + "\" font-size=\"" +
+                       FmtSvgNum(fontSize) + "\">" +
+                       XmlEscape(label) + "</text>\n";
+                return;
+            }
+
+            std::vector<ImVec2> pts;
+            if (e.tipo == "linha")
+            {
+                float x1 = 0.0f, y1 = 0.0f, x2 = 0.0f, y2 = 0.0f;
+                Geo::LineEndpointsProject(e, x1, y1, x2, y2);
+                pts.push_back(ImVec2(x1, y1));
+                pts.push_back(ImVec2(x2, y2));
+            }
+            else
+            {
+                Geo::OutlineProject(e, pts, 64);
+            }
+            // Setas da linha: triângulos preenchidos nas pontas (mesma
+            // geometria do canvas).
+            if (e.tipo == "linha" && pts.size() >= 2 &&
+                e.estilos.is_object() && e.estilos.contains("setas") &&
+                e.estilos["setas"].is_object())
+            {
+                const auto& setas = e.estilos["setas"];
+                const bool atStart = setas.value("inicio", false);
+                const bool atEnd = setas.value("fim", false);
+                const float arrowSize = std::max(4.0f, setas.value("tamanho", 10.0f));
+                const float ax = pts[0].x, ay = pts[0].y;
+                const float bx = pts[1].x, by = pts[1].y;
+                const float ldx = bx - ax, ldy = by - ay;
+                const float len = sqrtf(ldx * ldx + ldy * ldy);
+                if ((atStart || atEnd) && len > 0.01f)
+                {
+                    const float ux = ldx / len, uy = ldy / len;
+                    const float nx = -uy, ny = ux;
+                    const float half = arrowSize * 0.5f;
+                    const std::string strokeFill =
+                        e.estilos.contains("cor_borda")
+                        ? e.estilos["cor_borda"].get<std::string>()
+                        : std::string("#cfcfcf");
+                    auto emitArrow = [&](float px, float py, float sign)
+                    {
+                        const float backX = px + ux * arrowSize * sign;
+                        const float backY = py + uy * arrowSize * sign;
+                        svg += indent + "<path d=\"M " + FmtSvgNum(px) +
+                               " " + FmtSvgNum(py) + " L " +
+                               FmtSvgNum(backX + nx * half) + " " +
+                               FmtSvgNum(backY + ny * half) + " L " +
+                               FmtSvgNum(backX - nx * half) + " " +
+                               FmtSvgNum(backY - ny * half) +
+                               " Z\" fill=\"" + strokeFill + "\"/>\n";
+                    };
+                    if (atEnd) emitArrow(bx, by, -1.0f);
+                    if (atStart) emitArrow(ax, ay, 1.0f);
+                }
+            }
+            if (pts.size() < 2) return;
+            std::string d = "M " + FmtSvgNum(pts[0].x) + " " +
+                            FmtSvgNum(pts[0].y);
+            for (size_t i = 1; i < pts.size(); ++i)
+                d += " L " + FmtSvgNum(pts[i].x) + " " +
+                     FmtSvgNum(pts[i].y);
+            const bool closed = e.tipo == "linha" ? false
+                : e.transformacao.value("fechado", 0.0f) > 0.5f ||
+                  e.tipo != "caminho";
+            if (closed) d += " Z";
+            svg += indent + "<path d=\"" + d + "\" fill=\"" + fill +
+                   "\"" + attrs + "/>\n";
+        }
+    }
+
+    std::string App::GerarSVG(const Project& projeto, const Modo& modo)
+    {
+        std::string svg;
+        svg += "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+        svg += "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" +
+               FmtSvgNum((float)projeto.telaBaseLargura) + "\" height=\"" +
+               FmtSvgNum((float)projeto.telaBaseAltura) + "\" viewBox=\"0 0 " +
+               FmtSvgNum((float)projeto.telaBaseLargura) + " " +
+               FmtSvgNum((float)projeto.telaBaseAltura) + "\">\n";
+        // Gradientes usados pela árvore (defs antes dos elementos).
+        std::string defs;
+        for (const Element& e : modo.raiz)
+            CollectGradientDefs(e, defs);
+        if (!defs.empty())
+            svg += "<defs>\n" + defs + "</defs>\n";
+        for (const Element& e : modo.raiz)
+            EmitElementSVG(svg, e, 2);
+        svg += "</svg>\n";
+        return svg;
+    }
+
+    void App::ExportarSVG()
+    {
+        if (!mHasProject)
+        {
+            mStatusMsg = "Abra um projeto para exportar SVG";
+            mStatusMsgUntil = GetTime() + 4.0;
+            return;
+        }
+        const std::string path = SalvarDialogoSVG(mProject.nome + ".svg");
+        if (path.empty()) return;
+
+        Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+        std::string svg = GerarSVG(mProject, mode);
+
+        FILE* f = fopen(path.c_str(), "wb");
+        if (!f)
+        {
+            mStatusMsg = "Não foi possível exportar: " + path;
+            mStatusMsgUntil = GetTime() + 5.0;
+            return;
+        }
+        fwrite(svg.data(), 1, svg.size(), f);
+        fclose(f);
+        mStatusMsg = "SVG exportado: " + path;
+        mStatusMsgUntil = GetTime() + 6.0;
+        TraceLog(LOG_INFO, "SVG exportado: %s (%zu bytes)", path.c_str(), svg.size());
+    }
+
     void App::ZoomCanvas(float factor)
     {
         if (!mHasProject) return;
         const float oldZoom = mCanvasZoom;
         const float newZoom = factor > 1.0f
-            ? std::min(32.0f, oldZoom * factor)
-            : std::max(0.1f, oldZoom * factor);
+            ? std::min(10000.0f, oldZoom * factor)
+            : std::max(0.001f, oldZoom * factor);
         if (newZoom == oldZoom) return;
         if (!mZoomToMouse)
         {
@@ -1728,6 +2862,62 @@ namespace seedui
             return;
         }
 
+        // Ferramenta Texto (T): CLIQUE cria um texto no ponto; ARRASTAR
+        // define a caixa de texto (largura de quebra) — estilo CorelDRAW.
+        // Conteúdo, tamanho e cor são editados no Inspetor.
+        if (PossuiModoAtivo() && mCurrentTool == Tool::Text && !ctrlTemporary)
+        {
+            const ImVec2 mouse = ImGui::GetMousePos();
+            float projectX = 0.0f, projectY = 0.0f;
+            const bool inside = CanvasScreenToProject(&mProject, mouse.x, mouse.y,
+                projectX, projectY, false, mCanvasZoom, mCanvasPanX, mCanvasPanY);
+            if (canvasHovered && inside &&
+                ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            {
+                mShapeCreating = true;
+                mShapeStartX = mShapeEndX = projectX;
+                mShapeStartY = mShapeEndY = projectY;
+            }
+            if (mShapeCreating && ImGui::IsMouseDown(ImGuiMouseButton_Left))
+            {
+                CanvasScreenToProject(&mProject, mouse.x, mouse.y,
+                    mShapeEndX, mShapeEndY, false, mCanvasZoom, mCanvasPanX,
+                    mCanvasPanY);
+                ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
+            }
+            if (mShapeCreating && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+            {
+                const float dragW = fabsf(mShapeEndX - mShapeStartX);
+                const float dragH = fabsf(mShapeEndY - mShapeStartY);
+                const bool dragged = dragW > 12.0f || dragH > 12.0f;
+                const float px = std::min(mShapeStartX, mShapeEndX);
+                const float py = std::min(mShapeStartY, mShapeEndY);
+                if (AdicionarComponente("texto", "Texto",
+                                        dragged ? px : mShapeStartX,
+                                        dragged ? py : mShapeStartY))
+                {
+                    Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+                    if (Element* created =
+                            Project::ResolverId(mode, mSelectedElementId))
+                    {
+                        created->propriedades["texto"] = "Texto";
+                        created->estilos["tamanho_fonte"] = 18.0f;
+                        created->estilos["cor_texto"] = "#e8e8e8";
+                        created->transformacao["largura"] =
+                            dragged ? std::max(24.0f, dragW) : 130.0f;
+                        created->transformacao["altura"] =
+                            dragged ? std::max(16.0f, dragH) : 26.0f;
+                    }
+                    mStatusMsg = dragged
+                        ? "Caixa de texto criada — edite o conteúdo no Inspetor"
+                        : "Texto criado — edite o conteúdo no Inspetor";
+                    mStatusMsgUntil = GetTime() + 4.0;
+                }
+                mShapeCreating = false;
+            }
+            return;
+        }
+
         const bool editTool = mCurrentTool == Tool::Select || mCurrentTool == Tool::Move;
         if (!PossuiModoAtivo() || (!editTool && !ctrlTemporary))
         {
@@ -1814,15 +3004,31 @@ namespace seedui
                 element.transformacao.contains("pontos") &&
                 element.transformacao["pontos"].is_array())
             {
-                // Nós e alças de curva editáveis (modo 16 = nó, 17 = alça).
-                // Sem alças de tamanho: o caminho se edita pelos nós.
+                // Nós e alças de curva editáveis: 16 = nó, 17 = alça de
+                // SAÍDA (segmento i→i+1), 18 = alça de ENTRADA (i-1→i).
+                // Tolerância ampla e ergonômica (~13px em tela) com prioridade absoluta.
                 const auto& pts = element.transformacao["pontos"];
-                const float nodeTol = 7.0f / std::max(0.25f, viewScale);
+                const float nodeTol = 13.0f / std::max(0.25f, viewScale);
                 const float nodeTolSq = nodeTol * nodeTol;
                 for (int i = 0; i < (int)pts.size(); ++i)
                 {
                     const float nx = ex + pts[i].value("x", 0.0f);
                     const float ny = ey + pts[i].value("y", 0.0f);
+                    const bool broken = pts[i].value("quebrado", 0.0f) > 0.5f;
+                    // Alça de entrada
+                    const float ix = broken
+                        ? nx + pts[i].value("cx1", 0.0f)
+                        : nx - pts[i].value("cx2", 0.0f);
+                    const float iy = broken
+                        ? ny + pts[i].value("cy1", 0.0f)
+                        : ny - pts[i].value("cy2", 0.0f);
+                    const float idx = x - ix, idy = y - iy;
+                    if (idx * idx + idy * idy <= nodeTolSq)
+                    {
+                        mPathEditIndex = i;
+                        return 18;
+                    }
+                    // Alça de saída
                     const float hx = nx + pts[i].value("cx2", 0.0f);
                     const float hy = ny + pts[i].value("cy2", 0.0f);
                     const float hdx = x - hx, hdy = y - hy;
@@ -1831,6 +3037,7 @@ namespace seedui
                         mPathEditIndex = i;
                         return 17;
                     }
+                    // Nó central
                     const float ndx = x - nx, ndy = y - ny;
                     if (ndx * ndx + ndy * ndy <= nodeTolSq)
                     {
@@ -1838,7 +3045,20 @@ namespace seedui
                         return 16;
                     }
                 }
-                if (x >= ex && x <= ex + ew && y >= ey && y <= ey + eh)
+
+                // Se clicou sobre o contorno da curva (tolerância generosa de 10px):
+                const float curveTol = 10.0f / std::max(0.25f, viewScale);
+                int segIdx = -1; float segT = 0.0f, projX = 0.0f, projY = 0.0f;
+                if (Geo::FindSegmentOnPath(element, x - ex, y - ey, curveTol, segIdx, segT, projX, projY))
+                {
+                    mPathEditIndex = (segT > 0.5f) ? ((segIdx + 1) % (int)pts.size()) : segIdx;
+                    return 16;
+                }
+
+                const bool hasFill = element.estilos.is_object() &&
+                                     element.estilos.contains("cor_fundo") &&
+                                     element.transformacao.value("fechado", 0.0f) > 0.5f;
+                if (hasFill && x >= ex && x <= ex + ew && y >= ey && y <= ey + eh)
                     return 1;
                 return 0;
             }
@@ -1968,6 +3188,135 @@ namespace seedui
                 if (!selected->bloqueado) applyCursor(dragModeAt(*selected, mouseX, mouseY));
         }
 
+        // CTRL + ALT + clique em um NÓ do caminho: DESCONECTA o contorno —
+        // abre o caminho fechado no ponto clicado (o contorno volta a ser
+        // uma linha aberta, pronta para continuar ou editar).
+        if (canvasHovered && mouseOnFrame && ImGui::GetIO().KeyCtrl &&
+            ImGui::GetIO().KeyAlt &&
+            ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        {
+            Element* path = Project::ResolverId(mode, mSelectedElementId);
+            if (path && path->tipo == "caminho" && !path->bloqueado &&
+                path->transformacao.contains("pontos") &&
+                path->transformacao["pontos"].is_array() &&
+                path->transformacao.value("fechado", 0.0f) > 0.5f)
+            {
+                const auto& pts = path->transformacao["pontos"];
+                const float ex = path->transformacao.value("x", 0.0f);
+                const float ey = path->transformacao.value("y", 0.0f);
+                const float nodeTol = 13.0f / std::max(0.25f, mCanvasZoom);
+                const float nodeTolSq = nodeTol * nodeTol;
+                for (int i = 0; i < (int)pts.size(); ++i)
+                {
+                    const float nx = ex + pts[i].value("x", 0.0f);
+                    const float ny = ey + pts[i].value("y", 0.0f);
+                    const float dx = mouseX - nx, dy = mouseY - ny;
+                    if (dx * dx + dy * dy <= nodeTolSq)
+                    {
+                        path->transformacao["fechado"] = 0.0f;
+                        mProjectDirty = true;
+                        CapturarHistorico();
+                        mStatusMsg = "Contorno desconectado (caminho aberto)";
+                        mStatusMsgUntil = GetTime() + 4.0;
+                        return;
+                    }
+                }
+            }
+        }
+
+        // ALT (ou CTRL) + clique DUPLO em um NÓ do caminho: quebra a curva e converte em QUINA ("quinado")
+        if (canvasHovered && mouseOnFrame && (ImGui::GetIO().KeyAlt || ImGui::GetIO().KeyCtrl) &&
+            ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+        {
+            Element* path = Project::ResolverId(mode, mSelectedElementId);
+            if (path && path->tipo == "caminho" && !path->bloqueado &&
+                path->transformacao.contains("pontos") &&
+                path->transformacao["pontos"].is_array())
+            {
+                auto& pts = path->transformacao["pontos"];
+                const float ex = path->transformacao.value("x", 0.0f);
+                const float ey = path->transformacao.value("y", 0.0f);
+                const float nodeTol = 13.0f / std::max(0.25f, mCanvasZoom);
+                const float nodeTolSq = nodeTol * nodeTol;
+                for (int i = 0; i < (int)pts.size(); ++i)
+                {
+                    const float nx = ex + pts[i].value("x", 0.0f);
+                    const float ny = ey + pts[i].value("y", 0.0f);
+                    const float dx = mouseX - nx, dy = mouseY - ny;
+                    if (dx * dx + dy * dy <= nodeTolSq)
+                    {
+                        // Converte o nó em quina (zera as alças e remove a curvatura no ponto)
+                        pts[i]["curva"] = 0.0f;
+                        pts[i]["cx1"] = 0.0f;
+                        pts[i]["cy1"] = 0.0f;
+                        pts[i]["cx2"] = 0.0f;
+                        pts[i]["cy2"] = 0.0f;
+                        pts[i]["quebrado"] = 0.0f;
+
+                        RecalcularCaixaCaminho(*path);
+                        mPathEditIndex = -1;
+                        mCanvasDragMode = 0;
+                        mCanvasDragChanged = false;
+                        mProjectDirty = true;
+                        CapturarHistorico();
+                        mStatusMsg = "Nó convertido em quina (Alt + duplo clique)";
+                        mStatusMsgUntil = GetTime() + 4.0;
+                        return;
+                    }
+                }
+            }
+        }
+
+        // ALT + clique SIMPLES em um NÓ do caminho: alterna entre alças UNIFORMES
+        // (espelhadas, uma só curva) e INDIVIDUAIS (quebrado — cada lado com
+        // sua própria alça independente).
+        if (canvasHovered && mouseOnFrame && ImGui::GetIO().KeyAlt &&
+            !ImGui::GetIO().KeyCtrl &&
+            ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
+            !ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+        {
+            Element* path = Project::ResolverId(mode, mSelectedElementId);
+            if (path && path->tipo == "caminho" && !path->bloqueado &&
+                path->transformacao.contains("pontos") &&
+                path->transformacao["pontos"].is_array())
+            {
+                auto& pts = path->transformacao["pontos"];
+                const float ex = path->transformacao.value("x", 0.0f);
+                const float ey = path->transformacao.value("y", 0.0f);
+                const float nodeTol = 13.0f / std::max(0.25f, mCanvasZoom);
+                const float nodeTolSq = nodeTol * nodeTol;
+                for (int i = 0; i < (int)pts.size(); ++i)
+                {
+                    const float nx = ex + pts[i].value("x", 0.0f);
+                    const float ny = ey + pts[i].value("y", 0.0f);
+                    const float dx = mouseX - nx, dy = mouseY - ny;
+                    if (dx * dx + dy * dy <= nodeTolSq)
+                    {
+                        if (pts[i].value("quebrado", 0.0f) > 0.5f)
+                        {
+                            // Volta ao UNIFORME: remove a quebra (a entrada volta a ser o espelho da saída).
+                            pts[i]["quebrado"] = 0.0f;
+                            pts[i].erase("cx1");
+                            pts[i].erase("cy1");
+                            mStatusMsg = "Nó uniforme (alças espelhadas)";
+                        }
+                        else
+                        {
+                            // Quebra em INDIVIDUAL: congela a entrada atual como alça própria independente.
+                            pts[i]["quebrado"] = 1.0f;
+                            pts[i]["cx1"] = -pts[i].value("cx2", 0.0f);
+                            pts[i]["cy1"] = -pts[i].value("cy2", 0.0f);
+                            mStatusMsg = "Nó individual (alças independentes)";
+                        }
+                        mProjectDirty = true;
+                        CapturarHistorico();
+                        mStatusMsgUntil = GetTime() + 4.0;
+                        return;
+                    }
+                }
+            }
+        }
+
         if (canvasHovered && mouseOnFrame &&
             ImGui::IsMouseClicked(ImGuiMouseButton_Left))
         {
@@ -2075,6 +3424,8 @@ namespace seedui
                 {
                     mSelectedElementIds.clear();
                     mSelectedElementIds.push_back(hit->id);
+                    if (mIncDup.currentCloneId != hit->id)
+                        mIncDup.Reset();
                 }
                 mSelectedElementId = hit->id;
             }
@@ -2086,6 +3437,7 @@ namespace seedui
                 {
                     mSelectedElementIds.clear();
                     mSelectedElementId.clear();
+                    mIncDup.Reset();
                 }
                 mCanvasMarquee = true;
                 mCanvasMarqueeAdditive = additive;
@@ -2351,73 +3703,63 @@ namespace seedui
                 dx = 0.0f;
                 dy = 0.0f;
             }
-            if (dragEngaged && mSnapEnabled &&
-                !(mCanvasDragMode >= 10 && mCanvasDragMode <= 13))
+            if (dragEngaged && !(mCanvasDragMode >= 10 && mCanvasDragMode <= 13))
             {
-                constexpr float snapStep = Geo::kGridStep;
+                const bool shiftHeld = ImGui::GetIO().KeyShift;
+                std::vector<SmartGuides::Rect> guideRects;
+                guideRects.reserve(mCanvasGroupStarts.size());
+                for (const CanvasTransformStart& s : mCanvasGroupStarts)
+                    guideRects.push_back({ s.x, s.y, s.w, s.h });
+
                 if (mCanvasDragMode == 1)
                 {
-                    // Snap assertivo estilo CorelDRAW: as guias inteligentes
-                    // encaixam bordas/centros PRIMEIRO (no movimento bruto),
-                    // depois a grade de 8px e uma re-puxada — o encaixe vence
-                    // a grade e o elemento não "escapa" da trava.
-                    std::vector<SmartGuides::Rect> guideRects;
-                    guideRects.reserve(mCanvasGroupStarts.size());
-                    for (const CanvasTransformStart& s : mCanvasGroupStarts)
-                        guideRects.push_back({ s.x, s.y, s.w, s.h });
-                    const float guideTol = SnapTol(10.0f);
-                    const float spacingTol = SnapTol(12.0f);
-                    SmartGuides::Apply(mode, guideRects, mSelectedElementIds,
-                                       dx, dy, (float)mProject.telaBaseLargura,
-                                       (float)mProject.telaBaseAltura,
-                                       guideTol, mGuideSnapX, mGuideSnapY);
-                    // Previsão de espaçamento (M04, assertiva): QUALQUER
-                    // espaço existente entre vizinhos é um alvo — o ímã
-                    // mais forte. A grade de 8px NÃO é aplicada no eixo em
-                    // que a previsão engatou (senão a quantização desfaz o
-                    // encaixe exato, pousando em 31/33 em vez de 32).
-                    SmartGuides::ApplySpacing(mode, guideRects, mSelectedElementIds,
-                                              dx, dy, spacingTol,
-                                              mCanvasPrevDX, mCanvasPrevDY,
-                                              mGuideSpacingX1, mGuideSpacingX2,
-                                              mGuideSpacingY1, mGuideSpacingY2);
-                    // A grade de 8px NÃO é aplicada quando a MOLDURA (ou uma
-                    // guia inteligente) já engatou no eixo: a quantização da
-                    // grade pode desfazer o snap exato da tela-base (ex.
-                    // objeto com x não múltiplo de 8 desgruda da borda 1280
-                    // e pousa em 1284). O delimitador principal SEMPRE vence.
-                    if (mGuideSpacingX1 < 0.0f && mGuideSnapX < 0.0f)
-                        dx = roundf((mCanvasDragX + dx) / snapStep) * snapStep -
-                             mCanvasDragX;
-                    if (mGuideSpacingY1 < 0.0f && mGuideSnapY < 0.0f)
-                        dy = roundf((mCanvasDragY + dy) / snapStep) * snapStep -
-                             mCanvasDragY;
-                    SmartGuides::Apply(mode, guideRects, mSelectedElementIds,
-                                       dx, dy, (float)mProject.telaBaseLargura,
-                                       (float)mProject.telaBaseAltura,
-                                       guideTol, mGuideSnapX, mGuideSnapY);
-                    // Re-afirma a previsão por último: corrige qualquer
-                    // desvio da re-puxada e garante o espaçamento EXATO.
-                    SmartGuides::ApplySpacing(mode, guideRects, mSelectedElementIds,
-                                              dx, dy, spacingTol,
-                                              mCanvasPrevDX, mCanvasPrevDY,
-                                              mGuideSpacingX1, mGuideSpacingX2,
-                                              mGuideSpacingY1, mGuideSpacingY2);
-                    // Snap às guias fixas (arrastadas das réguas) por último:
-                    // referência intencional do usuário, tem prioridade.
-                    SnapGuias(dx, dy, guideRects);
+                    mGuideSnapX = -1.0f;
+                    mGuideSnapY = -1.0f;
+                    mGuideSpacingX1 = mGuideSpacingX2 = -1.0f;
+                    mGuideSpacingY1 = mGuideSpacingY2 = -1.0f;
+
+                    // Com Shift pressionado, trava o movimento no eixo ortogonal (horizontal ou vertical estrito)
+                    if (shiftHeld)
+                    {
+                        if (fabsf(dx) >= fabsf(dy))
+                            dy = 0.0f;
+                        else
+                            dx = 0.0f;
+                    }
+
+                    // Snap magnético inteligente (bordas, centros, laterais coladas e moldura)
+                    if (mSnapEnabled)
+                    {
+                        const float guideTol = SnapTol(shiftHeld ? 8.0f : 6.0f);
+                        SmartGuides::Apply(mode, guideRects, mSelectedElementIds,
+                                           dx, dy, (float)mProject.telaBaseLargura,
+                                           (float)mProject.telaBaseAltura,
+                                           guideTol, mGuideSnapX, mGuideSnapY);
+
+                        // Snap às guias fixas das réguas (se houver e snap ativo)
+                        SnapGuias(dx, dy, guideRects);
+                    }
+
                     mCanvasPrevDX = dx;
                     mCanvasPrevDY = dy;
                 }
                 else
                 {
-                    const float snappedMouseX = roundf(mouseX / snapStep) * snapStep;
-                    const float snappedMouseY = roundf(mouseY / snapStep) * snapStep;
-                    dx = snappedMouseX - mCanvasDragMouseX;
-                    dy = snappedMouseY - mCanvasDragMouseY;
+                    if (shiftHeld && mSnapEnabled)
+                    {
+                        const float gridStep = Geo::GetAdaptiveGridStep(viewScale);
+                        const float snappedMouseX = roundf(mouseX / gridStep) * gridStep;
+                        const float snappedMouseY = roundf(mouseY / gridStep) * gridStep;
+                        dx = snappedMouseX - mCanvasDragMouseX;
+                        dy = snappedMouseY - mCanvasDragMouseY;
+                    }
+                    else
+                    {
+                        dx = mouseX - mCanvasDragMouseX;
+                        dy = mouseY - mCanvasDragMouseY;
+                    }
                 }
             }
-            const float minSize = 24.0f;
             float left = mCanvasDragX;
             float top = mCanvasDragY;
             float right = mCanvasDragX + mCanvasDragW;
@@ -2490,6 +3832,7 @@ namespace seedui
                 float deltaDeg = (angle - startAngle) * (180.0f / 3.14159265f);
                 if (ImGui::GetIO().KeyShift)
                     deltaDeg = roundf(deltaDeg / 15.0f) * 15.0f;
+                mCanvasLastRotDelta = deltaDeg;
                 const float deltaRad = deltaDeg * 0.017453292519943295f;
                 const float cosA = cosf(deltaRad);
                 const float sinA = sinf(deltaRad);
@@ -2543,10 +3886,10 @@ namespace seedui
                         const float d = fabsf(c[0] - px) + fabsf(c[1] - py);
                         if (d < bestD) { bestD = d; px = c[0]; py = c[1]; }
                     }
-                    // Grade de 8px quando nenhum ponto da forma pegou.
-                    if (bestD >= pivotTol && mSnapEnabled)
+                    // Grade adaptativa quando Shift está pressionado e nenhum ponto da forma pegou.
+                    if (bestD >= pivotTol && ImGui::GetIO().KeyShift && mSnapEnabled)
                     {
-                        const float snapStep = Geo::kGridStep;
+                        const float snapStep = Geo::GetAdaptiveGridStep(viewScale);
                         px = roundf(px / snapStep) * snapStep;
                         py = roundf(py / snapStep) * snapStep;
                     }
@@ -2561,11 +3904,12 @@ namespace seedui
                 }
                 ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
             }
-            else if (mCanvasDragMode == 16 || mCanvasDragMode == 17)
+            else if (mCanvasDragMode == 16 || mCanvasDragMode == 17 ||
+                     mCanvasDragMode == 18)
             {
                 // Edição de NÓS do caminho (caneta): 16 move o ponto, 17
-                // arrasta a alça de saída (cria curva). Coordenadas em
-                // unidades do projeto, convertidas para o espaço local.
+                // arrasta a alça de saída, 18 a alça de entrada. Coordenadas
+                // em unidades do projeto, convertidas para o espaço local.
                 Element* element = Project::ResolverId(mode, mSelectedElementId);
                 if (element && !element->bloqueado &&
                     element->transformacao.contains("pontos") &&
@@ -2581,6 +3925,29 @@ namespace seedui
                         {
                             pts[index]["x"] = mouseX - bx;
                             pts[index]["y"] = mouseY - by;
+                            RecalcularCaixaCaminho(*element);
+                        }
+                        else if (mCanvasDragMode == 18)
+                        {
+                            // Alça de ENTRADA: arrasta independente quando o
+                            // ponto está quebrado; se estiver uniforme, o
+                            // arrasto espelha na saída (a entrada é o espelho).
+                            const float nx = bx + pts[index].value("x", 0.0f);
+                            const float ny = by + pts[index].value("y", 0.0f);
+                            const bool broken = pts[index].value("quebrado", 0.0f) > 0.5f;
+                            const float dx = mouseX - nx, dy = mouseY - ny;
+                            if (broken)
+                            {
+                                pts[index]["cx1"] = dx;
+                                pts[index]["cy1"] = dy;
+                                pts[index]["curva"] = 1.0f;
+                            }
+                            else
+                            {
+                                pts[index]["cx2"] = -dx;
+                                pts[index]["cy2"] = -dy;
+                                pts[index]["curva"] = 1.0f;
+                            }
                         }
                         else
                         {
@@ -2663,23 +4030,21 @@ namespace seedui
                     }
                     const float origW = std::max(0.01f, mCanvasDragW);
                     const float origH = std::max(0.01f, mCanvasDragH);
-                    propScale = std::max(fabsf(hx - ax) / origW,
-                                         fabsf(hy - ay) / origH);
-                    propScale = std::max(propScale,
-                                         minSize / std::max(origW, origH));
+                    propScale = std::max(0.001f, std::max(fabsf(hx - ax) / origW,
+                                                          fabsf(hy - ay) / origH));
                     anchorX = ax;
                     anchorY = ay;
                 }
 
-                // Resize livre (sem Shift): sem clamps à moldura.
+                // Resize livre: sem travas de tamanho mínimo (compressão total até 0 e inversão/flip para o lado oposto).
                 if (resizeLeft)
-                    left = std::min(right - minSize, mCanvasDragX + dx);
+                    left = mCanvasDragX + dx;
                 if (resizeRight)
-                    right = std::max(left + minSize, mCanvasDragX + mCanvasDragW + dx);
+                    right = mCanvasDragX + mCanvasDragW + dx;
                 if (resizeTop)
-                    top = std::min(bottom - minSize, mCanvasDragY + dy);
+                    top = mCanvasDragY + dy;
                 if (resizeBottom)
-                    bottom = std::max(top + minSize, mCanvasDragY + mCanvasDragH + dy);
+                    bottom = mCanvasDragY + mCanvasDragH + dy;
 
                 // Resize ESPELHADO (Shift isolado): a aresta oposta à alça
                 // espelha o movimento em torno do ponto de origem (pivô).
@@ -2711,29 +4076,9 @@ namespace seedui
                         top = origTop + dy;
                         bottom = 2.0f * py - origTop - dy;
                     }
-                    if (right - left < minSize)
-                    {
-                        const float c = (right + left) * 0.5f;
-                        left = c - minSize * 0.5f;
-                        right = c + minSize * 0.5f;
-                    }
-                    if (bottom - top < minSize)
-                    {
-                        const float c = (bottom + top) * 0.5f;
-                        top = c - minSize * 0.5f;
-                        bottom = c + minSize * 0.5f;
-                    }
                 }
 
-                // Snap das ARESTAS às guias fixas das réguas durante o
-                // RESIZE (a régua é referência de encaixe também ao
-                // redimensionar, não só ao mover): a aresta arrastada
-                // encaixa na guia mais próxima e a guia engatada acende em
-                // laranja (feedback igual ao do mover).
-                // Depois, a MOLDURA da tela-base (delimitador principal)
-                // magnetiza com força 8x e VENCE as guias em empate — é o
-                // que faz a aresta "travar" claramente nas laterais do
-                // canvas ao redimensionar.
+                // Snap das ARESTAS às guias fixas das réguas durante o RESIZE
                 if (mSnapEnabled)
                 {
                     mGuideFixedSnapX = -1.0f;
@@ -2747,14 +4092,12 @@ namespace seedui
                         SnapTol(12.0f), mirrored,
                         mCanvasDragPivotX, mCanvasDragPivotY,
                         mGuideFixedSnapX, mGuideFixedSnapY);
-                    // Moldura primeiro de tudo no ajuste (roda por último
-                    // aqui para ter a palavra final no eixo).
                     SmartGuides::SnapResizeToFrame(
                         left, right, top, bottom,
                         resizeLeft, resizeRight, resizeTop, resizeBottom,
                         (float)mProject.telaBaseLargura,
                         (float)mProject.telaBaseAltura,
-                        8.0f * SnapTol(12.0f), mirrored,
+                        SnapTol(12.0f), mirrored,
                         mCanvasDragPivotX, mCanvasDragPivotY,
                         mGuideSnapX, mGuideSnapY);
                 }
@@ -2783,8 +4126,6 @@ namespace seedui
                     float scaleX = 1.0f, scaleY = 1.0f;
                     if (proportional)
                     {
-                        // Caixa do grupo proporcional: âncora = canto oposto
-                        // da caixa CONJUNTA; escala uniforme nos dois eixos.
                         const float gx0 = groupLeft, gy0 = groupTop;
                         const float gx1 = groupRight, gy1 = groupBottom;
                         float hx, hy, ax, ay;
@@ -2795,8 +4136,8 @@ namespace seedui
                             case 8: hx = gx0 + dx; hy = gy1 + dy; ax = gx1; ay = gy0; break;
                             default: hx = gx1 + dx; hy = gy1 + dy; ax = gx0; ay = gy0; break;
                         }
-                        const float s = std::max(fabsf(hx - ax) / groupW,
-                                                 fabsf(hy - ay) / groupH);
+                        const float s = std::max(0.001f, std::max(fabsf(hx - ax) / groupW,
+                                                                 fabsf(hy - ay) / groupH));
                         const float nw = groupW * s, nh = groupH * s;
                         switch (mCanvasDragMode)
                         {
@@ -2813,9 +4154,6 @@ namespace seedui
                     }
                     else if (mirrored)
                     {
-                        // Conjunto espelhado em torno do CENTRO da caixa
-                        // conjunta (Shift isolado): a aresta oposta à alça
-                        // espelha o movimento — cresce para os dois lados.
                         const float px = groupLeft + groupW * 0.5f;
                         const float py = groupTop + groupH * 0.5f;
                         if (resizeRight)
@@ -2838,72 +4176,37 @@ namespace seedui
                             newTop = groupTop + dy;
                             newBottom = 2.0f * py - groupTop - dy;
                         }
-                        if (newRight - newLeft < minSize)
-                        {
-                            const float c = (newRight + newLeft) * 0.5f;
-                            newLeft = c - minSize * 0.5f;
-                            newRight = c + minSize * 0.5f;
-                        }
-                        if (newBottom - newTop < minSize)
-                        {
-                            const float c = (newBottom + newTop) * 0.5f;
-                            newTop = c - minSize * 0.5f;
-                            newBottom = c + minSize * 0.5f;
-                        }
-                        scaleX = (newRight - newLeft) / groupW;
-                        scaleY = (newBottom - newTop) / groupH;
                     }
                     else
                     {
-                        // Resize do conjunto: livre da moldura, escalando todos.
                         if (resizeLeft)
-                            newLeft = std::min(newRight - minSize, groupLeft + dx);
+                            newLeft = groupLeft + dx;
                         if (resizeRight)
-                            newRight = std::max(newLeft + minSize, groupRight + dx);
+                            newRight = groupRight + dx;
                         if (resizeTop)
-                            newTop = std::min(newBottom - minSize, groupTop + dy);
+                            newTop = groupTop + dy;
                         if (resizeBottom)
-                            newBottom = std::max(newTop + minSize, groupBottom + dy);
-                        scaleX = (newRight - newLeft) / groupW;
-                        scaleY = (newBottom - newTop) / groupH;
+                            newBottom = groupBottom + dy;
                     }
-                    // Snap das arestas da caixa CONJUNTA às guias fixas e à
-                    // MOLDURA (delimitador principal, força 8x — vence).
-                    if (mSnapEnabled)
-                    {
-                        mGuideFixedSnapX = -1.0f;
-                        mGuideFixedSnapY = -1.0f;
-                        mGuideSnapX = -1.0f;
-                        mGuideSnapY = -1.0f;
-                        SmartGuides::SnapResizeToGuides(
-                            newLeft, newRight, newTop, newBottom,
-                            resizeLeft, resizeRight, resizeTop, resizeBottom,
-                            mGuidesV, mGuidesH,
-                            SnapTol(12.0f), mirrored,
-                            groupLeft + groupW * 0.5f,
-                            groupTop + groupH * 0.5f,
-                            mGuideFixedSnapX, mGuideFixedSnapY);
-                        SmartGuides::SnapResizeToFrame(
-                            newLeft, newRight, newTop, newBottom,
-                            resizeLeft, resizeRight, resizeTop, resizeBottom,
-                            (float)mProject.telaBaseLargura,
-                            (float)mProject.telaBaseAltura,
-                            8.0f * SnapTol(12.0f),
-                            mirrored,
-                            groupLeft + groupW * 0.5f,
-                            groupTop + groupH * 0.5f,
-                            mGuideSnapX, mGuideSnapY);
-                        scaleX = (newRight - newLeft) / groupW;
-                        scaleY = (newBottom - newTop) / groupH;
-                    }
+
+                    const float finalGLeft = std::min(newLeft, newRight);
+                    const float finalGRight = std::max(newLeft, newRight);
+                    const float finalGTop = std::min(newTop, newBottom);
+                    const float finalGBottom = std::max(newTop, newBottom);
+                    const float finalGW = std::max(1.0f, finalGRight - finalGLeft);
+                    const float finalGH = std::max(1.0f, finalGBottom - finalGTop);
+
+                    scaleX = finalGW / groupW;
+                    scaleY = finalGH / groupH;
+
                     for (const CanvasTransformStart& start : mCanvasGroupStarts)
                     {
                         Element* element = Project::ResolverId(mode, start.id);
                         if (!element) continue;
                         element->transformacao["x"] =
-                            newLeft + (start.x - groupLeft) * scaleX;
+                            finalGLeft + (start.x - groupLeft) * scaleX;
                         element->transformacao["y"] =
-                            newTop + (start.y - groupTop) * scaleY;
+                            finalGTop + (start.y - groupTop) * scaleY;
                         element->transformacao["largura"] =
                             std::max(1.0f, start.w * scaleX);
                         element->transformacao["altura"] =
@@ -2913,7 +4216,6 @@ namespace seedui
                 }
                 else if (proportional)
                 {
-                    // Elemento único proporcional: caixa derivada da âncora.
                     const float newW = mCanvasDragW * propScale;
                     const float newH = mCanvasDragH * propScale;
                     switch (mCanvasDragMode)
@@ -2927,51 +4229,39 @@ namespace seedui
                         default: left = anchorX; right = anchorX + newW;
                                  top = anchorY; bottom = anchorY + newH; break;
                     }
-                    // Snap das arestas às guias fixas (elemento proporcional).
-                    if (mSnapEnabled)
-                    {
-                        mGuideFixedSnapX = -1.0f;
-                        mGuideFixedSnapY = -1.0f;
-                        SmartGuides::SnapResizeToGuides(
-                            left, right, top, bottom,
-                            resizeLeft, resizeRight, resizeTop, resizeBottom,
-                            mGuidesV, mGuidesH,
-                            SnapTol(12.0f), false,
-                            0.0f, 0.0f,
-                            mGuideFixedSnapX, mGuideFixedSnapY);
-                    }
-                    selected->transformacao["x"] = left;
-                    selected->transformacao["y"] = top;
-                    selected->transformacao["largura"] = right - left;
-                    selected->transformacao["altura"] = bottom - top;
+                    const float finalLeft = std::min(left, right);
+                    const float finalRight = std::max(left, right);
+                    const float finalTop = std::min(top, bottom);
+                    const float finalBottom = std::max(top, bottom);
+                    const float finalW = std::max(1.0f, finalRight - finalLeft);
+                    const float finalH = std::max(1.0f, finalBottom - finalTop);
+
+                    selected->transformacao["x"] = finalLeft;
+                    selected->transformacao["y"] = finalTop;
+                    selected->transformacao["largura"] = finalW;
+                    selected->transformacao["altura"] = finalH;
                     ClampElementCornerRadii(*selected);
                     RescalePivot(selected, mCanvasDragX, mCanvasDragY,
                                  mCanvasDragW, mCanvasDragH,
-                                 left, top, right - left, bottom - top);
-                }
-                else if (mirrored)
-                {
-                    // Elemento único espelhado (Shift isolado): left/right e
-                    // top/bottom já foram espelhados em torno do pivô acima.
-                    selected->transformacao["x"] = left;
-                    selected->transformacao["y"] = top;
-                    selected->transformacao["largura"] = right - left;
-                    selected->transformacao["altura"] = bottom - top;
-                    ClampElementCornerRadii(*selected);
-                    RescalePivot(selected, mCanvasDragX, mCanvasDragY,
-                                 mCanvasDragW, mCanvasDragH,
-                                 left, top, right - left, bottom - top);
+                                 finalLeft, finalTop, finalW, finalH);
                 }
                 else
                 {
-                    selected->transformacao["x"] = left;
-                    selected->transformacao["y"] = top;
-                    selected->transformacao["largura"] = right - left;
-                    selected->transformacao["altura"] = bottom - top;
+                    const float finalLeft = std::min(left, right);
+                    const float finalRight = std::max(left, right);
+                    const float finalTop = std::min(top, bottom);
+                    const float finalBottom = std::max(top, bottom);
+                    const float finalW = std::max(1.0f, finalRight - finalLeft);
+                    const float finalH = std::max(1.0f, finalBottom - finalTop);
+
+                    selected->transformacao["x"] = finalLeft;
+                    selected->transformacao["y"] = finalTop;
+                    selected->transformacao["largura"] = finalW;
+                    selected->transformacao["altura"] = finalH;
                     ClampElementCornerRadii(*selected);
                     RescalePivot(selected, mCanvasDragX, mCanvasDragY,
                                  mCanvasDragW, mCanvasDragH,
-                                 left, top, right - left, bottom - top);
+                                 finalLeft, finalTop, finalW, finalH);
                 }
             }
 
@@ -3019,6 +4309,22 @@ namespace seedui
             {
                 if (mCanvasDragMode == 1)
                 {
+                    if (!mCanvasGroupStarts.empty())
+                    {
+                        if (Element* el = Project::ResolverId(mode, mCanvasGroupStarts.front().id))
+                        {
+                            const float moveDX = el->transformacao.value("x", 0.0f) - mCanvasGroupStarts.front().x;
+                            const float moveDY = el->transformacao.value("y", 0.0f) - mCanvasGroupStarts.front().y;
+                            if (fabsf(moveDX) > 0.001f || fabsf(moveDY) > 0.001f)
+                            {
+                                mDuplicateDX = moveDX;
+                                mDuplicateDY = moveDY;
+                                mLastAction.kind = ActionKind::Move;
+                                mLastAction.moveDX = moveDX;
+                                mLastAction.moveDY = moveDY;
+                            }
+                        }
+                    }
                     if (mCloneForked)
                     {
                         mStatusMsg = "Clone posicionado — original voltou à posição inicial";
@@ -3032,11 +4338,34 @@ namespace seedui
                     }
                 }
                 else if (mCanvasDragMode == 14)
+                {
                     mStatusMsg = "Rotação ajustada";
+                    mLastAction.kind = ActionKind::Rotate;
+                    mLastAction.rotateDelta = mCanvasLastRotDelta;
+                }
                 else if (mCanvasDragMode >= 10 && mCanvasDragMode <= 13)
+                {
                     mStatusMsg = "Arredondamento da quina alterado";
-                else
+                    if (Element* el = Project::ResolverId(mode, mSelectedElementId))
+                    {
+                        mLastAction.kind = ActionKind::CornerRadius;
+                        mLastAction.cornerRadius = ElementCornerRadius(*el, mCanvasDragMode);
+                    }
+                }
+                else if (mCanvasDragMode >= 2 && mCanvasDragMode <= 9)
+                {
                     mStatusMsg = "Elemento redimensionado";
+                    if (Element* el = Project::ResolverId(mode, mSelectedElementId))
+                    {
+                        const float curW = el->transformacao.value("largura", 160.0f);
+                        const float curH = el->transformacao.value("altura", 32.0f);
+                        mLastAction.kind = ActionKind::Scale;
+                        mLastAction.scaleFactorX = curW / std::max(0.01f, mCanvasDragW);
+                        mLastAction.scaleFactorY = curH / std::max(0.01f, mCanvasDragH);
+                        mLastAction.deltaW = curW - mCanvasDragW;
+                        mLastAction.deltaH = curH - mCanvasDragH;
+                    }
+                }
                 mStatusMsgUntil = GetTime() + 4.0;
                 TraceLog(LOG_INFO, "M05 selecao: transformacao alterada (%s)",
                          mSelectedElementId.c_str());
@@ -3252,22 +4581,102 @@ namespace seedui
         if (!ImGui::GetIO().WantTextInput && ImGui::GetIO().KeyCtrl &&
             ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_G, false))
             DesagruparElementosSelecionados();
+        if (!ImGui::GetIO().WantTextInput && ImGui::GetIO().KeyCtrl &&
+            !ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_Q, false))
+            ConverterEmCaminho();
         if (!ImGui::GetIO().WantTextInput && !ImGui::GetIO().KeyCtrl &&
             !ImGui::GetIO().KeyAlt)
         {
+            if (ImGui::IsKeyPressed(ImGuiKey_P, false)) mCurrentTool = Tool::Pen;
+            if (ImGui::IsKeyPressed(ImGuiKey_V, false)) mCurrentTool = Tool::Select;
+            if (ImGui::IsKeyPressed(ImGuiKey_H, false)) mCurrentTool = Tool::Pan;
+            if (ImGui::IsKeyPressed(ImGuiKey_T, false)) mCurrentTool = Tool::Text;
+            if (ImGui::IsKeyPressed(ImGuiKey_M, false)) mCurrentTool = Tool::Rectangle;
+            if (ImGui::IsKeyPressed(ImGuiKey_L, false)) mCurrentTool = Tool::Ellipse;
+            if (ImGui::IsKeyPressed(ImGuiKey_Z, false)) mCurrentTool = Tool::Zoom;
+
+            // Shift+C: Converter Ponto de Ancoragem (estilo Illustrator)
+            if (ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_C, false))
+            {
+                if (PossuiModoAtivo() && !mSelectedElementId.empty())
+                {
+                    Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+                    Element* el = Project::ResolverId(mode, mSelectedElementId);
+                    if (el && el->tipo == "caminho" && el->transformacao.contains("pontos") &&
+                        el->transformacao["pontos"].is_array() && mPathEditIndex >= 0 &&
+                        mPathEditIndex < (int)el->transformacao["pontos"].size())
+                    {
+                        auto& pt = el->transformacao["pontos"][mPathEditIndex];
+                        const bool wasCurved = pt.value("curva", 0.0f) > 0.5f;
+                        if (wasCurved)
+                        {
+                            pt["curva"] = 0.0f;
+                            pt["cx1"] = 0.0f; pt["cy1"] = 0.0f;
+                            pt["cx2"] = 0.0f; pt["cy2"] = 0.0f;
+                            pt["quebrado"] = 0.0f;
+                            mStatusMsg = "Nó convertido em quina (Shift+C)";
+                        }
+                        else
+                        {
+                            pt["curva"] = 1.0f;
+                            pt["cx2"] = 24.0f; pt["cy2"] = 0.0f;
+                            pt["cx1"] = -24.0f; pt["cy1"] = 0.0f;
+                            pt["quebrado"] = 0.0f;
+                            mStatusMsg = "Nó convertido em suave (Shift+C)";
+                        }
+                        RecalcularCaixaCaminho(*el);
+                        mProjectDirty = true;
+                        CapturarHistorico();
+                        mStatusMsgUntil = GetTime() + 4.0;
+                    }
+                }
+            }
+
             if (ImGui::IsKeyPressed(ImGuiKey_Q, false)) AlinharElementosSelecionados(0);
             if (ImGui::IsKeyPressed(ImGuiKey_W, false)) AlinharElementosSelecionados(1);
             if (ImGui::IsKeyPressed(ImGuiKey_E, false)) AlinharElementosSelecionados(2);
             if (ImGui::IsKeyPressed(ImGuiKey_2, false)) AlinharElementosSelecionados(3);
             if (ImGui::IsKeyPressed(ImGuiKey_D, false)) AlinharElementosSelecionados(4);
             if (ImGui::IsKeyPressed(ImGuiKey_S, false)) AlinharElementosSelecionados(5);
-            if (ImGui::IsKeyPressed(ImGuiKey_Z, false)) mCurrentTool = Tool::Zoom;
-            if (ImGui::IsKeyPressed(ImGuiKey_X, false)) ApagarElementosSelecionados();
-            // Setas movem o elemento selecionado (1px com Shift, 8px sem) —
-            // sem modificador, para não conflitar com Ctrl+seta (camadas).
+            if (ImGui::IsKeyPressed(ImGuiKey_Delete, false) ||
+                ImGui::IsKeyPressed(ImGuiKey_Backspace, false) ||
+                ImGui::IsKeyPressed(ImGuiKey_X, false))
+            {
+                // Delete / Backspace / X: remove o NÓ do caminho em edição; sem nó selecionado, apaga o
+                // elemento selecionado.
+                bool removedNode = false;
+                if (PossuiModoAtivo() && mPathEditIndex >= 0)
+                {
+                    Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+                    Element* el = Project::ResolverId(mode, mSelectedElementId);
+                    if (el && el->tipo == "caminho" &&
+                        el->transformacao.contains("pontos") &&
+                        el->transformacao["pontos"].is_array())
+                    {
+                        auto& pts = el->transformacao["pontos"];
+                        if (pts.size() > 2 && mPathEditIndex < (int)pts.size())
+                        {
+                            pts.erase(pts.begin() + mPathEditIndex);
+                            RecalcularCaixaCaminho(*el);
+                            removedNode = true;
+                            mPathEditIndex = -1;
+                            mProjectDirty = true;
+                            CapturarHistorico();
+                            mStatusMsg = "Nó removido do caminho (X)";
+                            mStatusMsgUntil = GetTime() + 4.0;
+                        }
+                    }
+                }
+                if (!removedNode) ApagarElementosSelecionados();
+            }
+            // Movimentação pelas SETAS (Nudge estilo CorelDRAW):
+            // O valor de deslocamento base é configurado pelo usuário no campo 'Desloc' da PropertyBar (mNudgeDistance).
+            // Shift + Setas = Super Nudge (5x a distância configurada).
+            // Converte para pixels de projeto via UnitToPixels().
             if (PossuiModoAtivo() && !mSelectedElementId.empty())
             {
-                const float step = ImGui::GetIO().KeyShift ? 1.0f : 8.0f;
+                const float baseStep = std::max(0.001f, mNudgeDistance) * UnitToPixels();
+                const float step = ImGui::GetIO().KeyShift ? (baseStep * 5.0f) : baseStep;
                 float mx = 0.0f, my = 0.0f;
                 if (ImGui::IsKeyPressed(ImGuiKey_UpArrow, false)) my = -step;
                 if (ImGui::IsKeyPressed(ImGuiKey_DownArrow, false)) my = step;
@@ -3290,6 +4699,11 @@ namespace seedui
                     }
                     if (changed)
                     {
+                        mDuplicateDX = mx;
+                        mDuplicateDY = my;
+                        mLastAction.kind = ActionKind::Move;
+                        mLastAction.moveDX = mx;
+                        mLastAction.moveDY = my;
                         mProjectDirty = true;
                         if (PossuiModoAtivo())
                             RebuildGroupBounds(mProject.telas[mTelaAtiva].modos[mModoAtivo]);
@@ -3334,6 +4748,31 @@ namespace seedui
         {
             DuplicarSelecao();
         }
+        if (!ImGui::GetIO().WantTextInput && ImGui::GetIO().KeyCtrl &&
+            !ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_R, false))
+        {
+            RepetirUltimaAcao();
+        }
+        if (!ImGui::GetIO().WantTextInput && ImGui::GetIO().KeyCtrl &&
+            !ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_A, false))
+        {
+            SelecionarTodos();
+        }
+        if (!ImGui::GetIO().WantTextInput && ImGui::GetIO().KeyCtrl &&
+            !ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_1, false))
+        {
+            Zoom100();
+        }
+        if (!ImGui::GetIO().WantTextInput && ImGui::GetIO().KeyCtrl &&
+            !ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_0, false))
+        {
+            ZoomFit();
+        }
+        if (!ImGui::GetIO().WantTextInput && ImGui::GetIO().KeyCtrl &&
+            !ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_9, false))
+        {
+            ZoomFitSelection();
+        }
         if (ImGui::GetIO().KeyCtrl && !ImGui::GetIO().KeyShift &&
             ImGui::IsKeyPressed(ImGuiKey_S, false))
         {
@@ -3343,6 +4782,11 @@ namespace seedui
             ImGui::IsKeyPressed(ImGuiKey_S, false))
         {
             if (mHasProject) SalvarProjeto(true);
+        }
+        if (ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyShift &&
+            ImGui::IsKeyPressed(ImGuiKey_E, false))
+        {
+            if (mHasProject) ExportarSVG();
         }
         if (ImGui::GetIO().KeyCtrl && !ImGui::GetIO().KeyShift &&
             ImGui::IsKeyPressed(ImGuiKey_O, false))
@@ -3388,20 +4832,20 @@ namespace seedui
                 DrawPropertyBar();
                 ImGui::EndChild();
                 ImGui::PopStyleVar();
-                ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetStyle().ItemSpacing.y);
-
-                const float availY = ImGui::GetContentRegionAvail().y -
-                                     kStatusBarHeight - kColorBarHeight;
+                // Reserva vertical para as barras inferiores (Paleta de cores + Barra de detalhes/status + separadores).
+                // Elevado ~5% (folga de 28px) para garantir que a barra de detalhes fique 100% visível,
+                // arejada e nunca cortada pela borda inferior da janela.
+                const float bottomBarsReserve = kStatusBarHeight + kColorBarHeight + 28.0f;
+                const float availY = std::max(60.0f, ImGui::GetContentRegionAvail().y - bottomBarsReserve);
 
                 // Toolbar com rolagem fina (estilo Blender): se as ferramentas
                 // não couberem na altura disponível, uma barra de rolagem fina
-                // aparece na borda — nenhum ícone fica cortado/invisível. O
-                // scroll da RODA não rola a toolbar (pertence ao zoom do canvas);
-                // a rolagem é feita arrastando a barra ou com o trackpad.
+                // aparece na borda — nenhum ícone fica cortado/invisível. A
+                // RODA do mouse rola a toolbar quando o cursor está sobre ela;
+                // o zoom continua no canvas (janelas separadas do ImGui).
                 ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarSize, 6.0f);
                 ImGui::PushStyleColor(ImGuiCol_ScrollbarBg, IM_COL32(0, 0, 0, 0));
-                ImGui::BeginChild("##toolbar", ImVec2(kToolbarWidth, availY), false,
-                                  ImGuiWindowFlags_NoScrollWithMouse);
+                ImGui::BeginChild("##toolbar", ImVec2(kToolbarWidth, availY));
                 DrawToolbar();
                 ImGui::EndChild();
                 ImGui::PopStyleColor();
@@ -3565,10 +5009,126 @@ namespace seedui
                     CanvasProjectToScreen(&mProject, mShapeEndX, mShapeEndY,
                                           sx1, sy1, scale, mCanvasZoom,
                                           mCanvasPanX, mCanvasPanY);
-                    ImGui::GetWindowDrawList()->AddRect(
-                        ImVec2(std::min(sx0, sx1), std::min(sy0, sy1)),
-                        ImVec2(std::max(sx0, sx1), std::max(sy0, sy1)),
-                        ImGui::ColorConvertFloat4ToU32(Theme::AccentBlue), 0.0f, 0, 1.5f);
+                    ImDrawList* pdl = ImGui::GetWindowDrawList();
+                    const ImU32 prevCol = ImGui::ColorConvertFloat4ToU32(Theme::AccentBlue);
+                    const float px0 = std::min(sx0, sx1), py0 = std::min(sy0, sy1);
+                    const float px1 = std::max(sx0, sx1), py1 = std::max(sy0, sy1);
+                    if (mCurrentTool == Tool::Line)
+                    {
+                        // Linha: mostra o próprio traço sendo desenhado.
+                        pdl->AddLine(ImVec2(sx0, sy0), ImVec2(sx1, sy1),
+                                     prevCol, 1.5f);
+                        pdl->AddCircleFilled(ImVec2(sx0, sy0), 3.0f, prevCol, 12);
+                        pdl->AddCircleFilled(ImVec2(sx1, sy1), 3.0f, prevCol, 12);
+                    }
+                    else if (mCurrentTool == Tool::Ellipse)
+                    {
+                        pdl->AddEllipse(ImVec2((sx0 + sx1) * 0.5f, (sy0 + sy1) * 0.5f),
+                                        ImVec2((sx1 - sx0) * 0.5f, (sy1 - sy0) * 0.5f),
+                                        prevCol, 0.0f, 48, 1.5f);
+                    }
+                    else if (mCurrentTool == Tool::Polygon)
+                    {
+                        // Polígono: hexágono padrão (mesmo do inspetor).
+                        const int sides = 6;
+                        const float cx = (sx0 + sx1) * 0.5f, cy = (sy0 + sy1) * 0.5f;
+                        const float rx = std::max(1.0f, (sx1 - sx0) * 0.5f);
+                        const float ry = std::max(1.0f, (sy1 - sy0) * 0.5f);
+                        const float rr = std::min(rx, ry);
+                        for (int k = 0; k < sides; ++k)
+                        {
+                            const float a0 = -1.5707963f + (float)(6.2831853 * k) / sides;
+                            const float a1 = -1.5707963f + (float)(6.2831853 * (k + 1)) / sides;
+                            pdl->AddLine(ImVec2(cx + cosf(a0) * rr, cy + sinf(a0) * rr),
+                                         ImVec2(cx + cosf(a1) * rr, cy + sinf(a1) * rr),
+                                         prevCol, 1.5f);
+                        }
+                    }
+                    else
+                    {
+                        pdl->AddRect(ImVec2(px0, py0), ImVec2(px1, py1),
+                                     prevCol, 0.0f, 0, 1.5f);
+                    }
+                }
+
+                // Linha Elástica da Caneta (Rubber Banding estilo Illustrator)
+                if (mCurrentTool == Tool::Pen && mPenDrawing && PossuiModoAtivo())
+                {
+                    Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+                    if (Element* sel = Project::ResolverId(mode, mSelectedElementId))
+                    {
+                        if (sel->tipo == "caminho" && sel->transformacao.contains("pontos") &&
+                            sel->transformacao["pontos"].is_array() && !sel->transformacao["pontos"].empty())
+                        {
+                            const auto& spts = sel->transformacao["pontos"];
+                            const float sbx = sel->transformacao.value("x", 0.0f);
+                            const float sby = sel->transformacao.value("y", 0.0f);
+                            const int last = (int)spts.size() - 1;
+                            const float lx = sbx + spts[last].value("x", 0.0f);
+                            const float ly = sby + spts[last].value("y", 0.0f);
+
+                            float slx = 0.0f, sly = 0.0f, scale = 1.0f;
+                            CanvasProjectToScreen(&mProject, lx, ly, slx, sly, scale, mCanvasZoom, mCanvasPanX, mCanvasPanY);
+                            float smx = 0.0f, smy = 0.0f;
+                            CanvasProjectToScreen(&mProject, mPenMouseProjectX, mPenMouseProjectY, smx, smy, scale, mCanvasZoom, mCanvasPanX, mCanvasPanY);
+
+                            ImDrawList* pdl = ImGui::GetWindowDrawList();
+                            const ImU32 rubberCol = ImGui::ColorConvertFloat4ToU32(Theme::Hex(0x4f8cff, 0.90f));
+
+                            const bool curved = spts[last].value("curva", 0.0f) > 0.5f;
+                            if (curved)
+                            {
+                                const float c2x = lx + spts[last].value("cx2", 0.0f);
+                                const float c2y = ly + spts[last].value("cy2", 0.0f);
+                                float sc2x = 0.0f, sc2y = 0.0f;
+                                CanvasProjectToScreen(&mProject, c2x, c2y, sc2x, sc2y, scale, mCanvasZoom, mCanvasPanX, mCanvasPanY);
+                                pdl->AddBezierCubic(ImVec2(slx, sly), ImVec2(sc2x, sc2y), ImVec2(smx, smy), ImVec2(smx, smy),
+                                                    rubberCol, 1.0f, 32);
+                            }
+                            else
+                            {
+                                pdl->AddLine(ImVec2(slx, sly), ImVec2(smx, smy), rubberCol, 1.0f);
+                            }
+                            if (mPenSnapActive)
+                            {
+                                float snx = 0.0f, sny = 0.0f;
+                                CanvasProjectToScreen(&mProject, mPenSnapProjX, mPenSnapProjY, snx, sny, scale, mCanvasZoom, mCanvasPanX, mCanvasPanY);
+                                // Ponto de Snap Amarelo Luminoso (Luz Amarela com Halo de Encaixe)
+                                const ImU32 yellowCore = IM_COL32(255, 235, 0, 255);
+                                const ImU32 yellowRing = IM_COL32(255, 215, 0, 220);
+                                const ImU32 yellowGlow = IM_COL32(255, 200, 0, 65);
+                                pdl->AddCircleFilled(ImVec2(snx, sny), 10.0f, yellowGlow, 24);
+                                pdl->AddCircle(ImVec2(snx, sny), 7.5f, yellowRing, 24, 2.0f);
+                                pdl->AddCircleFilled(ImVec2(snx, sny), 4.0f, yellowCore, 16);
+                                pdl->AddCircle(ImVec2(snx, sny), 4.0f, IM_COL32(30, 30, 30, 255), 16, 1.0f);
+                                if (mPenSnapIsClose)
+                                {
+                                    pdl->AddCircle(ImVec2(smx + 9.0f, smy + 9.0f), 3.5f, yellowRing, 16, 1.5f);
+                                }
+                            }
+                            else
+                            {
+                                // Ponto indicador atual padrão: quadradinho vetorial estilo CorelDRAW
+                                pdl->AddRectFilled(ImVec2(smx - 2.5f, smy - 2.5f), ImVec2(smx + 2.5f, smy + 2.5f),
+                                                   IM_COL32(255, 255, 255, 255));
+                                pdl->AddRect(ImVec2(smx - 2.5f, smy - 2.5f), ImVec2(smx + 2.5f, smy + 2.5f),
+                                             rubberCol, 0.0f, 0, 1.0f);
+                            }
+                        }
+                    }
+                }
+
+                // Indicador de Inserção de Nó (+) ao passar a caneta sobre a curva
+                if (mCurrentTool == Tool::Pen && !mPenDrawing && mPenHoverSegmentIndex >= 0 && PossuiModoAtivo())
+                {
+                    float spx = 0.0f, spy = 0.0f, scale = 1.0f;
+                    CanvasProjectToScreen(&mProject, mPenHoverProjX, mPenHoverProjY, spx, spy, scale, mCanvasZoom, mCanvasPanX, mCanvasPanY);
+                    ImDrawList* pdl = ImGui::GetWindowDrawList();
+                    const ImU32 addCol = ImGui::ColorConvertFloat4ToU32(Theme::Hex(0x22c55e, 1.0f));
+                    pdl->AddCircleFilled(ImVec2(spx, spy), 5.0f, addCol, 16);
+                    pdl->AddCircle(ImVec2(spx, spy), 5.0f, IM_COL32(255, 255, 255, 255), 16, 1.5f);
+                    pdl->AddLine(ImVec2(spx - 3.0f, spy), ImVec2(spx + 3.0f, spy), IM_COL32(255, 255, 255, 255), 1.5f);
+                    pdl->AddLine(ImVec2(spx, spy - 3.0f), ImVec2(spx, spy + 3.0f), IM_COL32(255, 255, 255, 255), 1.5f);
                 }
                 if (mCanvasMarquee)
                 {
@@ -3674,11 +5234,14 @@ namespace seedui
         {
             bool clipPopup = false;
             ImVec2 popupMin(0, 0), popupMax(0, 0);
+            // Durante o arrasto a caixa de diálogo nem aparece — o recorte fica
+            // DESLIGADO para a anotação nunca sumir enquanto se move.
             if (mHasProject && mAnnot.selected >= 0 &&
+                mAnnot.dragging < 0 && !mAnnot.creating &&
                 mAnnot.selected < (int)mAnnot.items.size())
             {
                 const AnnotationsPopupRect pr =
-                    AnnotationsPopupRectFor(mAnnot.items[mAnnot.selected], vp->Size);
+                    AnnotationsPopupRectFor(mAnnot, mAnnot.items[mAnnot.selected], vp->Size);
                 popupMin = pr.min;
                 popupMax = pr.max;
                 clipPopup = true;
@@ -3718,6 +5281,7 @@ namespace seedui
             if (!salvarHabilitado) ImGui::BeginDisabled();
             if (ImGui::MenuItem("Salvar", "Ctrl+S")) SalvarProjeto(false);
             if (ImGui::MenuItem("Salvar como", "Ctrl+Shift+S")) SalvarProjeto(true);
+            if (ImGui::MenuItem("Exportar SVG…", "Ctrl+Shift+E")) ExportarSVG();
             if (!salvarHabilitado) ImGui::EndDisabled();
             MenuItemSoon("Exportar pacote", "M13");
             ImGui::Separator();
@@ -3743,7 +5307,10 @@ namespace seedui
                                 !mSelectedElementIds.empty();
             if (!PossuiModoAtivo() || !hasSel) ImGui::BeginDisabled();
             if (ImGui::MenuItem("Duplicar", "Ctrl+D")) DuplicarSelecao();
+            if (ImGui::MenuItem("Repetir última ação", "Ctrl+R")) RepetirUltimaAcao();
             if (!PossuiModoAtivo() || !hasSel) ImGui::EndDisabled();
+            if (ImGui::MenuItem("Selecionar tudo", "Ctrl+A", false, PossuiModoAtivo()))
+                SelecionarTodos();
             MenuItemSoon("Apagar", "M05");
             ImGui::Separator();
             if (ImGui::MenuItem("Copiar anotações para a IA", "Ctrl+Shift+C"))
@@ -3773,7 +5340,10 @@ namespace seedui
                 else MaximizeWindow();
             }
             ImGui::Separator();
-            MenuItemSoon("Zoom 100%", "M05");
+            if (ImGui::MenuItem("Zoom 100%", "Ctrl+1")) Zoom100();
+            if (ImGui::MenuItem("Ajustar à tela", "Ctrl+0")) ZoomFit();
+            if (ImGui::MenuItem("Ajustar à seleção", "Ctrl+9")) ZoomFitSelection();
+            ImGui::Separator();
             if (ImGui::MenuItem("Réguas", nullptr, mRulersVisible))
                 mRulersVisible = !mRulersVisible;
             if (ImGui::MenuItem("Bloquear réguas", nullptr, mRulersLocked))
@@ -3858,6 +5428,16 @@ namespace seedui
             }
             if (ImGui::MenuItem("Desagrupar", "Ctrl+Shift+G", false, canUngroup))
                 DesagruparElementosSelecionados();
+            const bool canConvert = PossuiModoAtivo() &&
+                                    (!mSelectedElementId.empty() ||
+                                     !mSelectedElementIds.empty());
+            if (ImGui::MenuItem("Converter em caminho", "Ctrl+Q", false,
+                                canConvert))
+                ConverterEmCaminho();
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip(
+                    "Transforma a forma em um caminho editável por nós "
+                    "(estilo CorelDRAW 'Convert to Curves')");
             ImGui::Separator();
             const bool canMirror = PossuiModoAtivo() &&
                                    (!mSelectedElementId.empty() ||
@@ -4016,7 +5596,11 @@ namespace seedui
         // alturas diferentes não ficam mais "colados" no topo da barra.
         auto centerRow = [&](float itemHeight)
         {
-            ImGui::SetCursorPosY((kActionBarHeight - itemHeight) * 0.5f);
+            // Centraliza no eixo VERTICAL da barra inteira (42 px): desconta o
+            // padding da janela, senão os itens ficam deslocados para baixo
+            // (colados na borda inferior) em vez de no centro.
+            const float padY = ImGui::GetStyle().WindowPadding.y;
+            ImGui::SetCursorPosY((kActionBarHeight - itemHeight) * 0.5f - padY);
         };
         centerRow(button);
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
@@ -4327,7 +5911,13 @@ namespace seedui
         float v = hasSel ? PixelsToUnit(bx) : 0.0f;
         if (field("##px", &v, single) && primary)
         {
-            primary->transformacao["x"] = v * UnitToPixels();
+            const float newX = v * UnitToPixels();
+            const float oldX = primary->transformacao.value("x", 0.0f);
+            mLastAction.kind = ActionKind::Move;
+            mLastAction.moveDX = newX - oldX;
+            mLastAction.moveDY = 0.0f;
+            mDuplicateDX = mLastAction.moveDX;
+            primary->transformacao["x"] = newX;
             propertyEdited = true;
         }
 
@@ -4337,7 +5927,13 @@ namespace seedui
         v = hasSel ? PixelsToUnit(by) : 0.0f;
         if (field("##py", &v, single) && primary)
         {
-            primary->transformacao["y"] = v * UnitToPixels();
+            const float newY = v * UnitToPixels();
+            const float oldY = primary->transformacao.value("y", 0.0f);
+            mLastAction.kind = ActionKind::Move;
+            mLastAction.moveDX = 0.0f;
+            mLastAction.moveDY = newY - oldY;
+            mDuplicateDY = mLastAction.moveDY;
+            primary->transformacao["y"] = newY;
             propertyEdited = true;
         }
 
@@ -4347,7 +5943,15 @@ namespace seedui
         v = hasSel ? PixelsToUnit(bw) : 0.0f;
         if (field("##pw", &v, single) && primary)
         {
-            primary->transformacao["largura"] = std::max(1.0f, v * UnitToPixels());
+            const float newW = std::max(1.0f, v * UnitToPixels());
+            const float oldW = primary->transformacao.value("largura", 160.0f);
+            mLastAction.kind = ActionKind::Scale;
+            mLastAction.scaleFactorX = newW / std::max(1.0f, oldW);
+            mLastAction.scaleFactorY = 1.0f;
+            mLastAction.deltaW = newW - oldW;
+            mLastAction.deltaH = 0.0f;
+            primary->transformacao["largura"] = newW;
+            ClampElementCornerRadii(*primary);
             propertyEdited = true;
         }
 
@@ -4357,7 +5961,15 @@ namespace seedui
         v = hasSel ? PixelsToUnit(bh) : 0.0f;
         if (field("##ph", &v, single) && primary)
         {
-            primary->transformacao["altura"] = std::max(1.0f, v * UnitToPixels());
+            const float newH = std::max(1.0f, v * UnitToPixels());
+            const float oldH = primary->transformacao.value("altura", 32.0f);
+            mLastAction.kind = ActionKind::Scale;
+            mLastAction.scaleFactorX = 1.0f;
+            mLastAction.scaleFactorY = newH / std::max(1.0f, oldH);
+            mLastAction.deltaW = 0.0f;
+            mLastAction.deltaH = newH - oldH;
+            primary->transformacao["altura"] = newH;
+            ClampElementCornerRadii(*primary);
             propertyEdited = true;
         }
 
@@ -4367,6 +5979,9 @@ namespace seedui
         v = hasSel ? rot : 0.0f;
         if (field("##prot", &v, single) && primary)
         {
+            const float oldRot = Geo::ElementRotation(*primary);
+            mLastAction.kind = ActionKind::Rotate;
+            mLastAction.rotateDelta = v - oldRot;
             primary->transformacao["rotacao"] = fmodf(v, 360.0f);
             propertyEdited = true;
         }
@@ -4413,6 +6028,16 @@ namespace seedui
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Incremento/precisão dos ajustes");
 
+        // Deslocamento por setas (Nudge estilo CorelDRAW)
+        ImGui::SameLine();
+        ImGui::TextDisabled("Desloc:");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(54.0f);
+        ImGui::InputFloat("##nudge", &mNudgeDistance, 0.0f, 0.0f, "%.2f");
+        if (mNudgeDistance < 0.001f) mNudgeDistance = 0.001f;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Distância de deslocamento pelas setas do teclado (%s)", kUnits[mUnit]);
+
         // Zoom (à direita): campo editável + ajustar página.
         const float zoomRight = ImGui::GetWindowContentRegionMax().x - 132.0f;
         if (ImGui::GetCursorPosX() + 40.0f < zoomRight)
@@ -4424,7 +6049,7 @@ namespace seedui
         ImGui::SetNextItemWidth(58.0f);
         float zoomPct = mCanvasZoom * 100.0f;
         if (ImGui::InputFloat("##zoom_pct", &zoomPct, 0.0f, 0.0f, "%.0f%%"))
-            mCanvasZoom = std::max(0.1f, std::min(32.0f, zoomPct / 100.0f));
+            mCanvasZoom = std::max(0.001f, std::min(10000.0f, zoomPct / 100.0f));
         ImGui::SameLine();
         if (ImGui::SmallButton("Ajustar##fit"))
         {
@@ -5114,17 +6739,224 @@ namespace seedui
                 float transparency = 100.0f * (1.0f -
                     selected->estilos.value("opacidade", 1.0f));
                 float outlineWidth = selected->estilos.value("espessura_borda", 1.0f);
-                if (ImGui::SliderFloat("Contorno", &outlineWidth,
-                                       0.0f, 16.0f, "%.1f px"))
+                float strokeTransparency = 100.0f * (1.0f -
+                    selected->estilos.value("opacidade_borda", 1.0f));
+
+                if (ImGui::SliderFloat("Espessura Contorno", &outlineWidth,
+                                       0.0f, 32.0f, "%.1f px"))
                 {
                     selected->estilos["espessura_borda"] = outlineWidth;
+                    mLastAction.kind = ActionKind::BorderWidth;
+                    mLastAction.borderWidth = outlineWidth;
                     mProjectDirty = true;
                 }
-                if (ImGui::SliderFloat("Transparencia", &transparency,
+                if (ImGui::SliderFloat("Transp. Contorno", &strokeTransparency,
                                        0.0f, 100.0f, "%.0f%%"))
                 {
-                    selected->estilos["opacidade"] = 1.0f - transparency / 100.0f;
+                    selected->estilos["opacidade_borda"] = 1.0f - strokeTransparency / 100.0f;
                     mProjectDirty = true;
+                }
+                if (ImGui::SliderFloat("Transparência Geral", &transparency,
+                                       0.0f, 100.0f, "%.0f%%"))
+                {
+                    const float op = 1.0f - transparency / 100.0f;
+                    selected->estilos["opacidade"] = op;
+                    mLastAction.kind = ActionKind::Opacity;
+                    mLastAction.opacity = op;
+                    mProjectDirty = true;
+                }
+
+                // Cores (Etapa 1 do painel vetorial): preenchimento e contorno
+                // com swatch que abre o seletor de 3 modelos (estilo
+                // CorelDRAW/Photoshop) aplicando na seleção inteira.
+                ImGui::Spacing();
+                ImGui::TextColored(Theme::TextSecondary, "Cores");
+                {
+                    Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+                    const bool multi = mSelectedElementIds.size() > 1;
+                    auto colorRow = [&](const char* label, const char* key,
+                                        const char* fallback, int target)
+                    {
+                        const bool has = selected->estilos.contains(key);
+                        float rgb[3];
+                        const ImVec4 col = has
+                            ? (ColorUtils::ParseHex(
+                                   selected->estilos.value(key, fallback), rgb),
+                               ImVec4(rgb[0], rgb[1], rgb[2], 1.0f))
+                            : ImVec4(0.13f, 0.13f, 0.15f, 1.0f);
+                        ImGui::PushID(key);
+                        ImGui::ColorButton("##sw", col,
+                            ImGuiColorEditFlags_NoTooltip |
+                            ImGuiColorEditFlags_NoPicker |
+                            ImGuiColorEditFlags_NoBorder,
+                            ImVec2(18.0f, 18.0f));
+                        if (ImGui::IsItemHovered())
+                            ImGui::SetTooltip("%s", has
+                                ? selected->estilos[key].get<std::string>().c_str()
+                                : "Sem cor — clique para definir");
+                        if (ImGui::IsItemClicked())
+                        {
+                            mColorPickerTarget = target;
+                            mColorPickerOpen = true;
+                        }
+                        ImGui::SameLine(0, 8);
+                        ImGui::TextUnformatted(label);
+                        ImGui::SameLine();
+                        if (has)
+                        {
+                            ImGui::TextDisabled("%s",
+                                selected->estilos[key].get<std::string>().c_str());
+                            ImGui::SameLine(ImGui::GetContentRegionAvail().x - 20.0f);
+                            ImGui::PushStyleColor(ImGuiCol_Text,
+                                                  Theme::TextDisabled);
+                            if (ImGui::SmallButton("x##rem"))
+                            {
+                                int removed = 0;
+                                for (const std::string& id : mSelectedElementIds)
+                                {
+                                    Element* el = Project::ResolverId(mode, id);
+                                    if (!el || el->bloqueado) continue;
+                                    std::function<void(Element&)> rec =
+                                        [&](Element& e)
+                                    {
+                                        e.estilos.erase(key);
+                                        for (Element& ch : e.filhos) rec(ch);
+                                    };
+                                    rec(*el);
+                                    ++removed;
+                                }
+                                if (removed) mProjectDirty = true;
+                            }
+                            if (ImGui::IsItemHovered())
+                                ImGui::SetTooltip("Remover %s do(s) elemento(s) "
+                                                  "selecionado(s)", label);
+                            ImGui::PopStyleColor();
+                        }
+                        else
+                        {
+                            ImGui::TextDisabled("—");
+                        }
+                        if (multi)
+                            ImGui::TextColored(Theme::TextSecondary,
+                                               "Aplica em %d selecionados",
+                                               (int)mSelectedElementIds.size());
+                        ImGui::PopID();
+                    };
+                    colorRow("Preenchimento", "cor_fundo", "#2b2b2b", 0);
+                    colorRow("Contorno", "cor_borda", "#cfcfcf", 1);
+                }
+                ImGui::Separator();
+
+                // Texto (ferramenta T): conteúdo, tamanho da fonte e cor.
+                if (selected->tipo == "texto")
+                {
+                    ImGui::Spacing();
+                    ImGui::TextColored(Theme::TextSecondary, "Texto");
+                    std::string textContent = selected->propriedades.is_object()
+                        ? selected->propriedades.value("texto", std::string("Texto"))
+                        : std::string("Texto");
+                    char textBuf[1024];
+                    strncpy(textBuf, textContent.c_str(), sizeof(textBuf) - 1);
+                    textBuf[sizeof(textBuf) - 1] = 0;
+                    if (ImGui::InputTextMultiline("##text_content", textBuf,
+                                                  sizeof(textBuf),
+                                                  ImVec2(-1.0f, 56.0f)))
+                    {
+                        selected->propriedades["texto"] = textBuf;
+                        mProjectDirty = true;
+                    }
+                    float fontSize = std::max(6.0f,
+                        selected->estilos.value("tamanho_fonte", 18.0f));
+                    if (ImGui::SliderFloat("Tamanho", &fontSize, 6.0f, 96.0f,
+                                           "%.1f"))
+                    {
+                        selected->estilos["tamanho_fonte"] = fontSize;
+                        mProjectDirty = true;
+                    }
+                    float textRgb[3];
+                    const bool hasTextColor =
+                        selected->estilos.contains("cor_texto");
+                    ColorUtils::ParseHex(
+                        selected->estilos.value("cor_texto", "#e8e8e8"), textRgb);
+                    ImGui::ColorButton("##text_color_sw",
+                        ImVec4(textRgb[0], textRgb[1], textRgb[2], 1.0f),
+                        ImGuiColorEditFlags_NoTooltip |
+                        ImGuiColorEditFlags_NoPicker |
+                        ImGuiColorEditFlags_NoBorder, ImVec2(18.0f, 18.0f));
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("%s", hasTextColor
+                            ? selected->estilos["cor_texto"].get<std::string>().c_str()
+                            : "Clique para definir a cor do texto");
+                    if (ImGui::IsItemClicked())
+                    {
+                        mColorPickerTarget = 2;
+                        mColorPickerOpen = true;
+                    }
+                    ImGui::SameLine(0, 8);
+                    ImGui::TextUnformatted("Cor do texto");
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("%s", hasTextColor
+                        ? selected->estilos["cor_texto"].get<std::string>().c_str()
+                        : "—");
+                    ImGui::Separator();
+                }
+
+                // Cantos arredondados (estilo CorelDRAW): raio uniforme e
+                // ajuste fino por canto com valores numéricos (as alças do
+                // canvas continuam como atalho visual).
+                const bool shapeWithCorners = selected->tipo != "elipse" &&
+                    selected->tipo != "poligono" &&
+                    selected->tipo != "linha" &&
+                    selected->tipo != "caminho" &&
+                    selected->tipo != "grupo";
+                if (shapeWithCorners)
+                {
+                    ImGui::Spacing();
+                    ImGui::TextColored(Theme::TextSecondary, "Cantos");
+                    const float cornerW = selected->transformacao.value("largura", 160.0f);
+                    const float cornerH = selected->transformacao.value("altura", 32.0f);
+                    const float maxR = std::max(0.0f, std::min(cornerW, cornerH) * 0.5f);
+                    float uniformR = 0.0f;
+                    if (selected->estilos.is_object())
+                        uniformR = std::max(0.0f, selected->estilos.value("raio", 0.0f));
+                    if (ImGui::SliderFloat("Raio", &uniformR, 0.0f, maxR, "%.1f"))
+                    {
+                        // O raio uniforme vale para os 4 cantos (sobrescreve
+                        // qualquer ajuste individual anterior).
+                        selected->estilos["raio"] = uniformR;
+                        selected->estilos["raio_quinas"] = nlohmann::json{
+                            { "superior_esquerda", uniformR },
+                            { "superior_direita", uniformR },
+                            { "inferior_direita", uniformR },
+                            { "inferior_esquerda", uniformR }
+                        };
+                        mLastAction.kind = ActionKind::CornerRadius;
+                        mLastAction.cornerRadius = uniformR;
+                        mProjectDirty = true;
+                    }
+                    if (!selected->estilos.is_object())
+                        selected->estilos = nlohmann::json::object();
+                    auto& quinas = selected->estilos["raio_quinas"];
+                    if (!quinas.is_object()) quinas = nlohmann::json::object();
+                    static const char* kCornerLabels[4] = {
+                        "Sup. esq.", "Sup. dir.", "Inf. dir.", "Inf. esq."
+                    };
+                    static const char* kCornerKeys[4] = {
+                        "superior_esquerda", "superior_direita",
+                        "inferior_direita", "inferior_esquerda"
+                    };
+                    for (int i = 0; i < 4; ++i)
+                    {
+                        float radius = std::max(0.0f, std::min(maxR,
+                            quinas.value(kCornerKeys[i], uniformR)));
+                        if (ImGui::SliderFloat(kCornerLabels[i], &radius,
+                                               0.0f, maxR, "%.1f"))
+                        {
+                            quinas[kCornerKeys[i]] = radius;
+                            mProjectDirty = true;
+                        }
+                    }
+                    ImGui::Separator();
                 }
 
                 // Sombra (estilo CorelDRAW): cor, deslocamento e desfoque.
@@ -5198,6 +7030,64 @@ namespace seedui
                     }
                 }
 
+                // Gradiente de preenchimento (linear/radial).
+                ImGui::Spacing();
+                ImGui::TextColored(Theme::TextSecondary, "Gradiente");
+                bool gradOn = selected->estilos.contains("gradiente");
+                if (ImGui::Checkbox("Ativar gradiente", &gradOn))
+                {
+                    if (gradOn)
+                        selected->estilos["gradiente"] = nlohmann::json{
+                            { "tipo", "linear" }, { "cor1", "#2b2b2b" },
+                            { "cor2", "#000000" }, { "angulo", 0.0 }
+                        };
+                    else
+                        selected->estilos.erase("gradiente");
+                    mProjectDirty = true;
+                }
+                if (gradOn)
+                {
+                    auto& grad = selected->estilos["gradiente"];
+                    const char* tipoAtual = grad.value("tipo", "linear") == "radial"
+                        ? "Radial" : grad.value("angulo", 0.0f) >= 315.0f ||
+                            grad.value("angulo", 0.0f) < 45.0f ? "Horizontal"
+                          : grad.value("angulo", 0.0f) < 135.0f ? "Vertical" : "Diagonal";
+                    static const char* kTipos[] = {
+                        "Horizontal", "Vertical", "Diagonal", "Radial"
+                    };
+                    static int gradCombo = 0;
+                    gradCombo = std::string(tipoAtual) == "Radial" ? 3
+                             : std::string(tipoAtual) == "Vertical" ? 1
+                             : std::string(tipoAtual) == "Diagonal" ? 2 : 0;
+                    if (ImGui::Combo("Tipo", &gradCombo, kTipos, 4))
+                    {
+                        if (gradCombo == 3)
+                            grad["tipo"] = "radial";
+                        else
+                        {
+                            grad["tipo"] = "linear";
+                            grad["angulo"] = gradCombo == 0 ? 0.0 : gradCombo == 1
+                                ? 90.0 : 45.0;
+                        }
+                        mProjectDirty = true;
+                    }
+                    char c1buf[16], c2buf[16];
+                    strncpy(c1buf, grad.value("cor1", "#2b2b2b").c_str(), 15);
+                    c1buf[15] = 0;
+                    strncpy(c2buf, grad.value("cor2", "#000000").c_str(), 15);
+                    c2buf[15] = 0;
+                    if (ImGui::InputText("Cor inicial", c1buf, sizeof(c1buf)))
+                    {
+                        grad["cor1"] = c1buf;
+                        mProjectDirty = true;
+                    }
+                    if (ImGui::InputText("Cor final", c2buf, sizeof(c2buf)))
+                    {
+                        grad["cor2"] = c2buf;
+                        mProjectDirty = true;
+                    }
+                }
+
                 // Forma do polígono: lados, estrela e raio interno.
                 if (selected->tipo == "poligono")
                 {
@@ -5224,6 +7114,41 @@ namespace seedui
                                                0.1f, 0.95f))
                         {
                             selected->transformacao["raio_interno"] = innerRatio;
+                            mProjectDirty = true;
+                        }
+                    }
+                    ImGui::Separator();
+                }
+
+                // Setas da linha (estilo CorelDRAW): pontas com triângulo
+                // no início e/ou no fim, com tamanho ajustável.
+                if (selected->tipo == "linha")
+                {
+                    ImGui::Spacing();
+                    ImGui::TextColored(Theme::TextSecondary, "Setas (linha)");
+                    if (!selected->estilos.is_object())
+                        selected->estilos = nlohmann::json::object();
+                    auto& setas = selected->estilos["setas"];
+                    if (!setas.is_object()) setas = nlohmann::json::object();
+                    bool arrowStart = setas.value("inicio", false);
+                    bool arrowEnd = setas.value("fim", false);
+                    float arrowSize = std::max(4.0f, setas.value("tamanho", 10.0f));
+                    if (ImGui::Checkbox("Seta no início", &arrowStart))
+                    {
+                        setas["inicio"] = arrowStart;
+                        mProjectDirty = true;
+                    }
+                    if (ImGui::Checkbox("Seta no fim", &arrowEnd))
+                    {
+                        setas["fim"] = arrowEnd;
+                        mProjectDirty = true;
+                    }
+                    if (arrowStart || arrowEnd)
+                    {
+                        if (ImGui::SliderFloat("Tamanho", &arrowSize,
+                                               4.0f, 40.0f, "%.1f"))
+                        {
+                            setas["tamanho"] = arrowSize;
                             mProjectDirty = true;
                         }
                     }
@@ -5357,6 +7282,89 @@ namespace seedui
             ImGui::Spacing();
             ImGui::EndTabItem();
         }
+        if (ImGui::BeginTabItem("Camadas"))
+        {
+            Modo* layerMode = nullptr;
+            if (mHasProject && mTelaAtiva >= 0 && mTelaAtiva < (int)mProject.telas.size())
+            {
+                Tela& ls = mProject.telas[mTelaAtiva];
+                if (mModoAtivo >= 0 && mModoAtivo < (int)ls.modos.size())
+                    layerMode = &ls.modos[mModoAtivo];
+            }
+            if (!layerMode)
+            {
+                PanelHint("Abra um projeto para ver as camadas.");
+            }
+            else if (layerMode->raiz.empty())
+            {
+                PanelHint("Nenhum objeto ainda. Crie formas no canvas.");
+            }
+            else
+            {
+                // Ações de camada (estilo CorelDRAW): trazer/só subir, descer.
+                if (ImGui::Button("↑ Trazer ao topo", ImVec2(-1.0f, 0.0f)))
+                    MoverCamadaSelecionada(+1000);
+                if (ImGui::Button("↓ Enviar ao fundo", ImVec2(-1.0f, 0.0f)))
+                    MoverCamadaSelecionada(-1000);
+                ImGui::Separator();
+                ImGui::TextColored(Theme::TextDisabled,
+                    "A primeira linha é a camada do TOPO (desenha por cima).");
+
+                ImGui::Columns(3, "##layer_cols", false);
+                ImGui::SetColumnWidth(0, 26.0f);
+                ImGui::SetColumnWidth(1, 26.0f);
+                // Lista plana da raiz: do topo (último) para o fundo.
+                for (int i = (int)layerMode->raiz.size() - 1; i >= 0; --i)
+                {
+                    Element& layer = layerMode->raiz[(size_t)i];
+                    ImGui::PushID((int)i + 1000);
+
+                    const bool isSel = layer.id == mSelectedElementId;
+                    // Coluna 0: olho (visibilidade).
+                    ImGui::PushStyleColor(ImGuiCol_Text,
+                        layer.visivel ? Theme::TextPrimary : Theme::TextDisabled);
+                    if (ImGui::Button(layer.visivel ? "●" : "○", ImVec2(20.0f, 20.0f)))
+                    {
+                        layer.visivel = !layer.visivel;
+                        mProjectDirty = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip(layer.visivel ? "Ocultar camada"
+                                                        : "Mostrar camada");
+                    ImGui::PopStyleColor();
+                    ImGui::NextColumn();
+                    // Coluna 1: cadeado (bloqueio).
+                    ImGui::PushStyleColor(ImGuiCol_Text,
+                        layer.bloqueado ? Theme::AccentOrange : Theme::TextDisabled);
+                    if (ImGui::Button(layer.bloqueado ? "🔒" : "🔓", ImVec2(20.0f, 20.0f)))
+                    {
+                        layer.bloqueado = !layer.bloqueado;
+                        mProjectDirty = true;
+                    }
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip(layer.bloqueado ? "Desbloquear camada"
+                                                          : "Bloquear camada");
+                    ImGui::PopStyleColor();
+                    ImGui::NextColumn();
+                    // Coluna 2: nome + seleção.
+                    const char* label = layer.nome.empty() ? layer.id.c_str()
+                                                           : layer.nome.c_str();
+                    if (isSel) ImGui::PushStyleColor(ImGuiCol_Text, Theme::AccentOrange);
+                    if (ImGui::Selectable(label, isSel, 0, ImVec2(0.0f, 22.0f)))
+                    {
+                        mSelectedElementId = layer.id;
+                        mSelectedElementIds = { layer.id };
+                    }
+                    if (isSel) ImGui::PopStyleColor();
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("%s · %s", layer.id.c_str(), layer.tipo.c_str());
+                    ImGui::NextColumn();
+                    ImGui::PopID();
+                }
+                ImGui::Columns(1);
+            }
+            ImGui::EndTabItem();
+        }
         if (ImGui::BeginTabItem("Diretrizes"))
         {
             ImGui::TextWrapped("Comentário geral do programa (o que você quer comunicar à IA sobre o SeedUI):");
@@ -5445,16 +7453,20 @@ namespace seedui
             }
 
             ImGui::SameLine(0, 16);
+            ImGui::AlignTextToFramePadding();
             ImGui::TextColored(Theme::TextSecondary, "● Modo Normal");
             ImGui::SameLine(0, 18);
+            ImGui::AlignTextToFramePadding();
             ImGui::TextColored(Theme::TextSecondary, "Zoom: %.0f%%", mCanvasZoom * 100.0f);
             ImGui::SameLine(0, 18);
+            ImGui::AlignTextToFramePadding();
             ImGui::TextColored(Theme::TextSecondary, "%.0f×%.0f",
                                (float)mProject.telaBaseLargura,
                                (float)mProject.telaBaseAltura);
 
             const ImGuiIO& io = ImGui::GetIO();
             ImGui::SameLine(0, 18);
+            ImGui::AlignTextToFramePadding();
             if (fabsf(io.MousePos.x) > 1.0e30f || fabsf(io.MousePos.y) > 1.0e30f)
                 ImGui::TextColored(Theme::TextSecondary, "Mouse: (—, —)");
             else
@@ -5495,8 +7507,10 @@ namespace seedui
                     if (ImGui::GetCursorPosX() + needC < rightBound)
                     {
                         ImGui::SameLine(0, 20);
+                        ImGui::AlignTextToFramePadding();
                         ImGui::TextColored(Theme::TextSecondary, "%s", cmyk.c_str());
                         ImGui::SameLine(0, 8);
+                        ImGui::AlignTextToFramePadding();
                         ImGui::TextColored(Theme::TextSecondary, "· %.1fpx", borda);
                     }
                 }
@@ -5524,16 +7538,60 @@ namespace seedui
         // Paleta de cores fixa na parte inferior (estilo CorelDRAW): clique
         // esquerdo = preenchimento, clique direito = contorno do selecionado.
         ImGui::Separator();
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 5.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 0.0f));
         ImGui::BeginChild("##colorbar", ImVec2(0, kColorBarHeight), false,
                           ImGuiWindowFlags_NoScrollbar);
-        // Centralização vertical da linha na faixa: o cursor Y dentro do child
-        // já desconta o padding (8,5); (kColorBarHeight - altura) / 2 - 5
-        // deixa texto e swatches exatamente no MEIO da faixa.
+
+        // Centralização vertical exata na faixa de 32px:
         const float swatchSize = 18.0f;
-        ImGui::SetCursorPosY((kColorBarHeight - swatchSize) * 0.5f - 5.0f);
+        const float centerY = (kColorBarHeight - swatchSize) * 0.5f;
+
+        ImGui::SetCursorPosY(centerY + 1.0f);
         ImGui::TextColored(Theme::TextSecondary, "Paleta:");
         ImGui::SameLine(0, 8);
+
+        // Swatch "SEM COR" (Estilo CorelDRAW - Caixa branca com X vermelho):
+        // Clique esquerdo = remove preenchimento | Clique direito = remove contorno
+        {
+            ImGui::PushID("no_color_swatch");
+            ImGui::SetCursorPosY(centerY);
+            const ImVec2 pos = ImGui::GetCursorScreenPos();
+            ImGui::InvisibleButton("##no_color", ImVec2(18.0f, 18.0f));
+            const bool hovered = ImGui::IsItemHovered();
+            const bool leftClick = hovered && ImGui::IsMouseClicked(0);
+            const bool rightClick = hovered && ImGui::IsMouseClicked(1);
+
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            dl->AddRectFilled(pos, ImVec2(pos.x + 18.0f, pos.y + 18.0f), IM_COL32(245, 245, 245, 255));
+            dl->AddRect(pos, ImVec2(pos.x + 18.0f, pos.y + 18.0f), IM_COL32(80, 80, 80, 255));
+            dl->AddLine(ImVec2(pos.x + 2.0f, pos.y + 2.0f), ImVec2(pos.x + 16.0f, pos.y + 16.0f),
+                        IM_COL32(230, 40, 40, 255), 1.5f);
+
+            if (hovered)
+                ImGui::SetTooltip("Sem cor (Esq. remove preenchimento · Dir. desativa contorno)");
+
+            if (leftClick || rightClick)
+            {
+                if (PossuiModoAtivo() && !mSelectedElementIds.empty())
+                {
+                    Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+                    const bool border = rightClick;
+                    int applied = 0;
+                    bool blocked = false;
+                    applied = ApplyStyleToSelection(mode, mSelectedElementIds,
+                        border ? "cor_borda" : "cor_fundo", "none", blocked);
+                    if (applied)
+                    {
+                        mProjectDirty = true;
+                        mStatusMsg = border ? "Contorno desativado (sem borda)"
+                                            : "Preenchimento desativado (transparente)";
+                        mStatusMsgUntil = GetTime() + 4.0;
+                    }
+                }
+            }
+            ImGui::SameLine(0, 3);
+            ImGui::PopID();
+        }
 
         constexpr ImU32 kPalette[] = {
             0xffffff, 0x000000, 0x808080, 0xc0c0c0, 0x404040,
@@ -5546,6 +7604,7 @@ namespace seedui
         {
             const ImVec4 col = Theme::Hex(color);
             ImGui::PushID((int)color);
+            ImGui::SetCursorPosY(centerY);
             ImGui::ColorButton("##sw", col,
                                ImGuiColorEditFlags_NoTooltip |
                                ImGuiColorEditFlags_NoPicker |
@@ -5556,7 +7615,7 @@ namespace seedui
             const bool rightClick = hovered && ImGui::IsMouseClicked(1);
             if (hovered)
                 ImGui::SetTooltip("%s  (esq. preenche · dir. contorno)",
-                                  ColorUtils::ToHex(col.x, col.y, col.z).c_str());
+                                   ColorUtils::ToHex(col.x, col.y, col.z).c_str());
             if (leftClick || rightClick)
             {
                 if (PossuiModoAtivo() && !mSelectedElementIds.empty())
@@ -5573,6 +7632,16 @@ namespace seedui
                     if (applied)
                     {
                         mProjectDirty = true;
+                        if (border)
+                        {
+                            mLastAction.kind = ActionKind::BorderColor;
+                            mLastAction.borderColor = hex;
+                        }
+                        else
+                        {
+                            mLastAction.kind = ActionKind::FillColor;
+                            mLastAction.fillColor = hex;
+                        }
                         mStatusMsg = std::string(border ? "Contorno: "
                                                         : "Preenchimento: ") +
                                      hex + (applied > 1
@@ -5597,7 +7666,7 @@ namespace seedui
         }
 
         ImGui::SameLine(0, 10);
-        ImGui::SetCursorPosY((kColorBarHeight - 22.0f) * 0.5f - 5.0f);
+        ImGui::SetCursorPosY((kColorBarHeight - 22.0f) * 0.5f);
         if (ImGui::Button("Seletor de cor...##open_picker", ImVec2(118, 22)))
             mColorPickerOpen = true;
         ImGui::EndChild();
@@ -5607,9 +7676,9 @@ namespace seedui
     void App::DrawColorPickerWindow()
     {
         if (!mColorPickerOpen) return;
-        ImGui::SetNextWindowSize(ImVec2(284, 0), ImGuiCond_Always);
-        if (!ImGui::Begin("Seletor de cor", &mColorPickerOpen,
-                          ImGuiWindowFlags_NoResize))
+        ImGui::SetNextWindowSize(ImVec2(280, 0), ImGuiCond_Always);
+        if (!ImGui::Begin("Seletor de Cor", &mColorPickerOpen,
+                          ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse))
         {
             ImGui::End();
             return;
@@ -5630,8 +7699,24 @@ namespace seedui
             ImGui::End();
             return;
         }
+        // Alvo do seletor: preenchimento (cor_fundo), contorno (cor_borda)
+        // ou cor do texto (cor_texto). O botão do Inspetor/paleta define
+        // mColorPickerTarget antes de abrir.
+        const char* targetKey = mColorPickerTarget == 2 ? "cor_texto"
+                             : mColorPickerTarget == 1 ? "cor_borda"
+                                                        : "cor_fundo";
+        const char* targetLabel = mColorPickerTarget == 2 ? "Cor do texto"
+                             : mColorPickerTarget == 1 ? "Contorno"
+                                                        : "Preenchimento";
+        const char* targetDefault = mColorPickerTarget == 2 ? "#e8e8e8"
+                             : mColorPickerTarget == 1 ? "#cfcfcf"
+                                                        : "#2b2b2b";
         float rgb[3] = { 0x2b / 255.0f, 0x2b / 255.0f, 0x2b / 255.0f };
-        ColorUtils::ParseHex(element->estilos.value("cor_fundo", "#2b2b2b"), rgb);
+        if (element->estilos.contains(targetKey))
+            ColorUtils::ParseHex(element->estilos.value(targetKey, targetDefault),
+                                 rgb);
+        ImGui::TextColored(Theme::AccentOrange, "● %s", targetLabel);
+        ImGui::Separator();
         if (ColorPicker::Widget("##picker", rgb))
         {
             // Multi-seleção: aplica a todos os selecionados (grupos incluem
@@ -5640,8 +7725,21 @@ namespace seedui
             Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
             bool blocked = false;
             const int applied = ApplyStyleToSelection(mode, mSelectedElementIds,
-                                                      "cor_fundo", hex, blocked);
-            if (applied) mProjectDirty = true;
+                                                      targetKey, hex, blocked);
+            if (applied)
+            {
+                mProjectDirty = true;
+                if (mColorPickerTarget == 1)
+                {
+                    mLastAction.kind = ActionKind::BorderColor;
+                    mLastAction.borderColor = hex;
+                }
+                else if (mColorPickerTarget == 0)
+                {
+                    mLastAction.kind = ActionKind::FillColor;
+                    mLastAction.fillColor = hex;
+                }
+            }
         }
         ImGui::End();
     }

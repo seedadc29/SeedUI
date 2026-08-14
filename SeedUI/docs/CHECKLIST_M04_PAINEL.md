@@ -10,11 +10,11 @@ barra lateral esquerda (famílias existentes), com ícone + tooltip + atalho.
 
 | Etapa | Conteúdo | Status |
 |---|---|---|
-| 1 | **Cores de preenchimento e contorno**: seletor de cor (`cor_fundo`/`cor_borda`) na barra lateral e no Inspetor, swatch no botão, conta-gotas aplicando no selecionado | Parcial — paleta inferior + seletor 3 modelos prontos; falta na barra lateral/Inspetor |
-| 2 | **Transformações de precisão**: rotação (alça no canvas + valor no Inspetor), espelhar H/V, nudge (setas 1px / Shift 10px), proporção travada (Shift no resize) | Parcial — **rotação pronta** |
-| 3 | **Grupo avançado**: desagrupar (filhos sobem ao nível do pai preservando posição), redimensionar grupo escalando filhos, duplicar (Ctrl+D) com deslocamento fixo, repetir último deslocamento | Parcial — **redimensionar grupo e desagrupar prontos** |
-| 4 | **Estilo de linha e sombra**: contorno tracejado, pontas (caps), junções (joins), sombra (`sombra`: cor, deslocamento, desfoque) | Pendente |
-| 5 | **Auxílio de precisão**: guias arrastadas da régua com snap e bloquear/apagar, guias inteligentes (centro/bordas no arraste), ferramenta medir (distância/ângulo com rótulo, sem entrar no JSON) | Parcial — guias inteligentes prontas e **snap reforçado** (tol. 10px, grade em espaço de projeto); régua e medir pendentes |
+| 1 | **Cores de preenchimento e contorno**: seletor de cor (`cor_fundo`/`cor_borda`) na barra lateral e no Inspetor, swatch no botão, conta-gotas aplicando no selecionado | **Pronta** — paleta inferior + seletor 3 modelos + **seção Cores no Inspetor** (swatches de preenchimento/contorno que abrem o seletor e aplicam na seleção inteira, com botão × para remover) |
+| 2 | **Transformações de precisão**: rotação (alça no canvas + valor no Inspetor), espelhar H/V, nudge (setas 1px / Shift 10px), proporção travada (Shift no resize) | **Pronta** — rotação, espelhar H/V (flip real de geometria), nudge e Shift espelhado/proporcional |
+| 3 | **Grupo avançado**: desagrupar (filhos sobem ao nível do pai preservando posição), redimensionar grupo escalando filhos, duplicar (Ctrl+D) com deslocamento fixo, repetir último deslocamento | **Pronta** — redimensionar grupo, desagrupar e **Ctrl+D com repetição do último passo** |
+| 4 | **Estilo de linha e sombra**: contorno tracejado, pontas (caps), junções (joins), sombra (`sombra`: cor, deslocamento, desfoque) | **Pronta** — tracejado (traço/espaço) e sombra (cor, desloc. X/Y, desfoque) no Inspetor |
+| 5 | **Auxílio de precisão**: guias arrastadas da régua com snap e bloquear/apagar, guias inteligentes (centro/bordas no arraste), ferramenta medir (distância/ângulo com rótulo, sem entrar no JSON) | **Pronta** — guias + snap reforçado + **ferramenta Medir** (distância na unidade atual e ângulo) |
 
 ## O que foi implementado (2026-08-12)
 
@@ -57,7 +57,7 @@ barra lateral esquerda (famílias existentes), com ícone + tooltip + atalho.
 - 4 verificações no autoteste: bloqueado recusa, remove o grupo, devolve os
   filhos, posição preservada.
 
-### Cores (etapa 1 — parcial)
+### Cores (etapa 1 — completa)
 - Canvas renderiza `estilos.cor_fundo`/`cor_borda` (`#rrggbb`), fallback
   neutro; `src/ColorUtils.h` (parse/hex + HSV) e `src/ColorPicker.{h,cpp}`
   (seletor com 3 modelos: Triângulo, Quadrado, Barras) — novo arquivo
@@ -67,6 +67,11 @@ barra lateral esquerda (famílias existentes), com ícone + tooltip + atalho.
 - Seletor com 3 modelos (Triângulo/Quadrado/Barras) — triângulo com
   subdivisão em quads e bordas suaves (sem serrilhado), alças maiores e
   prévia com borda.
+- **Seção Cores no Inspetor**: swatches de **Preenchimento** e **Contorno**
+  que abrem o seletor de 3 modelos no alvo certo (o seletor ganhou o campo
+  `mColorPickerTarget`: 0 preenchimento, 1 contorno, 2 cor do texto) e
+  aplicam na seleção inteira (grupos recursivamente); botão **×** remove a
+  cor do(s) elemento(s) selecionado(s).
 
 ### Seleção e zoom (refinamento)
 - Seleção por caixa com **modo alternável**: padrão **cobertura total**
@@ -195,9 +200,61 @@ barra lateral esquerda (famílias existentes), com ícone + tooltip + atalho.
 ## Validação
 - Builds Debug e Development aprovados (via MSBuild direto; devenv com lock
   da reinicialização pendente do instalador do VS).
-- `SeedUI.exe --self-test-m04`: **76 verificações PASS, 0 failures**.
+- `SeedUI.exe --self-test-m04`: **134 verificações PASS, 0 failures** (última
+  rodada: cores/cantos/setas/texto/converter em caminho/exportação SVG).
 - Captura automática (`--capture`) sem crash/asserts (Debug e Development);
   limite máx. 1366×768 aplicado na inicialização.
-- **Pendente de validação manual (usuário)**: barra de propriedades editando
-  o selecionado (X/Y/L/A/Rot e unidade), criar/arrastar/remover guias das
-  réguas com snap, réguas seguindo zoom/pan, e detalhes+CMYK no rodapé.
+
+## Lote de implementação autônoma (2026-08-13, madrugada)
+
+Trabalho feito enquanto o usuário dormia (foco em design gráfico,
+CorelDRAW/Illustrator) — todas com autoteste:
+
+### Seção **Cores** no Inspetor (completa a Etapa 1)
+- Swatches de Preenchimento (`cor_fundo`) e Contorno (`cor_borda`) que abrem
+  o seletor de 3 modelos no alvo certo e aplicam na seleção inteira (grupos
+  recursivamente); botão **×** remove a cor. O seletor ganhou o alvo
+  `mColorPickerTarget` (0 preenchimento, 1 contorno, 2 cor do texto).
+
+### Seção **Cantos** no Inspetor (raio numérico)
+- Slider de raio **uniforme** (grava `estilos.raio` e os 4 cantos em
+  `raio_quinas`) + 4 sliders individuais (Sup. esq. / Sup. dir. / Inf. dir. /
+  Inf. esq.), limitados a `min(largura,altura)/2`. As alças do canvas
+  continuam como atalho visual. Oculta em elipse/polígono/linha/caminho/grupo.
+
+### **Setas nas linhas** (estilo CorelDRAW)
+- `estilos.setas { inicio, fim, tamanho }`: triângulos preenchidos nas pontas
+  da linha, seguindo a rotação real (Canvas.cpp usa as pontas em tela);
+  controles no Inspetor (Seta no início / Seta no fim / Tamanho).
+
+### **Ferramenta Texto (T) + renderização + Inspetor**
+- **Clique** com a ferramenta T cria um texto; **arrastar** define a caixa de
+  texto (largura de quebra), estilo CorelDRAW.
+- Canvas desenha o conteúdo (`propriedades.texto`) com `estilos.tamanho_fonte`
+  em unidades de projeto (segue o zoom), cor `estilos.cor_texto` (seletor,
+  alvo 2) e quebra na largura da caixa, centralizado verticalmente. Rotação
+  de glifos fica para M07.
+- Inspetor: campo de conteúdo multilinha, tamanho da fonte (6–96) e cor.
+
+### **Exportação SVG mais fiel** (Arquivo → Exportar SVG…, Ctrl+Shift+E)
+- **Texto** exporta com `cor_texto` (não mais a cor do fundo) e `font-size`
+  real (baseline = y + tamanho).
+- **Gradientes** viram `<defs>` com `<linearGradient>`/`<radialGradient>`
+  (cores + ângulo, objectBoundingBox) e o fill referencia `url(#id)` —
+  sanitizado pelo id do elemento (único).
+- **Setas das linhas** emitem os triângulos nas pontas com a cor do contorno.
+- Números SVG limpos (`FmtSvgNum`: "28" em vez de "28.000000").
+- Geração extraída para `App::GerarSVG(projeto, modo)` (estático) — testável
+  no autoteste sem abrir janela.
+
+### **Converter em caminho (Ctrl+Q)** — "Convert to Curves" do CorelDRAW
+- Formas (retângulo, painel, elipse, polígono/estrela, botão...) viram
+  `caminho` com `transformacao.pontos` amostrados de `Geo::OutlineLocal`
+  (retângulo com quinas → pontos com arcos; elipse → 16 pontos; polígono →
+  `lados`; estrela → `lados*2`), preservando posição/tamanho/rotação/cores/
+  espelhamento. Depois é editável por nós com as ferramentas da caneta.
+  Menu Objeto → "Converter em caminho" + atalho Ctrl+Q.
+
+Testes novos: serialização de setas, cantos por quina, texto (conteúdo /
+ tamanho / cor), amostragem do contorno (retângulo 4 pontos, polígono 5,
+ estrela 10, elipse 16).

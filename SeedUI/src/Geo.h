@@ -22,11 +22,25 @@ namespace seedui
     {
         inline constexpr float kMaxCornerSegments = 12.0f;
 
-        // Passo ÚNICO do sistema de grade: usado tanto pelo DESENHO do grid
-        // (Canvas) quanto pelo SNAP (App) — uma única fonte matemática, para
-        // que o encaixe do snap coincida exatamente com os pontos visíveis
-        // da grade em qualquer zoom. Major = 5× o passo (40 unidades).
-        inline constexpr float kGridStep = 8.0f;
+        // Passo ADAPTATIVO do grid com o zoom:
+        // A grade adapta-se dinamicamente para manter o espaçamento entre pontos na tela
+        // sempre confortável (~20px a ~50px).
+        // Em zoom out (visão ampla): passos maiores (100, 50, 20).
+        // Em zoom in (precisão): passos cada vez menores (10, 5, 2, 1, 0.5, 0.2, 0.1).
+        inline float GetAdaptiveGridStep(float viewScale)
+        {
+            constexpr float kSteps[] = {
+                0.05f, 0.1f, 0.2f, 0.5f, 1.0f, 2.0f, 5.0f, 10.0f, 20.0f, 50.0f, 100.0f, 200.0f, 500.0f, 1000.0f
+            };
+            for (float s : kSteps)
+            {
+                if (s * viewScale >= 20.0f)
+                    return s;
+            }
+            return 100.0f;
+        }
+
+        inline constexpr float kGridStep = 10.0f;
         inline constexpr float kGridMajorMult = 5.0f;
 
         inline float DegToRad(float degrees)
@@ -95,6 +109,222 @@ namespace seedui
                     radius = e.estilos["raio_quinas"].value(keys[i], radius);
                 out[i] = std::max(0.0f, std::min(maximum, radius));
             }
+        }
+
+        // Encontra os valores mínimo e máximo de uma coordenada em uma curva cúbica
+        // avaliando os extremos locais através das raízes da derivada B'(t) = 0.
+        inline void CubicExtrema(float p0, float p1, float p2, float p3, float& minVal, float& maxVal)
+        {
+            minVal = std::min(minVal, std::min(p0, p3));
+            maxVal = std::max(maxVal, std::max(p0, p3));
+            const float a = 3.0f * (-p0 + 3.0f * p1 - 3.0f * p2 + p3);
+            const float b = 6.0f * (p0 - 2.0f * p1 + p2);
+            const float c = 3.0f * (p1 - p0);
+            if (fabsf(a) < 1e-6f)
+            {
+                if (fabsf(b) > 1e-6f)
+                {
+                    const float t = -c / b;
+                    if (t > 0.0f && t < 1.0f)
+                    {
+                        const float u = 1.0f - t;
+                        const float val = u * u * u * p0 + 3.0f * u * u * t * p1 + 3.0f * u * t * t * p2 + t * t * t * p3;
+                        minVal = std::min(minVal, val);
+                        maxVal = std::max(maxVal, val);
+                    }
+                }
+                return;
+            }
+            const float disc = b * b - 4.0f * a * c;
+            if (disc >= 0.0f)
+            {
+                const float sqrtD = sqrtf(disc);
+                const float t1 = (-b + sqrtD) / (2.0f * a);
+                const float t2 = (-b - sqrtD) / (2.0f * a);
+                if (t1 > 0.0f && t1 < 1.0f)
+                {
+                    const float u = 1.0f - t1;
+                    const float val = u * u * u * p0 + 3.0f * u * u * t1 * p1 + 3.0f * u * t1 * t1 * p2 + t1 * t1 * t1 * p3;
+                    minVal = std::min(minVal, val);
+                    maxVal = std::max(maxVal, val);
+                }
+                if (t2 > 0.0f && t2 < 1.0f)
+                {
+                    const float u = 1.0f - t2;
+                    const float val = u * u * u * p0 + 3.0f * u * u * t2 * p1 + 3.0f * u * t2 * t2 * p2 + t2 * t2 * t2 * p3;
+                    minVal = std::min(minVal, val);
+                    maxVal = std::max(maxVal, val);
+                }
+            }
+        }
+
+        // Subdivide uma curva Bézier cúbica no parâmetro t usando o algoritmo de De Casteljau.
+        inline void SplitCubic(const ImVec2& p0, const ImVec2& p1, const ImVec2& p2, const ImVec2& p3,
+                               float t, ImVec2 q[4], ImVec2 r[4])
+        {
+            const float u = 1.0f - t;
+            const ImVec2 p01(u * p0.x + t * p1.x, u * p0.y + t * p1.y);
+            const ImVec2 p12(u * p1.x + t * p2.x, u * p1.y + t * p2.y);
+            const ImVec2 p23(u * p2.x + t * p3.x, u * p2.y + t * p3.y);
+            const ImVec2 p012(u * p01.x + t * p12.x, u * p01.y + t * p12.y);
+            const ImVec2 p123(u * p12.x + t * p23.x, u * p12.y + t * p23.y);
+            const ImVec2 p0123(u * p012.x + t * p123.x, u * p012.y + t * p123.y);
+
+            q[0] = p0;
+            q[1] = p01;
+            q[2] = p012;
+            q[3] = p0123;
+
+            r[0] = p0123;
+            r[1] = p123;
+            r[2] = p23;
+            r[3] = p3;
+        }
+
+        // AABB exata de um caminho calculada pelas raízes reais da derivada de
+        // cada segmento cúbico, cobrindo arcos e barrigas salientes perfeitamente.
+        inline bool PathBounds(const Element& e, float& minX, float& minY,
+                               float& maxX, float& maxY)
+        {
+            if (e.tipo != "caminho" || !e.transformacao.is_object() ||
+                !e.transformacao.contains("pontos") ||
+                !e.transformacao["pontos"].is_array())
+                return false;
+            const auto& arr = e.transformacao["pontos"];
+            if (arr.empty()) return false;
+            minX = arr[0].value("x", 0.0f);
+            minY = arr[0].value("y", 0.0f);
+            maxX = minX;
+            maxY = minY;
+            const int n = (int)arr.size();
+            const bool closed = e.transformacao.value("fechado", 0.0f) > 0.5f;
+            const int segments = closed ? n : (n - 1);
+            for (int i = 0; i < segments; ++i)
+            {
+                const int j = (i + 1) % n;
+                const auto& pa = arr[i];
+                const auto& pb = arr[j];
+                const float ax = pa.value("x", 0.0f);
+                const float ay = pa.value("y", 0.0f);
+                const float bx = pb.value("x", 0.0f);
+                const float by = pb.value("y", 0.0f);
+                const bool curved = pa.value("curva", 0.0f) > 0.5f || pb.value("curva", 0.0f) > 0.5f;
+                if (curved)
+                {
+                    const float c2x = ax + pa.value("cx2", 0.0f);
+                    const float c2y = ay + pa.value("cy2", 0.0f);
+                    float c1x = 0.0f, c1y = 0.0f;
+                    if (pb.value("quebrado", 0.0f) > 0.5f)
+                    {
+                        c1x = bx + pb.value("cx1", 0.0f);
+                        c1y = by + pb.value("cy1", 0.0f);
+                    }
+                    else
+                    {
+                        c1x = bx - pb.value("cx2", 0.0f);
+                        c1y = by - pb.value("cy2", 0.0f);
+                    }
+                    CubicExtrema(ax, c2x, c1x, bx, minX, maxX);
+                    CubicExtrema(ay, c2y, c1y, by, minY, maxY);
+                }
+                else
+                {
+                    minX = std::min(minX, std::min(ax, bx));
+                    maxX = std::max(maxX, std::max(ax, bx));
+                    minY = std::min(minY, std::min(ay, by));
+                    maxY = std::max(maxY, std::max(ay, by));
+                }
+            }
+            return true;
+        }
+
+        // Localiza se um ponto (px, py) em coordenadas locais está sobre um segmento
+        // do caminho (para inserção de nós com De Casteljau).
+        inline bool FindSegmentOnPath(const Element& e, float px, float py, float maxDist,
+                                      int& outSeg, float& outT, float& outProjX, float& outProjY)
+        {
+            if (e.tipo != "caminho" || !e.transformacao.contains("pontos") ||
+                !e.transformacao["pontos"].is_array())
+                return false;
+            const auto& arr = e.transformacao["pontos"];
+            const int n = (int)arr.size();
+            if (n < 2) return false;
+            const bool closed = e.transformacao.value("fechado", 0.0f) > 0.5f;
+            const int segments = closed ? n : (n - 1);
+            float bestDistSq = maxDist * maxDist;
+            outSeg = -1;
+
+            for (int i = 0; i < segments; ++i)
+            {
+                const int j = (i + 1) % n;
+                const auto& pa = arr[i];
+                const auto& pb = arr[j];
+                const float ax = pa.value("x", 0.0f);
+                const float ay = pa.value("y", 0.0f);
+                const float bx = pb.value("x", 0.0f);
+                const float by = pb.value("y", 0.0f);
+                const bool curved = pa.value("curva", 0.0f) > 0.5f || pb.value("curva", 0.0f) > 0.5f;
+
+                const int samples = curved ? 32 : 8;
+                float prevX = ax, prevY = ay;
+                for (int s = 1; s <= samples; ++s)
+                {
+                    const float t = (float)s / (float)samples;
+                    float curX = 0.0f, curY = 0.0f;
+                    if (curved)
+                    {
+                        const float c2x = ax + pa.value("cx2", 0.0f);
+                        const float c2y = ay + pa.value("cy2", 0.0f);
+                        float c1x = 0.0f, c1y = 0.0f;
+                        if (pb.value("quebrado", 0.0f) > 0.5f)
+                        {
+                            c1x = bx + pb.value("cx1", 0.0f);
+                            c1y = by + pb.value("cy1", 0.0f);
+                        }
+                        else
+                        {
+                            c1x = bx - pb.value("cx2", 0.0f);
+                            c1y = by - pb.value("cy2", 0.0f);
+                        }
+                        const float u = 1.0f - t;
+                        const float w0 = u * u * u;
+                        const float w1 = 3.0f * u * u * t;
+                        const float w2 = 3.0f * u * t * t;
+                        const float w3 = t * t * t;
+                        curX = w0 * ax + w1 * c2x + w2 * c1x + w3 * bx;
+                        curY = w0 * ay + w1 * c2y + w2 * c1y + w3 * by;
+                    }
+                    else
+                    {
+                        curX = ax + (bx - ax) * t;
+                        curY = ay + (by - ay) * t;
+                    }
+
+                    // Projeção no subsegmento linear [prev, cur]
+                    const float segDx = curX - prevX;
+                    const float segDy = curY - prevY;
+                    const float segLenSq = segDx * segDx + segDy * segDy;
+                    float segT = 0.0f;
+                    if (segLenSq > 1e-6f)
+                        segT = std::max(0.0f, std::min(1.0f, ((px - prevX) * segDx + (py - prevY) * segDy) / segLenSq));
+                    const float projX = prevX + segDx * segT;
+                    const float projY = prevY + segDy * segT;
+                    const float ddx = px - projX;
+                    const float ddy = py - projY;
+                    const float dSq = ddx * ddx + ddy * ddy;
+                    if (dSq < bestDistSq)
+                    {
+                        bestDistSq = dSq;
+                        outSeg = i;
+                        outT = ((float)(s - 1) + segT) / (float)samples;
+                        outProjX = projX;
+                        outProjY = projY;
+                    }
+                    prevX = curX;
+                    prevY = curY;
+                }
+            }
+            return (outSeg >= 0);
         }
 
         // AABB do elemento rotacionado (espaço do projeto). Útil para hit
@@ -213,8 +443,11 @@ namespace seedui
 
         // Amostra o contorno do elemento na forma local (0..w, 0..h), sem
         // translação/rotação/escala. Pontos em sentido anti-horário.
+        // pixelsPerUnit: escala de tela (pixels por unidade de projeto). O
+        // caminho é tessellado com passo ALVO em pixels de tela (~2px), para
+        // que a curva fique lisa em QUALQUER zoom — sem facetas "low-poly".
         inline void OutlineLocal(const Element& e, std::vector<ImVec2>& out,
-                                 int segments = 48)
+                                 int segments = 48, float pixelsPerUnit = 1.0f)
         {
             out.clear();
             const float w = e.transformacao.value("largura", 160.0f);
@@ -247,7 +480,6 @@ namespace seedui
                     {
                         const bool closed = e.transformacao.value("fechado", 0.0f) > 0.5f;
                         const int segments = closed ? n : n - 1;
-                        const int steps = 12;
                         for (int i = 0; i < segments; ++i)
                         {
                             const int j = (i + 1) % n;
@@ -263,9 +495,34 @@ namespace seedui
                             {
                                 const float c2x = ax + pa.value("cx2", 0.0f);
                                 const float c2y = ay + pa.value("cy2", 0.0f);
-                                const float c1x = bx - pb.value("cx2", 0.0f);
-                                const float c1y = by - pb.value("cy2", 0.0f);
-                                for (int s = 0; s < steps; ++s)
+                                // Alça de ENTRADA de B: quando o ponto está
+                                // "quebrado" (alças individuais, Alt+clique),
+                                // usa a própria cx1/cy1; senão usa o espelho
+                                // da alça de saída (modo uniforme).
+                                float c1x = 0.0f, c1y = 0.0f;
+                                if (pb.value("quebrado", 0.0f) > 0.5f)
+                                {
+                                    c1x = bx + pb.value("cx1", 0.0f);
+                                    c1y = by + pb.value("cy1", 0.0f);
+                                }
+                                else
+                                {
+                                    c1x = bx - pb.value("cx2", 0.0f);
+                                    c1y = by - pb.value("cy2", 0.0f);
+                                }
+                                // Passos ADAPTATIVOS em PIXELS DE TELA: o
+                                // comprimento aproximado do polígono de controle
+                                // (em unidades de projeto) multiplicado pela
+                                // escala vira pixels, e o passo alvo é ~2px de
+                                // tela. Em qualquer zoom o traço fica liso — sem
+                                // facetas "low-poly" (que o passo fixo causava).
+                                const float approx = fabsf(c2x - ax) + fabsf(c2y - ay) +
+                                                     fabsf(c1x - c2x) + fabsf(c1y - c2y) +
+                                                     fabsf(bx - c1x) + fabsf(by - c1y);
+                                const float stepPx = std::max(0.25f, pixelsPerUnit);
+                                const int steps = std::max(16, std::min(512,
+                                    (int)(approx * stepPx / 2.0f + 0.5f)));
+                                for (int s = 0; s <= steps; ++s)
                                 {
                                     const float t = (float)s / (float)steps;
                                     const float u = 1.0f - t;
@@ -273,28 +530,72 @@ namespace seedui
                                     const float w1 = 3.0f * u * u * t;
                                     const float w2 = 3.0f * u * t * t;
                                     const float w3 = t * t * t;
-                                    out.push_back(ImVec2(
-                                        w0 * ax + w1 * c2x + w2 * c1x + w3 * bx,
-                                        w0 * ay + w1 * c2y + w2 * c1y + w3 * by));
+                                    const float px = w0 * ax + w1 * c2x + w2 * c1x + w3 * bx;
+                                    const float py = w0 * ay + w1 * c2y + w2 * c1y + w3 * by;
+                                    if (out.empty())
+                                        out.push_back(ImVec2(px, py));
+                                    else
+                                    {
+                                        const float dx = px - out.back().x;
+                                        const float dy = py - out.back().y;
+                                        if (dx * dx + dy * dy > 0.0001f)
+                                            out.push_back(ImVec2(px, py));
+                                    }
                                 }
                             }
                             else
                             {
-                                out.push_back(ImVec2(ax, ay));
+                                if (out.empty())
+                                    out.push_back(ImVec2(ax, ay));
+                                else
+                                {
+                                    const float dx = ax - out.back().x;
+                                    const float dy = ay - out.back().y;
+                                    if (dx * dx + dy * dy > 0.0001f)
+                                        out.push_back(ImVec2(ax, ay));
+                                }
                             }
                         }
                         if (closed)
                         {
-                            const auto& first = arr[0];
-                            out.push_back(ImVec2(first.value("x", 0.0f),
-                                                 first.value("y", 0.0f)));
+                            if (out.size() >= 2)
+                            {
+                                const float fpx = out.front().x;
+                                const float fpy = out.front().y;
+                                const float ddx = out.back().x - fpx;
+                                const float ddy = out.back().y - fpy;
+                                if (ddx * ddx + ddy * ddy > 0.0001f)
+                                    out.push_back(ImVec2(fpx, fpy));
+                            }
+                        }
+                        else if (n >= 2)
+                        {
+                            const float lastX = arr[n - 1].value("x", 0.0f);
+                            const float lastY = arr[n - 1].value("y", 0.0f);
+                            if (out.empty())
+                                out.push_back(ImVec2(lastX, lastY));
+                            else
+                            {
+                                const float dx = lastX - out.back().x;
+                                const float dy = lastY - out.back().y;
+                                if (dx * dx + dy * dy > 0.0001f)
+                                    out.push_back(ImVec2(lastX, lastY));
+                            }
                         }
                         else
                         {
-                            // Aberto: o último ponto é o fim do último segmento.
                             const auto& last = arr[n - 1];
-                            out.push_back(ImVec2(last.value("x", 0.0f),
-                                                 last.value("y", 0.0f)));
+                            const float lx = last.value("x", 0.0f);
+                            const float ly = last.value("y", 0.0f);
+                            if (out.empty())
+                                out.push_back(ImVec2(lx, ly));
+                            else
+                            {
+                                const float dx = lx - out.back().x;
+                                const float dy = ly - out.back().y;
+                                if (dx * dx + dy * dy > 0.0001f)
+                                    out.push_back(ImVec2(lx, ly));
+                            }
                         }
                         ApplyMirror(e, w, h, out);
                         return;
@@ -373,9 +674,9 @@ namespace seedui
 
         // Contorno em coordenadas de projeto (translação + rotação aplicada).
         inline void OutlineProject(const Element& e, std::vector<ImVec2>& out,
-                                   int segments = 48)
+                                   int segments = 48, float pixelsPerUnit = 1.0f)
         {
-            OutlineLocal(e, out, segments);
+            OutlineLocal(e, out, segments, pixelsPerUnit);
             const float x = e.transformacao.value("x", 0.0f);
             const float y = e.transformacao.value("y", 0.0f);
             const float radians = DegToRad(ElementRotation(e));
@@ -394,11 +695,13 @@ namespace seedui
         }
 
         // Contorno em coordenadas de tela (escala + deslocamento de origem).
+        // A escala é repassada como pixelsPerUnit para a tesselação do caminho
+        // ficar lisa em qualquer zoom (passo alvo ~2px de tela).
         inline void OutlineScreen(const Element& e, float originX, float originY,
                                   float scale, std::vector<ImVec2>& out,
                                   int segments = 48)
         {
-            OutlineProject(e, out, segments);
+            OutlineProject(e, out, segments, scale);
             for (ImVec2& p : out)
             {
                 p.x = originX + p.x * scale;

@@ -78,14 +78,10 @@ namespace seedui
         void OffsetElementTreeXY(Element& element, float dx, float dy,
                                  float canvasWidth, float canvasHeight)
         {
-            const float width = element.transformacao.value("largura", 160.0f);
-            const float height = element.transformacao.value("altura", 32.0f);
             const float x = element.transformacao.value("x", 0.0f) + dx;
             const float y = element.transformacao.value("y", 0.0f) + dy;
-            element.transformacao["x"] = std::max(0.0f,
-                std::min(std::max(0.0f, canvasWidth - width), x));
-            element.transformacao["y"] = std::max(0.0f,
-                std::min(std::max(0.0f, canvasHeight - height), y));
+            element.transformacao["x"] = x;
+            element.transformacao["y"] = y;
             for (Element& child : element.filhos)
                 OffsetElementTreeXY(child, dx, dy, canvasWidth, canvasHeight);
         }
@@ -129,6 +125,30 @@ namespace seedui
                         best = std::min(best, ddx * ddx + ddy * ddy);
                     }
                     inside = best <= 64.0f; // raio 8px
+                    // Caminho FECHADO: clique DENTRO do preenchimento também
+                    // seleciona (teste de ponto no polígono — ray casting).
+                    // Só vale para caminhos com cor de fundo: sem preenchimento
+                    // o interior é transparente e o clique continua no contorno.
+                    if (!inside && closed)
+                    {
+                        bool hasFill = element.estilos.is_object() &&
+                            element.estilos.contains("cor_fundo");
+                        if (hasFill)
+                        {
+                            bool insidePoly = false;
+                            int j = n - 1;
+                            for (int i = 0; i < n; ++i)
+                            {
+                                const ImVec2& a = pts[i];
+                                const ImVec2& b = pts[j];
+                                const bool cross = (a.y > y) != (b.y > y) &&
+                                    x < (b.x - a.x) * (y - a.y) / (b.y - a.y) + a.x;
+                                if (cross) insidePoly = !insidePoly;
+                                j = i;
+                            }
+                            inside = insidePoly;
+                        }
+                    }
                 }
             }
             else if (element.tipo == "linha")

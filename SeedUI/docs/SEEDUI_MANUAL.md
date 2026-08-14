@@ -495,11 +495,16 @@ Se você é uma IA (ou desenvolvedor) trabalhando em um projeto SeedUI:
 
 ## 10. Estado atual e próximas etapas
 
-- **Agora**: o SeedUI é um editor **standalone** (não conectado à engine).
-  Ele cria, edita e exporta projetos de interface. No canvas já funcionam
+- **Agora**: o SeedUI é um editor **standalone** (não conectado à engine)
+  com conjunto de ferramentas de **design gráfico** (CorelDRAW/Illustrator):
   seleção, mover, redimensionar, **rotação**, **redimensionar em grupo**,
   **desagrupar**, **guias inteligentes**, **cores** (paleta + seletor),
-  **clone com o botão direito** e **zoom até 16×** (ver §3.3 e §3.4).
+  **clone com o botão direito**, **zoom até 32×** (Ctrl+1/0/9 = 100%/tela/seleção),
+  **duplicar (Ctrl+D)**, **espelhar H/V**, **medir distância/ângulo**,
+  **sombra**, **contorno tracejado**, **elemento Linha**, **polígono/estrela
+  configurável**, **caneta Bezier** com edição de nós, **modo wireframe**,
+  **gradientes** (linear/radial), **Selecionar tudo (Ctrl+A)**, **exportar
+  SVG** (Arquivo → Exportar SVG…) e aba **Camadas** no painel direito.
 - **Futuro (opcional)**: integração com a engine — carregar os projetos
   exportados dentro do jogo e conectar funções reais aos IDs. O F1 e o F2
   continuam sendo da engine; o SeedUI apenas projeta as interfaces deles.

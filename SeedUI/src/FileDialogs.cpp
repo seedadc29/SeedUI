@@ -58,4 +58,23 @@ namespace seedui
     {
         return RunSaveDialog(nomeSugerido);
     }
+
+    std::string SalvarDialogoSVG(const std::string& nomeSugerido)
+    {
+        constexpr const char* kFilterSvg =
+            "SVG ("".svg)\0*.svg\0Todos os arquivos (*.*)\0*.*\0\0";
+        char buf[MAX_PATH] = { 0 };
+        strncpy(buf, nomeSugerido.c_str(), sizeof buf - 1);
+        OPENFILENAMEA ofn;
+        std::memset(&ofn, 0, sizeof ofn);
+        ofn.lStructSize = sizeof ofn;
+        ofn.lpstrFilter = kFilterSvg;
+        ofn.lpstrFile = buf;
+        ofn.nMaxFile = MAX_PATH;
+        ofn.lpstrTitle = "Exportar SVG";
+        ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+        ofn.lpstrDefExt = "svg";
+        if (!GetSaveFileNameA(&ofn)) return std::string();
+        return std::string(buf);
+    }
 }

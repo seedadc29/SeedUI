@@ -15,6 +15,27 @@ namespace seedui
         constexpr float kLabelMinH = 68.0f;
         constexpr float kPopupW = 360.0f;
         constexpr float kPopupH = 202.0f; // edição individual compacta; exportação é global na barra inferior
+        constexpr float kIconPickerH = 210.0f; // altura extra do seletor de ícones (SeedNotas)
+        constexpr float kFontRowH = 26.0f;     // linha do tamanho da fonte
+
+        float ClampFontSize(float v)
+        {
+            return std::max(8.0f, std::min(64.0f, v));
+        }
+
+        float BodyFontSize(const Annotation& a)
+        {
+            return ClampFontSize(a.fontSize <= 0.0f ? 13.0f : a.fontSize);
+        }
+
+        // Fonte de alta resolução para o texto das anotações (SeedNotas
+        // registra; SeedUI deixa nulo e usa a fonte atual do ImGui).
+        ImFont* gAnnotHighResFont = nullptr;
+
+        ImFont* BodyFont()
+        {
+            return gAnnotHighResFont ? gAnnotHighResFont : ImGui::GetFont();
+        }
 
         const ImU32 kAnnotColors[] = {
             IM_COL32(241, 196, 15, 255),   // amarelo
@@ -25,13 +46,12 @@ namespace seedui
         };
         constexpr int kColorCount = 5;
 
-        float LabelHeight(const Annotation& a)
+        float PopupHeight(const AnnotationState& st)
         {
-            const char* preview = a.text.empty() ? "Clique para editar..." : a.text.c_str();
-            const float textH = ImGui::CalcTextSize(preview, nullptr, false,
-                                                    kLabelW - 16.0f).y;
-            return std::max(kLabelMinH, 34.0f + textH + 8.0f);
+            return kPopupH + kFontRowH +
+                   (st.iconPicker ? kIconPickerH : 0.0f);
         }
+
         bool PointInRect(const ImVec2& p, const ImVec2& a, const ImVec2& b)
         {
             return p.x >= a.x && p.x <= b.x && p.y >= a.y && p.y <= b.y;
@@ -43,6 +63,23 @@ namespace seedui
             return a0.x < b1.x && a1.x > b0.x && a0.y < b1.y && a1.y > b0.y;
         }
 
+        // Alça de redimensionamento da CAIXA DE SELEÇÃO sob o mouse:
+        // 1=sup.esq, 2=sup.dir, 3=inf.esq, 4=inf.dir, 5=esq, 6=dir, 7=sup, 8=inf.
+        int AreaResizeHandle(const Annotation& a, const ImVec2& mouse)
+        {
+            const float tol = 10.0f;
+            const float l = a.min.x, t = a.min.y, r = a.max.x, b = a.max.y;
+            if (fabsf(mouse.x - l) <= tol && fabsf(mouse.y - t) <= tol) return 1;
+            if (fabsf(mouse.x - r) <= tol && fabsf(mouse.y - t) <= tol) return 2;
+            if (fabsf(mouse.x - l) <= tol && fabsf(mouse.y - b) <= tol) return 3;
+            if (fabsf(mouse.x - r) <= tol && fabsf(mouse.y - b) <= tol) return 4;
+            if (fabsf(mouse.x - l) <= tol && mouse.y >= t && mouse.y <= b) return 5;
+            if (fabsf(mouse.x - r) <= tol && mouse.y >= t && mouse.y <= b) return 6;
+            if (mouse.x >= l && mouse.x <= r && fabsf(mouse.y - t) <= tol) return 7;
+            if (mouse.x >= l && mouse.x <= r && fabsf(mouse.y - b) <= tol) return 8;
+            return 0;
+        }
+
         void ArrowHead(ImDrawList* dl, const ImVec2& to, const ImVec2& dir, ImU32 col, float size)
         {
             const float d0 = -dir.y * 0.5f;
@@ -52,23 +89,88 @@ namespace seedui
         }
     }
 
-    AnnotationsPopupRect AnnotationsPopupRectFor(const Annotation& annotation,
+    void AnnotationsSetHighResFont(ImFont* font)
+    {
+        gAnnotHighResFont = font;
+    }
+
+    float AnnotationsLabelHeight(const Annotation& a)
+    {
+        const char* preview = a.text.empty() ? "Clique para editar..." : a.text.c_str();
+        const float bodySize = BodyFontSize(a);
+        const float w = std::max(100.0f, a.labelW);
+        ImFont* font = BodyFont();
+        float bodyH = 0.0f;
+        if (font)
+            bodyH = font->CalcTextSizeA(bodySize, FLT_MAX,
+                                        w - 16.0f, preview).y;
+        // 6 (topo) + 12 (título) + 8 (espaço) + corpo + 6 (base)
+        const float autoH = std::max(kLabelMinH, 32.0f + bodyH);
+        if (a.labelH > 0.0f) return std::max(autoH, a.labelH);
+        return autoH;
+    }
+
+    AnnotationsPopupRect AnnotationsPopupRectFor(const AnnotationState& st,
+                                                 const Annotation& annotation,
                                                  const ImVec2& viewportSize)
     {
+        const float popupH = PopupHeight(st);
+        const float popupW = kPopupW;
         const ImVec2 label = annotation.label;
-        ImVec2 anchor(label.x, label.y + LabelHeight(annotation) + 8.0f); // abaixo do rótulo
-        if (anchor.x + kPopupW > viewportSize.x) anchor.x = viewportSize.x - kPopupW;
-        if (anchor.x < 0.0f) anchor.x = 0.0f;
-        if (anchor.y + kPopupH > viewportSize.y)
+        const float lh = AnnotationsLabelHeight(annotation);
+        const float lw = std::max(100.0f, annotation.labelW);
+        const ImVec2 a0 = annotation.min;
+        const ImVec2 a1 = annotation.max;
+
+        // Candidatos em ordem de preferência. O escolhido deve caber na
+        // janela E NÃO cobrir nem a área anotada nem o rótulo — assim a caixa
+        // de seleção continua visível e a digitação fica legível.
+        const float cx = std::max(0.0f, std::min(viewportSize.x - popupW, label.x));
+        const float belowY = label.y + lh + 8.0f;
+        const float aboveY = label.y - popupH - 8.0f;
+        const float bottomY = std::max(0.0f, viewportSize.y - popupH);
+        const float midY = std::max(0.0f, std::min(viewportSize.y - popupH,
+                                                   (a0.y + a1.y) * 0.5f - popupH * 0.5f));
+        struct Cand { float x, y; };
+        const Cand cands[] = {
+            { cx, belowY },          // abaixo do rótulo
+            { cx, aboveY },          // acima do rótulo
+            { cx, bottomY },         // abaixo do rótulo, ancorado na borda inferior
+            { a1.x + 14.0f, midY },  // à direita da área
+            { a0.x - popupW - 14.0f, midY }, // à esquerda da área
+        };
+
+        const auto clears = [&](float x, float y)
         {
-            // Não coube embaixo: coloca acima do rótulo (ou na borda de baixo)
-            anchor.y = label.y - kPopupH - 8.0f;
-            if (anchor.y < 0.0f) anchor.y = viewportSize.y - kPopupH;
-            if (anchor.y < 0.0f) anchor.y = 0.0f;
+            if (x + popupW > a0.x && x < a1.x &&
+                y + popupH > a0.y && y < a1.y)
+                return false; // cobre a área anotada
+            if (x + popupW > label.x && x < label.x + lw &&
+                y + popupH > label.y && y < label.y + lh)
+                return false; // cobre o rótulo
+            return true;
+        };
+
+        for (const Cand& c : cands)
+        {
+            float x = std::max(0.0f, std::min(viewportSize.x - popupW, c.x));
+            float y = std::max(0.0f, std::min(viewportSize.y - popupH, c.y));
+            if (clears(x, y))
+            {
+                AnnotationsPopupRect r;
+                r.min = ImVec2(x, y);
+                r.max = ImVec2(x + popupW, y + popupH);
+                return r;
+            }
         }
+
+        // Fallback: abaixo do rótulo, dentro da janela (pode encostar — não
+        // há outro espaço livre).
+        float x = std::max(0.0f, std::min(viewportSize.x - popupW, label.x));
+        float y = std::max(0.0f, std::min(viewportSize.y - popupH, belowY));
         AnnotationsPopupRect r;
-        r.min = anchor;
-        r.max = ImVec2(anchor.x + kPopupW, anchor.y + kPopupH);
+        r.min = ImVec2(x, y);
+        r.max = ImVec2(x + popupW, y + popupH);
         return r;
     }
 
@@ -79,11 +181,13 @@ namespace seedui
         a.min = min;
         a.max = max;
         a.text = text ? text : "";
-        a.label = ImVec2(max.x + 14.0f, max.y - LabelHeight(a) - 8.0f);
+        a.label = ImVec2(max.x + 14.0f, max.y - AnnotationsLabelHeight(a) - 8.0f);
         a.color = kAnnotColors[(a.id - 1) % kColorCount];
         st.items.push_back(a);
         st.selected = (int)st.items.size() - 1;
         st.editedIndex = -1;
+        TraceLog(LOG_INFO, "ANNOT add id=%d area %.0f,%.0f %.0fx%.0f",
+                 a.id, a.min.x, a.min.y, a.max.x - a.min.x, a.max.y - a.min.y);
     }
 
     void AnnotationsUpdate(AnnotationState& st, bool toolActive, const ImVec2& viewportSize)
@@ -109,20 +213,38 @@ namespace seedui
             st.selected < (int)st.items.size())
         {
             const AnnotationsPopupRect popup =
-                AnnotationsPopupRectFor(st.items[st.selected], viewportSize);
+                AnnotationsPopupRectFor(st, st.items[st.selected], viewportSize);
             if (PointInRect(mouse, popup.min, popup.max)) return;
         }
 
         if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && hovered)
         {
+            TraceLog(LOG_INFO, "ANNOT click %.0f,%.0f toolActive=%d",
+                     mouse.x, mouse.y, (int)toolActive);
             int hitLabel = -1;
             int hitRect = -1;
+            int hitHandle = 0;
             for (int i = (int)st.items.size() - 1; i >= 0; --i)
             {
                 const Annotation& a = st.items[i];
-                if (PointInRect(mouse, a.label, ImVec2(a.label.x + kLabelW, a.label.y + LabelHeight(a))))
+                const float w = std::max(100.0f, a.labelW);
+                if (PointInRect(mouse, a.label,
+                                ImVec2(a.label.x + w,
+                                       a.label.y + AnnotationsLabelHeight(a))))
                 {
                     hitLabel = i;
+                    break;
+                }
+                // Alças de redimensionamento ANTES do interior: uma alça
+                // pode estar até 10px FORA do retângulo (metade do quadrado
+                // fica para fora) — sem isto, clicar na alça criava uma nova
+                // seleção em vez de redimensionar.
+                // (1=sup.esq, 2=sup.dir, 3=inf.esq, 4=inf.dir,
+                //  5=esq, 6=dir, 7=sup, 8=inf)
+                hitHandle = AreaResizeHandle(a, mouse);
+                if (hitHandle != 0)
+                {
+                    hitRect = i;
                     break;
                 }
                 if (PointInRect(mouse, a.min, a.max))
@@ -132,11 +254,32 @@ namespace seedui
                 }
             }
 
-            if (hitLabel >= 0)
+            if (hitHandle != 0 && hitRect >= 0)
+            {
+                // Redimensionar a caixa de seleção pela alça
+                st.selected = hitRect;
+                st.dragging = hitRect;
+                st.dragMode = 2 + hitHandle; // 3..10
+                const Annotation& ha = st.items[hitRect];
+                const float cx = (ha.min.x + ha.max.x) * 0.5f;
+                const float cy = (ha.min.y + ha.max.y) * 0.5f;
+                switch (hitHandle)
+                {
+                    case 1: st.dragOffset = ImVec2(mouse.x - ha.min.x, mouse.y - ha.min.y); break;
+                    case 2: st.dragOffset = ImVec2(mouse.x - ha.max.x, mouse.y - ha.min.y); break;
+                    case 3: st.dragOffset = ImVec2(mouse.x - ha.min.x, mouse.y - ha.max.y); break;
+                    case 4: st.dragOffset = ImVec2(mouse.x - ha.max.x, mouse.y - ha.max.y); break;
+                    case 5: st.dragOffset = ImVec2(mouse.x - ha.min.x, mouse.y - cy); break;
+                    case 6: st.dragOffset = ImVec2(mouse.x - ha.max.x, mouse.y - cy); break;
+                    case 7: st.dragOffset = ImVec2(mouse.x - cx, mouse.y - ha.min.y); break;
+                    case 8: st.dragOffset = ImVec2(mouse.x - cx, mouse.y - ha.max.y); break;
+                }
+            }
+            else if (hitLabel >= 0)
             {
                 st.selected = hitLabel;
                 st.dragging = hitLabel;
-                st.dragMode = 2;
+                st.dragMode = 2; // mover o rótulo (a caixa de seleção NÃO muda)
                 st.dragOffset = ImVec2(mouse.x - st.items[hitLabel].label.x,
                                        mouse.y - st.items[hitLabel].label.y);
             }
@@ -153,6 +296,8 @@ namespace seedui
                 st.selected = -1;
                 st.creating = true;
                 st.createStart = mouse;
+                TraceLog(LOG_INFO, "ANNOT create start %.0f,%.0f toolActive=%d",
+                         mouse.x, mouse.y, (int)toolActive);
             }
         }
 
@@ -170,14 +315,69 @@ namespace seedui
                 a.label.x += delta.x;
                 a.label.y += delta.y;
             }
-            else
+            else if (st.dragMode == 2)
             {
                 a.label.x = mouse.x - st.dragOffset.x;
                 a.label.y = mouse.y - st.dragOffset.y;
-                const float boundX = std::max(0.0f, viewportSize.x - kLabelW);
-                const float boundY = std::max(0.0f, viewportSize.y - LabelHeight(a));
+
+                // O rótulo NUNCA cobre a área anotada: se o usuário arrastar
+                // para cima dela, empurra para fora — no lado mais próximo
+                // do ponto onde soltou (a informação selecionada fica sempre
+                // visível).
+                const float lw = std::max(100.0f, a.labelW);
+                const float lh = AnnotationsLabelHeight(a);
+                if (RectsOverlap(a.label, ImVec2(a.label.x + lw, a.label.y + lh),
+                                 a.min, a.max))
+                {
+                    const float gap = 6.0f;
+                    const float cand[4][2] = {
+                        { a.label.x, a.max.y + gap },        // abaixo da área
+                        { a.label.x, a.min.y - lh - gap },   // acima da área
+                        { a.min.x - lw - gap, a.label.y },   // esquerda da área
+                        { a.max.x + gap, a.label.y },        // direita da área
+                    };
+                    float best = FLT_MAX;
+                    int bestI = 0;
+                    for (int k = 0; k < 4; ++k)
+                    {
+                        const float ddx = cand[k][0] - a.label.x;
+                        const float ddy = cand[k][1] - a.label.y;
+                        const float d = ddx * ddx + ddy * ddy;
+                        if (d < best) { best = d; bestI = k; }
+                    }
+                    a.label.x = cand[bestI][0];
+                    a.label.y = cand[bestI][1];
+                }
+
+                const float boundX = std::max(0.0f, viewportSize.x - lw);
+                const float boundY = std::max(0.0f, viewportSize.y - lh);
                 a.label.x = std::min(std::max(a.label.x, 0.0f), boundX);
                 a.label.y = std::min(std::max(a.label.y, 0.0f), boundY);
+            }
+            else
+            {
+                // Redimensionar a CAIXA DE SELEÇÃO pelas alças (3..10)
+                const float minS = 24.0f;
+                float l = a.min.x;
+                float t = a.min.y;
+                float r = a.max.x;
+                float b = a.max.y;
+                if (st.dragMode == 3) { l = mouse.x - st.dragOffset.x; t = mouse.y - st.dragOffset.y; }
+                else if (st.dragMode == 4) { r = mouse.x - st.dragOffset.x; t = mouse.y - st.dragOffset.y; }
+                else if (st.dragMode == 5) { l = mouse.x - st.dragOffset.x; b = mouse.y - st.dragOffset.y; }
+                else if (st.dragMode == 6) { r = mouse.x - st.dragOffset.x; b = mouse.y - st.dragOffset.y; }
+                else if (st.dragMode == 7) { l = mouse.x - st.dragOffset.x; }
+                else if (st.dragMode == 8) { r = mouse.x - st.dragOffset.x; }
+                else if (st.dragMode == 9) { t = mouse.y - st.dragOffset.y; }
+                else if (st.dragMode == 10) { b = mouse.y - st.dragOffset.y; }
+                if (r - l < minS) { if (st.dragMode == 3 || st.dragMode == 5 || st.dragMode == 7) l = r - minS; else r = l + minS; }
+                if (b - t < minS) { if (st.dragMode == 3 || st.dragMode == 4 || st.dragMode == 9) t = b - minS; else b = t + minS; }
+                l = std::max(0.0f, l);
+                t = std::max(0.0f, t);
+                r = std::min(viewportSize.x, r);
+                b = std::min(viewportSize.y, b);
+                a.min = ImVec2(l, t);
+                a.max = ImVec2(r, b);
             }
         }
 
@@ -206,8 +406,11 @@ namespace seedui
             bool onAny = false;
             for (const Annotation& a : st.items)
             {
+                const float aw = std::max(100.0f, a.labelW);
                 if (PointInRect(mouse, a.min, a.max) ||
-                    PointInRect(mouse, a.label, ImVec2(a.label.x + kLabelW, a.label.y + LabelHeight(a))))
+                    PointInRect(mouse, a.label,
+                                ImVec2(a.label.x + aw,
+                                       a.label.y + AnnotationsLabelHeight(a))))
                 {
                     onAny = true;
                     break;
@@ -226,9 +429,15 @@ namespace seedui
         for (const Annotation& a : st.items)
         {
             // Não desenha por cima da janela de edição aberta
-            const bool overPopup = clipPopup &&
+            const float aw = std::max(100.0f, a.labelW);
+            // A anotação SELECIONADA (a que está sendo editada) NUNCA é
+            // escondida pelo popup — a caixa de seleção continua visível.
+            // Só as outras anotações são puladas quando ficariam por cima
+            // da caixa de digitação.
+            const bool isSelected = (st.selected >= 0 && &a == &st.items[st.selected]);
+            const bool overPopup = clipPopup && !isSelected &&
                 (RectsOverlap(a.min, a.max, popupMin, popupMax) ||
-                 RectsOverlap(a.label, ImVec2(a.label.x + kLabelW, a.label.y + LabelHeight(a)),
+                 RectsOverlap(a.label, ImVec2(a.label.x + aw, a.label.y + AnnotationsLabelHeight(a)),
                               popupMin, popupMax));
             if (overPopup) continue;
 
@@ -243,6 +452,30 @@ namespace seedui
             dl->AddRectFilled(r0, r1, fill);
             dl->AddRect(r0, r1, col, 0.0f, 0, isSel ? 2.5f : 1.5f);
 
+            // Alças de redimensionamento da CAIXA DE SELEÇÃO (só na
+            // selecionada): 4 cantos + 4 meios de borda, estilo Illustrator/
+            // CorelDRAW — quadrados brancos com contorno na cor.
+            if (isSel && !st.creating)
+            {
+                const float hs = 6.0f;
+                const ImU32 hfill = IM_COL32(240, 240, 240, 255);
+                const ImVec2 pts[8] = {
+                    ImVec2(r0.x, r0.y), ImVec2(r1.x, r0.y),
+                    ImVec2(r0.x, r1.y), ImVec2(r1.x, r1.y),
+                    ImVec2(r0.x, (r0.y + r1.y) * 0.5f),
+                    ImVec2(r1.x, (r0.y + r1.y) * 0.5f),
+                    ImVec2((r0.x + r1.x) * 0.5f, r0.y),
+                    ImVec2((r0.x + r1.x) * 0.5f, r1.y),
+                };
+                for (const ImVec2& c : pts)
+                {
+                    dl->AddRectFilled(ImVec2(c.x - hs, c.y - hs),
+                                      ImVec2(c.x + hs, c.y + hs), hfill);
+                    dl->AddRect(ImVec2(c.x - hs, c.y - hs),
+                                ImVec2(c.x + hs, c.y + hs), col, 1.0f);
+                }
+            }
+
             // Número (badge)
             const float badge = 18.0f;
             const ImVec2 bc(r0.x + badge, r0.y + badge);
@@ -253,9 +486,11 @@ namespace seedui
             dl->AddText(font, 12.0f, ImVec2(bc.x - nts.x * 0.5f, bc.y - nts.y * 0.5f),
                         IM_COL32(25, 25, 25, 255), nb);
 
-            // Rótulo flutuante
+            // Rótulo flutuante (largura redimensionável pelo usuário)
+            const float lw = std::max(100.0f, a.labelW);
+            const float lh = AnnotationsLabelHeight(a);
             const ImVec2 l0 = a.label;
-            const ImVec2 l1(l0.x + kLabelW, l0.y + LabelHeight(a));
+            const ImVec2 l1(l0.x + lw, l0.y + lh);
 
             // Seta do rótulo para a área
             const ImVec2 from((l0.x + l1.x) * 0.5f, l1.y);
@@ -278,10 +513,15 @@ namespace seedui
             dl->AddText(ImVec2(l0.x + 8.0f, l0.y + 6.0f), col, tb);
 
             const char* preview = a.text.empty() ? "Clique para editar..." : a.text.c_str();
+            const float bodySize = BodyFontSize(a);
+            ImFont* bodyFont = BodyFont();
             dl->PushClipRect(ImVec2(l0.x + 8.0f, l0.y + 24.0f),
                              ImVec2(l1.x - 8.0f, l1.y - 6.0f), true);
-            dl->AddText(font, 13.0f, ImVec2(l0.x + 8.0f, l0.y + 26.0f),
-                        IM_COL32(236, 236, 236, 255), preview, nullptr, kLabelW - 16.0f);
+            if (bodyFont)
+                dl->AddText(bodyFont, bodySize,
+                            ImVec2(l0.x + 8.0f, l0.y + 26.0f),
+                            IM_COL32(236, 236, 236, 255), preview, nullptr,
+                            lw - 16.0f);
             dl->PopClipRect();
         }
 
@@ -299,7 +539,10 @@ namespace seedui
 
     int AnnotationsEditWindow(AnnotationState& st)
     {
-        if (st.selected < 0 || st.selected >= (int)st.items.size())
+        // Enquanto o usuário estiver ARRASTANDO (área, rótulo ou redimensionando),
+        // a caixa de digitação não aparece — nada fica por cima da seleção.
+        if (st.selected < 0 || st.selected >= (int)st.items.size() ||
+            st.dragging >= 0 || st.creating)
         {
             st.editedIndex = -1;
             return AnnotationsEdit_None;
@@ -317,10 +560,11 @@ namespace seedui
         }
 
         // Popup sempre DENTRO da janela (abaixo do rótulo; acima dele se não couber)
+        const float popupH = PopupHeight(st);
         const AnnotationsPopupRect pr =
-            AnnotationsPopupRectFor(a, ImGui::GetMainViewport()->Size);
+            AnnotationsPopupRectFor(st, a, ImGui::GetMainViewport()->Size);
         ImGui::SetNextWindowPos(pr.min, ImGuiCond_Always);
-        ImGui::SetNextWindowSize(ImVec2(kPopupW, kPopupH), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(kPopupW, popupH), ImGuiCond_Always);
 
         char title[48];
         snprintf(title, sizeof title, "Anotação #%d — escreva a alteração", a.id);
@@ -352,6 +596,20 @@ namespace seedui
                            "Área: (%.0f, %.0f) %.0f x %.0f — janela do SeedUI",
                            a.min.x, a.min.y, a.max.x - a.min.x, a.max.y - a.min.y);
 
+        // Tamanho da fonte do texto (reflete ao vivo no rótulo e no print)
+        a.fontSize = ClampFontSize(a.fontSize <= 0.0f ? 13.0f : a.fontSize);
+        ImGui::SetNextItemWidth(150.0f);
+        ImGui::DragFloat("##fonte_anotacao", &a.fontSize, 0.5f, 8.0f, 64.0f,
+                         "%.1f");
+        ImGui::SameLine();
+        if (ImGui::Button("-"))
+            a.fontSize = ClampFontSize(a.fontSize - 1.0f);
+        ImGui::SameLine();
+        if (ImGui::Button("+"))
+            a.fontSize = ClampFontSize(a.fontSize + 1.0f);
+        ImGui::SameLine();
+        ImGui::TextColored(Theme::TextDisabled, "Fonte do texto (px)");
+
         const float btnW = (ImGui::GetContentRegionAvail().x - 8.0f) * 0.5f;
         if (ImGui::Button("Confirmar ✓", ImVec2(btnW, 0)))
         {
@@ -372,6 +630,13 @@ namespace seedui
             return AnnotationsEdit_Deleted;
         }
 
+        // Seletor de ícones opcional (SeedNotas registra o hook): desenhado
+        // dentro da janela de edição, após o campo de texto e os botões.
+        if (st.iconPicker)
+        {
+            ImGui::Separator();
+            st.iconPicker(a);
+        }
 
         ImGui::TextColored(Theme::TextDisabled,
                            "Salvamento automático · Esc fecha");

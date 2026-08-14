@@ -16,7 +16,26 @@ namespace seedui
         ImVec2 label = ImVec2(0, 0);  // canto sup. esquerdo do rótulo flutuante
         std::string text;             // alteração/diretriz escrita pelo usuário
         ImU32 color = 0;
+        int icon = 0;                 // índice do catálogo de ícones (0 = nenhum)
+        int iconPos = 0;              // 0 = sup. dir., 1 = inf. dir., 2 = inf. esq.
+        float fontSize = 13.0f;       // tamanho da fonte do texto (px; 8..64)
+        float labelW = 240.0f;        // largura do rótulo (redimensionável)
+        float labelH = 0.0f;          // altura manual mínima do rótulo (0 = automática pelo texto)
     };
+
+    // Posições do ícone no rótulo da anotação
+    enum AnnotationsIconPos
+    {
+        AnnotationsIconPos_TopRight = 0,
+        AnnotationsIconPos_BottomRight = 1,
+        AnnotationsIconPos_BottomLeft = 2,
+    };
+
+    // Hook opcional para o seletor de ícones: desenhado DENTRO da janela de
+    // edição da anotação (após o campo de texto). SeedNotas registra para
+    // mostrar a grade de ícones; o SeedUI (modo debug) deixa nulo e o
+    // comportamento não muda.
+    typedef void (*AnnotationsIconPicker)(Annotation& a);
 
     struct AnnotationState
     {
@@ -24,12 +43,13 @@ namespace seedui
         int nextId = 1;
         int selected = -1;            // índice da anotação em edição
         int dragging = -1;            // índice sendo arrastado
-        int dragMode = 0;             // 1 = retângulo, 2 = rótulo
+        int dragMode = 0;             // 1=área, 2=rótulo, 3=borda dir., 4=borda inf., 5=canto
         ImVec2 dragOffset = ImVec2(0, 0);
         bool creating = false;        // arrastando para criar uma nova
         ImVec2 createStart = ImVec2(0, 0);
         char editBuf[4096] = { 0 };
         int editedIndex = -1;
+        AnnotationsIconPicker iconPicker = nullptr;  // opcional (SeedNotas)
     };
 
     struct AnnotationsPopupRect
@@ -39,9 +59,20 @@ namespace seedui
     };
 
     // Retângulo do popup de edição de uma anotação, sempre DENTRO da janela:
-    // fica abaixo do rótulo; se não couber, aparece acima dele.
-    AnnotationsPopupRect AnnotationsPopupRectFor(const Annotation& annotation,
+    // fica abaixo do rótulo; se não couber, aparece acima dele. A altura leva
+    // em conta o seletor de ícones quando o hook estiver registrado.
+    AnnotationsPopupRect AnnotationsPopupRectFor(const AnnotationState& st,
+                                                 const Annotation& annotation,
                                                  const ImVec2& viewportSize);
+
+    // Altura atual do rótulo flutuante (cresce com o texto).
+    float AnnotationsLabelHeight(const Annotation& a);
+
+    // Fonte de alta resolução para o TEXTO das anotações (opcional).
+    // SeedNotas registra uma fonte de atlas grande (64px) para o texto
+    // ampliado sair nítido; SeedUI deixa nulo e usa a fonte atual do ImGui.
+    // Medição de altura e desenho usam a MESMA fonte (consistência).
+    void AnnotationsSetHighResFont(ImFont* font);
 
     // Cria uma anotação programaticamente (ex.: amostra em modo captura)
     void AnnotationsAdd(AnnotationState& st, const ImVec2& min, const ImVec2& max,

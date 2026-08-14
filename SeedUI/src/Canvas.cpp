@@ -48,6 +48,56 @@ namespace seedui
             return radii;
         }
 
+        // Traço com fita contínua pura (estilo CorelDRAW / Illustrator):
+        // Sanitiza os vértices e remove duplicatas no fechamento para garantir que
+        // dl->AddPolyline(..., ImDrawFlags_Closed) nunca gere segmentos de comprimento zero
+        // ou miters infinitos/pontas sobressalentes nas junções ou tangentes comprimidas.
+        void StrokePolyline(ImDrawList* dl, const std::vector<ImVec2>& pts,
+                            ImU32 col, float thickness, bool closed)
+        {
+            const int n = (int)pts.size();
+            if (n < 2 || thickness <= 0.0f || (col & IM_COL32_A_MASK) == 0) return;
+
+            // Filtro de pontos redundantes e micro-segmentos (distância < 0.25px em tela)
+            std::vector<ImVec2> clean;
+            clean.reserve(n);
+            for (const ImVec2& p : pts)
+            {
+                if (clean.empty())
+                {
+                    clean.push_back(p);
+                    continue;
+                }
+                const float dx = p.x - clean.back().x;
+                const float dy = p.y - clean.back().y;
+                if (dx * dx + dy * dy >= 0.0625f) // >= 0.25px
+                    clean.push_back(p);
+            }
+
+            // Para caminhos fechados, o flag ImDrawFlags_Closed conecta o último ao primeiro.
+            // Removemos qualquer ponto final idêntico/coincidente com o inicial para evitar
+            // segmento de comprimento zero (que gera divisão por zero na normal e cria o bico/artefato).
+            if (closed)
+            {
+                while (clean.size() > 2)
+                {
+                    const float dx = clean.back().x - clean.front().x;
+                    const float dy = clean.back().y - clean.front().y;
+                    if (dx * dx + dy * dy < 0.25f) // < 0.5px do início
+                        clean.pop_back();
+                    else
+                        break;
+                }
+            }
+
+            const int cn = (int)clean.size();
+            if (cn < 2) return;
+
+            dl->AddPolyline(clean.data(), cn, col,
+                            closed ? ImDrawFlags_Closed : ImDrawFlags_None,
+                            thickness);
+        }
+
         void RoundedRectPath(ImDrawList* dl, const ImVec2& a, const ImVec2& b,
                              const CornerRadii& radii)
         {
@@ -91,44 +141,23 @@ namespace seedui
                                 radii.bottomRight <= 0.01f && radii.bottomLeft <= 0.01f;
             if (square)
             {
-                if (outlineWidth > 0.0f) dl->AddRectFilled(a, b, outline);
-                const float inset = std::min(std::max(0.0f, outlineWidth),
-                    std::max(0.0f, std::min(b.x - a.x, b.y - a.y) * 0.5f));
-                const ImVec2 innerA(a.x + inset, a.y + inset);
-                const ImVec2 innerB(b.x - inset, b.y - inset);
-                if (innerB.x > innerA.x && innerB.y > innerA.y)
-                    dl->AddRectFilled(innerA, innerB, fill);
+                if ((fill & IM_COL32_A_MASK) != 0)
+                    dl->AddRectFilled(a, b, fill);
+                if (outlineWidth > 0.0f && (outline & IM_COL32_A_MASK) != 0)
+                    dl->AddRect(a, b, outline, 0.0f, 0, outlineWidth);
                 return;
             }
 
-            // Um PathStroke grosso produz juncoes em mitra (os "bicos" vistos
-            // nas quinas). Como num editor vetorial, construimos o contorno
-            // como duas formas preenchidas: silhueta externa e miolo interno.
-            // Assim a espessura fica uniforme, limpa e antialiasada.
-            if (outlineWidth <= 0.0f)
+            if ((fill & IM_COL32_A_MASK) != 0)
             {
                 RoundedRectPath(dl, a, b, radii);
                 dl->PathFillConvex(fill);
-                return;
             }
-
-            RoundedRectPath(dl, a, b, radii);
-            dl->PathFillConvex(outline);
-
-            const float maximumInset = std::max(0.0f,
-                std::min(b.x - a.x, b.y - a.y) * 0.5f);
-            const float inset = std::min(outlineWidth, maximumInset);
-            const ImVec2 innerA(a.x + inset, a.y + inset);
-            const ImVec2 innerB(b.x - inset, b.y - inset);
-            if (innerB.x <= innerA.x || innerB.y <= innerA.y) return;
-
-            CornerRadii inner = radii;
-            inner.topLeft = std::max(0.0f, inner.topLeft - inset);
-            inner.topRight = std::max(0.0f, inner.topRight - inset);
-            inner.bottomRight = std::max(0.0f, inner.bottomRight - inset);
-            inner.bottomLeft = std::max(0.0f, inner.bottomLeft - inset);
-            RoundedRectPath(dl, innerA, innerB, inner);
-            dl->PathFillConvex(fill);
+            if (outlineWidth > 0.0f && (outline & IM_COL32_A_MASK) != 0)
+            {
+                RoundedRectPath(dl, a, b, radii);
+                dl->PathStroke(outline, ImDrawFlags_Closed, outlineWidth);
+            }
         }
 
         bool GetDashStyle(const Element& e, float& dash, float& gap);
@@ -229,25 +258,53 @@ namespace seedui
 
             const float opacity = std::max(0.0f, std::min(1.0f,
                 e.estilos.value("opacidade", 1.0f)));
-            // Cor do preenchimento/contorno vinda de estilos.cor_fundo e
-            // estilos.cor_borda ("#rrggbb"); fallback para o neutro atual.
+            const float strokeOpacity = std::max(0.0f, std::min(1.0f,
+                e.estilos.value("opacidade_borda", 1.0f)));
+
+            // Preenchimento (com suporte total a transparência #RGBA / #RRGGBBAA / 'none' / 'transparent'):
             float fillRgb[3] = { 0x2b / 255.0f, 0x2b / 255.0f, 0x2b / 255.0f };
-            float borderRgb[3] = { 0x5a / 255.0f, 0x5a / 255.0f, 0x5a / 255.0f };
+            float fillAlpha = 1.0f;
+            bool hasFill = false;
             if (e.estilos.is_object() && e.estilos.contains("cor_fundo"))
-                ColorUtils::ParseHex(e.estilos["cor_fundo"].get<std::string>(), fillRgb);
+            {
+                std::string cf = e.estilos["cor_fundo"].get<std::string>();
+                if (ColorUtils::ParseHexWithAlpha(cf, fillRgb, fillAlpha))
+                    hasFill = (fillAlpha > 0.001f);
+            }
+            else if (e.tipo != "caminho" && e.tipo != "linha")
+            {
+                hasFill = true;
+            }
+
+            // Contorno (com opacidade independente, sólido por padrão, sem alpha 0.82 forçado):
+            float borderRgb[3] = { 0x5a / 255.0f, 0x5a / 255.0f, 0x5a / 255.0f };
+            float borderAlpha = 1.0f;
+            bool hasBorder = false;
             if (e.estilos.is_object() && e.estilos.contains("cor_borda"))
-                ColorUtils::ParseHex(e.estilos["cor_borda"].get<std::string>(), borderRgb);
+            {
+                std::string cb = e.estilos["cor_borda"].get<std::string>();
+                if (ColorUtils::ParseHexWithAlpha(cb, borderRgb, borderAlpha))
+                    hasBorder = (borderAlpha > 0.001f);
+            }
+            else
+            {
+                hasBorder = true;
+            }
+
+            const float outlineWidth = hasBorder
+                ? (std::max(0.0f, e.estilos.value("espessura_borda", 1.0f)) * scale)
+                : 0.0f;
+
             // Wireframe: só o contorno (sem preenchimento e sem sombra).
-            const ImU32 fill = wireframe
+            const ImU32 fill = (wireframe || !hasFill || fillAlpha <= 0.001f || opacity <= 0.001f)
                 ? IM_COL32(0, 0, 0, 0)
                 : ImGui::ColorConvertFloat4ToU32(
-                    ImVec4(fillRgb[0], fillRgb[1], fillRgb[2], opacity));
-            // Elementos não selecionados usam uma borda neutra e discreta.
-            // Azul/laranja ficam reservados exclusivamente para a seleção.
-            const ImU32 outline = ImGui::ColorConvertFloat4ToU32(
-                ImVec4(borderRgb[0], borderRgb[1], borderRgb[2], 0.82f));
-            const float outlineWidth = std::max(0.0f,
-                e.estilos.value("espessura_borda", 1.0f)) * scale;
+                    ImVec4(fillRgb[0], fillRgb[1], fillRgb[2], fillAlpha * opacity));
+
+            const ImU32 outline = (!hasBorder || borderAlpha <= 0.001f || strokeOpacity <= 0.001f || opacity <= 0.001f || outlineWidth <= 0.0f)
+                ? IM_COL32(0, 0, 0, 0)
+                : ImGui::ColorConvertFloat4ToU32(
+                    ImVec4(borderRgb[0], borderRgb[1], borderRgb[2], borderAlpha * strokeOpacity * opacity));
             const ImU32 label = ImGui::ColorConvertFloat4ToU32(Theme::TextPrimary);
             const float rotation = Geo::ElementRotation(e);
 
@@ -257,36 +314,109 @@ namespace seedui
 
             if (e.tipo != "grupo")
             {
+                if (e.tipo == "texto")
+                {
+                    // Texto: conteúdo em propriedades.texto, tamanho em
+                    // estilos.tamanho_fonte (unidades de PROJETO — segue o
+                    // zoom) e cor em estilos.cor_texto. Quebra na largura da
+                    // caixa, centralizado verticalmente. Rotação de glifos
+                    // fica para M07 (tipografia completa).
+                    std::string content = "Texto";
+                    if (e.propriedades.is_object())
+                        content = e.propriedades.value("texto", content);
+                    if (content.empty()) content = " ";
+                    const float fontSize = std::max(
+                        4.0f, e.estilos.value("tamanho_fonte", 18.0f));
+                    float textRgb[3] = { 0xe8 / 255.0f, 0xe8 / 255.0f,
+                                         0xe8 / 255.0f };
+                    if (e.estilos.is_object() && e.estilos.contains("cor_texto"))
+                        ColorUtils::ParseHex(
+                            e.estilos["cor_texto"].get<std::string>(), textRgb);
+                    const ImU32 textColor = ImGui::ColorConvertFloat4ToU32(
+                        ImVec4(textRgb[0], textRgb[1], textRgb[2], opacity));
+                    const float textSize = fontSize * scale;
+                    const float wrapW = std::max(1.0f, b.x - a.x);
+                    const float ty = a.y + std::max(
+                        0.0f, ((b.y - a.y) - textSize) * 0.5f);
+                    dl->AddText(ImGui::GetFont(), textSize,
+                                ImVec2(a.x, ty), textColor,
+                                content.c_str(), nullptr, wrapW);
+                    return;
+                }
                 if (e.tipo == "caminho")
                 {
-                    // Caminho (caneta): tessela as curvas e desenha o contorno;
-                    // fecha com preenchimento côncavo quando fechado.
+                    // Caminho (caneta): fita vetorial contínua e nítida (estilo CorelDRAW).
+                    // O preenchimento só é desenhado quando o usuário definir
+                    // uma cor de fundo explícita (estilos.cor_fundo) — por
+                    // padrão o caminho é um elemento de TRAÇO.
                     std::vector<ImVec2> pts;
                     Geo::OutlineScreen(e, origin.x, origin.y, scale, pts, 64);
                     const bool closed = e.transformacao.value("fechado", 0.0f) > 0.5f;
-                    if (pts.size() >= 3 && closed)
+                    const bool hasFill = e.estilos.is_object() &&
+                        e.estilos.contains("cor_fundo");
+                    if (pts.size() >= 3 && closed && hasFill && (fill & IM_COL32_A_MASK) != 0)
                         dl->AddConcavePolyFilled(pts.data(), (int)pts.size(), fill);
-                    if (pts.size() >= 2 && outlineWidth > 0.0f)
-                        dl->AddPolyline(pts.data(), (int)pts.size(), outline,
-                                        closed ? ImDrawFlags_Closed : 0, outlineWidth);
+                    if (pts.size() >= 2 && outlineWidth > 0.0f && (outline & IM_COL32_A_MASK) != 0)
+                        StrokePolyline(dl, pts, outline, outlineWidth, closed);
                 }
                 else if (e.tipo == "linha")
                 {
-                    // Linha: traço diagonal da caixa, com espessura e cor do
-                    // contorno. Pontas arredondadas (traço grosso).
+                    // Linha: traço vetorial nítido com espessura e cor do contorno.
                     float x1 = 0.0f, y1 = 0.0f, x2 = 0.0f, y2 = 0.0f;
                     Geo::LineEndpointsScreen(e, origin.x, origin.y, scale,
                                              x1, y1, x2, y2);
                     const float lineWidth = std::max(1.0f, outlineWidth);
                     dl->AddLine(ImVec2(x1, y1), ImVec2(x2, y2), outline, lineWidth);
+                    // Setas (estilo CorelDRAW): estilos.setas
+                    // { inicio, fim, tamanho } — triângulos preenchidos nas
+                    // pontas, seguindo a rotação real da linha.
+                    if (e.estilos.is_object() && e.estilos.contains("setas") &&
+                        e.estilos["setas"].is_object())
+                    {
+                        const auto& setas = e.estilos["setas"];
+                        const bool atStart = setas.value("inicio", false);
+                        const bool atEnd = setas.value("fim", false);
+                        const float arrowSize = std::max(
+                            4.0f, setas.value("tamanho", 10.0f));
+                        if (atStart || atEnd)
+                        {
+                            const float ldx = x2 - x1, ldy = y2 - y1;
+                            const float len = sqrtf(ldx * ldx + ldy * ldy);
+                            if (len > 0.01f)
+                            {
+                                const float ux = ldx / len, uy = ldy / len;
+                                const float nx = -uy, ny = ux;
+                                const float half = arrowSize * 0.5f;
+                                if (atEnd)
+                                {
+                                    const float backX = x2 - ux * arrowSize;
+                                    const float backY = y2 - uy * arrowSize;
+                                    dl->AddTriangleFilled(
+                                        ImVec2(x2, y2),
+                                        ImVec2(backX + nx * half, backY + ny * half),
+                                        ImVec2(backX - nx * half, backY - ny * half),
+                                        outline);
+                                }
+                                if (atStart)
+                                {
+                                    const float backX = x1 + ux * arrowSize;
+                                    const float backY = y1 + uy * arrowSize;
+                                    dl->AddTriangleFilled(
+                                        ImVec2(x1, y1),
+                                        ImVec2(backX + nx * half, backY + ny * half),
+                                        ImVec2(backX - nx * half, backY - ny * half),
+                                        outline);
+                                }
+                            }
+                        }
+                    }
                 }
                 else
                 {
                 if (!wireframe) DrawShadow(e, origin, scale, opacity, dl);
                 if (dashed)
                 {
-                    // Contorno tracejado: usa o mesmo contorno tessellado
-                    // (funciona rotacionado, espelhado, com quinas).
+                    // Contorno tracejado: usa o mesmo contorno tessellado.
                     std::vector<ImVec2> pts;
                     Geo::OutlineScreen(e, origin.x, origin.y, scale, pts, 64);
                     if (pts.size() >= 3)
@@ -299,46 +429,37 @@ namespace seedui
                 }
                 else if (fabsf(rotation) > 0.01f)
                 {
-                    // Elemento rotacionado: tessela o contorno no espaço local,
-                    // aplica a rotação e desenha como polígono preenchido +
-                    // contorno com junções arredondadas (sem bicos).
+                    // Elemento rotacionado: polígono preenchido + contorno contínuo.
                     std::vector<ImVec2> pts;
                     Geo::OutlineScreen(e, origin.x, origin.y, scale, pts, 64);
                     if (pts.size() >= 3)
                     {
-                        FillShapePoly(dl, pts, fill, IsStarShape(e));
-                        if (outlineWidth > 0.0f)
-                            dl->AddPolyline(pts.data(), (int)pts.size(), outline,
-                                ImDrawFlags_Closed, outlineWidth);
+                        if ((fill & IM_COL32_A_MASK) != 0)
+                            FillShapePoly(dl, pts, fill, IsStarShape(e));
+                        if (outlineWidth > 0.0f && (outline & IM_COL32_A_MASK) != 0)
+                            StrokePolyline(dl, pts, outline, outlineWidth, true);
                     }
                 }
                 else if (e.tipo == "elipse")
                 {
                     const ImVec2 center((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
                     const ImVec2 radius((b.x - a.x) * 0.5f, (b.y - a.y) * 0.5f);
-                    if (outlineWidth > 0.0f)
-                    {
-                        dl->AddEllipseFilled(center, radius, outline, 0.0f, 64);
-                        const ImVec2 innerRadius(
-                            std::max(0.0f, radius.x - outlineWidth),
-                            std::max(0.0f, radius.y - outlineWidth));
-                        if (innerRadius.x > 0.0f && innerRadius.y > 0.0f)
-                            dl->AddEllipseFilled(center, innerRadius, fill, 0.0f, 64);
-                    }
-                    else dl->AddEllipseFilled(center, radius, fill, 0.0f, 64);
+                    if ((fill & IM_COL32_A_MASK) != 0)
+                        dl->AddEllipseFilled(center, radius, fill, 0.0f, 64);
+                    if (outlineWidth > 0.0f && (outline & IM_COL32_A_MASK) != 0)
+                        dl->AddEllipse(center, radius, outline, 0.0f, 64, outlineWidth);
                 }
                 else if (e.tipo == "poligono")
                 {
-                    // Polígono/estrela configurável: tessela (lados, estrela,
-                    // raio interno) e preenche com tesselação adequada.
+                    // Polígono/estrela configurável: preenchimento limpo + contorno contínuo.
                     std::vector<ImVec2> pts;
                     Geo::OutlineScreen(e, origin.x, origin.y, scale, pts, 64);
                     if (pts.size() >= 3)
                     {
-                        FillShapePoly(dl, pts, fill, IsStarShape(e));
-                        if (outlineWidth > 0.0f)
-                            dl->AddPolyline(pts.data(), (int)pts.size(), outline,
-                                ImDrawFlags_Closed, outlineWidth);
+                        if ((fill & IM_COL32_A_MASK) != 0)
+                            FillShapePoly(dl, pts, fill, IsStarShape(e));
+                        if (outlineWidth > 0.0f && (outline & IM_COL32_A_MASK) != 0)
+                            StrokePolyline(dl, pts, outline, outlineWidth, true);
                     }
                 }
                 else
@@ -356,6 +477,72 @@ namespace seedui
                     const char* text = e.nome.empty() ? e.id.c_str() : e.nome.c_str();
                     dl->AddText(ImVec2(a.x + 4, a.y + 4), label, text);
                 }
+                }
+
+                // Gradiente: desenha por cima do preenchimento sólido.
+                if (!wireframe && e.tipo != "linha" &&
+                    e.estilos.contains("gradiente") &&
+                    e.estilos["gradiente"].is_object())
+                {
+                    const auto& g = e.estilos["gradiente"];
+                    const std::string gtype = g.value("tipo", "linear");
+                    float c1[3] = { 0.17f, 0.17f, 0.17f };
+                    float c2[3] = { 0.0f, 0.0f, 0.0f };
+                    if (g.contains("cor1") && g["cor1"].is_string())
+                        ColorUtils::ParseHex(g["cor1"].get<std::string>(), c1);
+                    if (g.contains("cor2") && g["cor2"].is_string())
+                        ColorUtils::ParseHex(g["cor2"].get<std::string>(), c2);
+                    const float ang = g.value("angulo", 0.0f);
+                    const ImU32 col1 = ImGui::ColorConvertFloat4ToU32(
+                        ImVec4(c1[0], c1[1], c1[2], opacity));
+                    const ImU32 col2 = ImGui::ColorConvertFloat4ToU32(
+                        ImVec4(c2[0], c2[1], c2[2], opacity));
+
+                    if (gtype == "radial")
+                    {
+                        // Radial por anéis concêntricos (barato, sem GPU).
+                        std::vector<ImVec2> pts;
+                        Geo::OutlineScreen(e, origin.x, origin.y, scale, pts, 48);
+                        const float cx = (a.x + b.x) * 0.5f;
+                        const float cy = (a.y + b.y) * 0.5f;
+                        const int steps = 20;
+                        for (int i = steps; i >= 1; --i)
+                        {
+                            const float t = (float)i / (float)steps;
+                            std::vector<ImVec2> ring(pts.size());
+                            for (size_t k = 0; k < pts.size(); ++k)
+                                ring[k] = ImVec2(cx + (pts[k].x - cx) * t,
+                                                 cy + (pts[k].y - cy) * t);
+                            const float k = (float)i / (float)steps;
+                            const ImU32 c = ImGui::ColorConvertFloat4ToU32(ImVec4(
+                                c1[0] + (c2[0] - c1[0]) * k,
+                                c1[1] + (c2[1] - c1[1]) * k,
+                                c1[2] + (c2[2] - c1[2]) * k, opacity));
+                            FillShapePoly(dl, ring, c, IsStarShape(e));
+                        }
+                    }
+                    else
+                    {
+                        // Linear: H, V ou diagonal (bilinear aproximado).
+                        const int dir = ang >= 315.0f || ang < 45.0f ? 0
+                            : ang < 135.0f ? 1
+                            : ang < 225.0f ? 2 : 3;
+                        switch (dir)
+                        {
+                            case 0: // horizontal
+                                dl->AddRectFilledMultiColor(a, b, col1, col2, col2, col1);
+                                break;
+                            case 1: // vertical
+                                dl->AddRectFilledMultiColor(a, b, col1, col1, col2, col2);
+                                break;
+                            case 2: // horizontal invertido
+                                dl->AddRectFilledMultiColor(a, b, col2, col1, col1, col2);
+                                break;
+                            default: // diagonal (TL-BR)
+                                dl->AddRectFilledMultiColor(a, b, col1, col2, col1, col2);
+                                break;
+                        }
+                    }
                 }
             }
 
@@ -472,7 +659,7 @@ namespace seedui
         const float availH = contentMax.y - contentMin.y;
         float scale = std::min(availW / baseW, availH / baseH);
         scale = std::max(0.25f, std::min(1.0f, scale));
-        scale *= std::max(0.1f, std::min(32.0f, zoom));
+        scale *= std::max(0.001f, std::min(10000.0f, zoom));
         const ImVec2 frame(baseW * scale, baseH * scale);
         const ImVec2 origin(contentMin.x + (availW - frame.x) * 0.5f + panX,
                             contentMin.y + (availH - frame.y) * 0.5f + panY);
@@ -507,7 +694,7 @@ namespace seedui
         const float availW = contentMax.x - contentMin.x;
         const float availH = contentMax.y - contentMin.y;
         scale = std::max(0.25f, std::min(1.0f, std::min(availW / baseW, availH / baseH)));
-        scale *= std::max(0.1f, std::min(32.0f, zoom));
+        scale *= std::max(0.001f, std::min(10000.0f, zoom));
         const ImVec2 frame(baseW * scale, baseH * scale);
         const ImVec2 origin(contentMin.x + (availW - frame.x) * 0.5f + panX,
                             contentMin.y + (availH - frame.y) * 0.5f + panY);
@@ -560,46 +747,47 @@ namespace seedui
             viewScale = scaleX < scaleY ? scaleX : scaleY;
             if (viewScale > 1.0f) viewScale = 1.0f;
             if (viewScale < 0.25f) viewScale = 0.25f;
-            viewScale *= std::max(0.1f, std::min(32.0f, zoom));
+            viewScale *= std::max(0.001f, std::min(10000.0f, zoom));
         }
 
         const ImVec2 frame(baseW * viewScale, baseH * viewScale);
         const ImVec2 origin(contentMin.x + (availW - frame.x) * 0.5f + panX,
                             contentMin.y + (availH - frame.y) * 0.5f + panY);
 
-        // Grade em ESPAÇO DE PROJETO: minor a cada kGridStep (8 unidades — o
-        // MESMO passo do snap, fonte única em Geo::kGridStep), major a cada
-        // 40 (5×). Recortada à moldura da tela base e à janela visível — fica
-        // "dentro do compasso" do snap: cada ponto visível da grade é um
-        // ponto EXATO de encaixe, em qualquer zoom.
+        // Grade em ESPAÇO DE PROJETO: passo adaptativo com o zoom (Geo::GetAdaptiveGridStep).
+        // Recortada estritamente dentro da área visível do canvas.
+        // Cada pontinho desenhado na tela é o cruzamento de linhas exato de coordenadas (ix * step, iy * step).
         if (exibirGrade)
         {
-            const float gridMinor = Geo::kGridStep;
-            const float gridMajor = Geo::kGridStep * Geo::kGridMajorMult;
-            const bool drawMinor = gridMinor * viewScale >= 7.0f;
-            // A grade percorre o CANVAS INTEIRO (não só a moldura): o espaço de
-            // trabalho é livre e os pontos continuam alinhados às unidades do
-            // projeto (8/40), então o snap encaixa exatamente neles em qualquer
-            // ponto do canvas.
-            const float stepPx = drawMinor ? gridMinor : gridMajor;
-            const float stepScreen = stepPx * viewScale;
-            const int ix0 = (int)floorf((min.x - origin.x) / stepScreen);
-            const int iy0 = (int)floorf((min.y - origin.y) / stepScreen);
-            const int ix1 = (int)ceilf((max.x - origin.x) / stepScreen);
-            const int iy1 = (int)ceilf((max.y - origin.y) / stepScreen);
+            dl->PushClipRect(min, max, true);
+            const float step = Geo::GetAdaptiveGridStep(viewScale);
+            const float minProjX = (min.x - origin.x) / viewScale;
+            const float maxProjX = (max.x - origin.x) / viewScale;
+            const float minProjY = (min.y - origin.y) / viewScale;
+            const float maxProjY = (max.y - origin.y) / viewScale;
+
+            const int ix0 = (int)floorf(minProjX / step);
+            const int ix1 = (int)ceilf(maxProjX / step);
+            const int iy0 = (int)floorf(minProjY / step);
+            const int iy1 = (int)ceilf(maxProjY / step);
+
             for (int ix = ix0; ix <= ix1; ++ix)
             {
-                const float px = ix * stepPx;
-                const bool xMajor = drawMinor ? (ix % 5 == 0) : true;
+                const float projX = ix * step;
+                const float screenX = origin.x + projX * viewScale;
+                const bool xMajor = (ix % 5 == 0);
                 for (int iy = iy0; iy <= iy1; ++iy)
                 {
-                    if (!drawMinor && !xMajor) continue;
-                    const bool major = xMajor && (drawMinor ? (iy % 5 == 0) : true);
+                    const float projY = iy * step;
+                    const float screenY = origin.y + projY * viewScale;
+                    const bool major = xMajor && (iy % 5 == 0);
                     dl->AddCircleFilled(
-                        ImVec2(origin.x + px * viewScale, origin.y + iy * stepPx * viewScale),
-                        major ? 1.35f : 1.0f, major ? gridMaj : gridMin, 8);
+                        ImVec2(screenX, screenY),
+                        major ? 1.4f : 1.0f,
+                        major ? gridMaj : gridMin, 8);
                 }
             }
+            dl->PopClipRect();
         }
 
         // Réguas (margens da janela) — sincronizadas com o zoom/pan: os
@@ -836,23 +1024,34 @@ namespace seedui
                 const bool primary = elementoPrincipalId && selectedId == elementoPrincipalId;
                 const ImU32 selection = ImGui::ColorConvertFloat4ToU32(
                     primary ? Theme::AccentOrange : Theme::AccentBlue);
+                // Linha de demarcação: o ImGui fixa espessura mínima em 1px
+                // (thickness = ImMax(thickness, 1.0f)), então "mais fina" é
+                // obtido com o coração 1px translúcido — o traço fino do
+                // Illustrator. As alças continuam na cor cheia.
+                const ImU32 selectionLine = (selection & 0x00FFFFFF) |
+                                            (primary ? 0x8F000000u : 0x77000000u);
                 const bool rotated = Geo::ElementRotation(*selected) != 0.0f;
+
+                // Caminho (caneta): sem contorno laranja de demarcação — o
+                // caminho é editado pelos nós, como no Illustrator/CorelDRAW.
+                // Somente ferramentas de transformação mostram a caixa.
+                const bool isPath = selected->tipo == "caminho";
 
                 float boxMinX = 0.0f, boxMinY = 0.0f, boxMaxX = 0.0f, boxMaxY = 0.0f;
                 Geo::RotatedAABB(*selected, boxMinX, boxMinY, boxMaxX, boxMaxY);
                 const ImVec2 a(origin.x + boxMinX * viewScale, origin.y + boxMinY * viewScale);
                 const ImVec2 b(origin.x + boxMaxX * viewScale, origin.y + boxMaxY * viewScale);
-                if (rotated)
+                if (!isPath && rotated)
                 {
                     // Contorno segue o elemento rotacionado (resolve a caixa
                     // AABB que ficaria "gorda" nas quinas).
                     std::vector<ImVec2> outline;
                     Geo::OutlineScreen(*selected, origin.x, origin.y, viewScale, outline, 64);
                     if (outline.size() >= 3)
-                        dl->AddPolyline(outline.data(), (int)outline.size(), selection,
-                            ImDrawFlags_Closed, primary ? 1.5f : 1.0f);
+                        dl->AddPolyline(outline.data(), (int)outline.size(), selectionLine,
+                            1.0f, ImDrawFlags_Closed); // 1px translúcido = fio fino
                 }
-                else
+                else if (!isPath)
                 {
                     CornerRadii selectionRadii = GetCornerRadii(*selected, w, h);
                     selectionRadii.topLeft *= viewScale;
@@ -860,11 +1059,81 @@ namespace seedui
                     selectionRadii.bottomRight *= viewScale;
                     selectionRadii.bottomLeft *= viewScale;
                     RoundedRectPath(dl, a, b, selectionRadii);
-                    dl->PathStroke(selection, ImDrawFlags_Closed, primary ? 1.5f : 1.0f);
+                    dl->PathStroke(selectionLine, 1.0f, ImDrawFlags_Closed); // 1px translúcido = fio fino
                 }
                 if (!primary || selected->bloqueado) continue;
-                // Caminho (caneta): sem alças de tamanho — edita-se pelos nós.
-                if (selected->tipo == "grupo" || selected->tipo == "caminho")
+
+                // Caminho (caneta): desenha os NÓS editáveis (sem contorno
+                // laranja e sem alças de tamanho — o caminho é editado pelos
+                // pontos, como no Illustrator/CorelDRAW). O contorno externo
+                // já foi pulado acima via isPath.
+                if (selected->tipo == "caminho" &&
+                    selected->transformacao.contains("pontos") &&
+                    selected->transformacao["pontos"].is_array())
+                {
+                    const auto& pts = selected->transformacao["pontos"];
+                    const float bx = selected->transformacao.value("x", 0.0f);
+                    const float by = selected->transformacao.value("y", 0.0f);
+                    const ImU32 rodCol = IM_COL32(110, 160, 220, 210); // haste hairline
+                    const ImU32 handleTipCol = IM_COL32(255, 170, 40, 255); // pegador
+                    const ImU32 smoothNodeCol = IM_COL32(50, 130, 255, 255); // borda nó suave
+                    const ImU32 cuspNodeCol = IM_COL32(255, 120, 30, 255); // borda nó cúspide
+
+                    for (int i = 0; i < (int)pts.size(); ++i)
+                    {
+                        const float nx = bx + pts[i].value("x", 0.0f);
+                        const float ny = by + pts[i].value("y", 0.0f);
+                        const float sx = origin.x + nx * viewScale;
+                        const float sy = origin.y + ny * viewScale;
+                        const bool broken = pts[i].value("quebrado", 0.0f) > 0.5f;
+
+                        // Alça de SAÍDA (controla o segmento i → i+1).
+                        const float ox = nx + pts[i].value("cx2", 0.0f);
+                        const float oy = ny + pts[i].value("cy2", 0.0f);
+                        const float sox = origin.x + ox * viewScale;
+                        const float soy = origin.y + oy * viewScale;
+
+                        // Alça de ENTRADA (controla o segmento i-1 → i).
+                        const float ix = broken
+                            ? nx + pts[i].value("cx1", 0.0f)
+                            : nx - pts[i].value("cx2", 0.0f);
+                        const float iy = broken
+                            ? ny + pts[i].value("cy1", 0.0f)
+                            : ny - pts[i].value("cy2", 0.0f);
+                        const float six = origin.x + ix * viewScale;
+                        const float siy = origin.y + iy * viewScale;
+
+                        const bool outActive = pts[i].value("curva", 0.0f) > 0.5f &&
+                            (fabsf(ox - nx) > 0.01f || fabsf(oy - ny) > 0.01f);
+                        const bool inActive = (broken ? pts[i].value("curva", 0.0f) > 0.5f
+                                                     : true) &&
+                            (fabsf(ix - nx) > 0.01f || fabsf(iy - ny) > 0.01f);
+
+                        // Hastes de controle (hairlines finos de 1px) + pegadores discretos
+                        if (inActive)
+                        {
+                            dl->AddLine(ImVec2(sx, sy), ImVec2(six, siy), rodCol, 1.0f);
+                            dl->AddCircleFilled(ImVec2(six, siy), 2.5f, handleTipCol, 12);
+                            dl->AddCircle(ImVec2(six, siy), 2.5f, IM_COL32(20, 20, 20, 255), 12, 1.0f);
+                        }
+                        if (outActive)
+                        {
+                            dl->AddLine(ImVec2(sx, sy), ImVec2(sox, soy), rodCol, 1.0f);
+                            dl->AddCircleFilled(ImVec2(sox, soy), 2.5f, handleTipCol, 12);
+                            dl->AddCircle(ImVec2(sox, soy), 2.5f, IM_COL32(20, 20, 20, 255), 12, 1.0f);
+                        }
+
+                        // Nó: pequeno quadradinho vetorial (6x6 px) estilo CorelDRAW
+                        const ImU32 nodeBorder = broken ? cuspNodeCol : smoothNodeCol;
+                        const float ns = 3.0f; // meio tamanho = 3px (total 6x6px)
+                        dl->AddRectFilled(ImVec2(sx - ns, sy - ns), ImVec2(sx + ns, sy + ns),
+                                          IM_COL32(255, 255, 255, 255));
+                        dl->AddRect(ImVec2(sx - ns, sy - ns), ImVec2(sx + ns, sy + ns),
+                                    nodeBorder, 0.0f, 0, 1.2f);
+                    }
+                    continue;
+                }
+                if (selected->tipo == "grupo")
                     continue;
 
                 const ImU32 handleFill = IM_COL32(245, 245, 245, 255);
@@ -968,42 +1237,6 @@ namespace seedui
                                   pivotCol, 16, 1.5f);
                 }
 
-                // Caminho (caneta): nós editáveis + alças de curva.
-                if (selected->tipo == "caminho" &&
-                    selected->transformacao.contains("pontos") &&
-                    selected->transformacao["pontos"].is_array())
-                {
-                    const auto& pts = selected->transformacao["pontos"];
-                    const float bx = selected->transformacao.value("x", 0.0f);
-                    const float by = selected->transformacao.value("y", 0.0f);
-                    const ImU32 nodeCol = ImGui::ColorConvertFloat4ToU32(
-                        Theme::Hex(0x4f8cff, 1.0f));
-                    const ImU32 handleCol = ImGui::ColorConvertFloat4ToU32(
-                        Theme::Hex(0xffb347, 1.0f));
-                    for (int i = 0; i < (int)pts.size(); ++i)
-                    {
-                        const float nx = bx + pts[i].value("x", 0.0f);
-                        const float ny = by + pts[i].value("y", 0.0f);
-                        const float sx = origin.x + nx * viewScale;
-                        const float sy = origin.y + ny * viewScale;
-                        const float hx = nx + pts[i].value("cx2", 0.0f);
-                        const float hy = ny + pts[i].value("cy2", 0.0f);
-                        const float shx = origin.x + hx * viewScale;
-                        const float shy = origin.y + hy * viewScale;
-                        const bool curved = pts[i].value("curva", 0.0f) > 0.5f ||
-                            pts[(i + 1) % (int)pts.size()].value("curva", 0.0f) > 0.5f;
-                        if (curved && (fabsf(hx - nx) > 0.01f || fabsf(hy - ny) > 0.01f))
-                        {
-                            dl->AddLine(ImVec2(sx, sy), ImVec2(shx, shy),
-                                        handleCol, 1.0f);
-                            dl->AddCircleFilled(ImVec2(shx, shy), 3.5f,
-                                                handleCol, 16);
-                        }
-                        dl->AddCircleFilled(ImVec2(sx, sy), 4.0f,
-                                            IM_COL32(20, 20, 20, 255), 16);
-                        dl->AddCircle(ImVec2(sx, sy), 4.0f, nodeCol, 16, 1.5f);
-                    }
-                }
             }
             }
         }

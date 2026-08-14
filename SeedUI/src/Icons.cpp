@@ -135,41 +135,6 @@ namespace seedui
         // aparece no TOPO da imagem desenhada. Portanto NÃO devemos inverter
         // as linhas aqui — fazer isso deixa os ícones de cabeça para baixo.
 
-        void StrengthenAlpha(std::vector<unsigned char>& rgba, int width, int height)
-        {
-            // Os SVGs thin perdem definição quando reduzidos para 18–23 px.
-            // Uma expansão de 1 px no bitmap de 96 px preserva o desenho e
-            // produz um traço final nítido, sem transformar o estilo em bold.
-            std::vector<unsigned char> source = rgba;
-            for (int y = 0; y < height; ++y)
-            {
-                for (int x = 0; x < width; ++x)
-                {
-                    unsigned char alpha = 0;
-                    for (int oy = -1; oy <= 1; ++oy)
-                    {
-                        const int sy = y + oy;
-                        if (sy < 0 || sy >= height) continue;
-                        for (int ox = -1; ox <= 1; ++ox)
-                        {
-                            const int sx = x + ox;
-                            if (sx < 0 || sx >= width) continue;
-                            const size_t si = ((size_t)sy * width + sx) * 4;
-                            alpha = std::max(alpha, source[si + 3]);
-                        }
-                    }
-                    const size_t di = ((size_t)y * width + x) * 4;
-                    if (alpha > rgba[di + 3])
-                    {
-                        rgba[di + 0] = 255;
-                        rgba[di + 1] = 255;
-                        rgba[di + 2] = 255;
-                        rgba[di + 3] = alpha;
-                    }
-                }
-            }
-        }
-
         ImTextureID Tex(IconId id)
         {
             const int idx = (int)id;
@@ -207,8 +172,10 @@ namespace seedui
                     NSVGrasterizer* rast = nsvgCreateRasterizer();
                     if (rast)
                     {
+                        // Ícones preenchidos (Tabler filled): sem expansão de
+                        // alpha — a forma sólida já rasteriza nítida; qualquer
+                        // dilatação criaria um halo/contorno indesejado.
                         nsvgRasterize(rast, img, 0.0f, 0.0f, scale, rgba.data(), rw, rh, rw * 4);
-                        StrengthenAlpha(rgba, rw, rh);
                         nsvgDeleteRasterizer(rast);
                     }
                     nsvgDelete(img);

@@ -37,6 +37,9 @@ namespace seedui
 
         void Run(bool captureAfterBoot = false);
 
+        // Gera o SVG de um modo (testável sem UI — usado pelo autoteste).
+        static std::string GerarSVG(const Project& projeto, const Modo& modo);
+
     private:
         void DrawWorkspace();
         void DrawMenuBar();
@@ -71,11 +74,19 @@ namespace seedui
         void ColarElementosCopiados();
         void DuplicarSelecao();
         void EspelharSelecao(bool horizontal);
+        void ConverterEmCaminho(); // Ctrl+Q: forma -> caminho editável por nós
         void HandleMeasureTool(bool canvasHovered);
         void DesenharMedicao();
+        void ZoomPara(float targetScale, float centerX, float centerY);
+        void Zoom100();
+        void ZoomFit();
+        void ZoomFitSelection();
+        void SelecionarTodos();
+        void ExportarSVG();
         void HandlePenTool(bool canvasHovered);
         void AddPenPoint(Element& path, float projectX, float projectY,
                          float handleDX, float handleDY, bool curved);
+        void RecalcularCaixaCaminho(Element& path);
         void ApagarElementosSelecionados();
         void AlternarModoAnotacao();
         void AlinharElementosSelecionados(int operacao);
@@ -94,10 +105,102 @@ namespace seedui
                        const std::vector<SmartGuides::Rect>& starts);
         float UnitToPixels() const;     // fator da unidade atual -> px
         float PixelsToUnit(float px) const;
-        // Força do snap: multiplicador das tolerâncias de encaixe (0.0 =
-        // snap DESLIGADO; 0.25x "fraco" até 3x "forte"; 1.0 = padrão).
-        // Aplica a guias inteligentes, espaçamento, moldura, guias das
-        // réguas e grade. Com 0.0 todas as tolerâncias zeram (sem snap).
+        enum class ActionKind
+        {
+            None,
+            Move,
+            Rotate,
+            Scale,
+            FillColor,
+            BorderColor,
+            BorderWidth,
+            Opacity,
+            CornerRadius
+        };
+
+        struct LastActionData
+        {
+            ActionKind kind = ActionKind::None;
+            float moveDX = 16.0f;
+            float moveDY = 16.0f;
+            float rotateDelta = 0.0f;
+            float scaleFactorX = 1.0f;
+            float scaleFactorY = 1.0f;
+            float deltaW = 0.0f;
+            float deltaH = 0.0f;
+            std::string fillColor;
+            std::string borderColor;
+            float borderWidth = 1.0f;
+            float opacity = 1.0f;
+            float cornerRadius = 0.0f;
+        };
+
+        LastActionData mLastAction;
+        void RepetirUltimaAcao(); // Ctrl+R: repete a última ação aplicada no elemento selecionado
+    public:
+        enum class IncrementalDupPhase
+        {
+            Idle,
+            FirstDuplicated,
+            RunningChain
+        };
+
+        // Estrutura de Snapshot para Duplicação Incremental (estilo CorelDRAW)
+        struct ElementSnapshot
+        {
+            std::string id;
+            float x = 0.0f;
+            float y = 0.0f;
+            float w = 160.0f;
+            float h = 32.0f;
+            float rot = 0.0f;
+            float opacity = 1.0f;
+            float strokeOpacity = 1.0f;
+            float borderWidth = 1.0f;
+            float cornerRadius = 0.0f;
+            bool hasFillColor = false;
+            float fillRGB[3] = { 1.0f, 1.0f, 1.0f };
+            bool hasBorderColor = false;
+            float borderRGB[3] = { 0.8f, 0.8f, 0.8f };
+            float fontSize = 18.0f;
+        };
+
+        struct IncrementalDelta
+        {
+            float deltaX = 16.0f;
+            float deltaY = 16.0f;
+            float deltaRot = 0.0f;
+            float scaleX = 1.0f;
+            float scaleY = 1.0f;
+            float deltaOpacity = 0.0f;
+            float deltaStrokeOpacity = 0.0f;
+            float deltaBorderWidth = 0.0f;
+            float deltaCornerRadius = 0.0f;
+            float deltaFillRGB[3] = { 0.0f, 0.0f, 0.0f };
+            bool hasFillDelta = false;
+            float deltaBorderRGB[3] = { 0.0f, 0.0f, 0.0f };
+            bool hasBorderDelta = false;
+        };
+
+        struct IncrementalDuplicateManager
+        {
+            IncrementalDupPhase phase = IncrementalDupPhase::Idle;
+            std::string currentCloneId;
+            ElementSnapshot stateA;
+            IncrementalDelta fixedDelta;
+
+            void Reset()
+            {
+                phase = IncrementalDupPhase::Idle;
+                currentCloneId.clear();
+            }
+        };
+
+        IncrementalDuplicateManager mIncDup;
+        float mCanvasLastRotDelta = 0.0f;
+
+    private:
+
         float SnapTol(float basePx) const;
         const char* SnapStrengthLabel() const;
         void DrawSnapStrengthPopup();
@@ -112,6 +215,7 @@ namespace seedui
         // Barra de propriedades contextual (estilo CorelDRAW)
         int mUnit = 0;        // 0 px, 1 mm, 2 cm, 3 in, 4 pt
         float mPrecision = 1.0f; // incremento dos campos numéricos
+        float mNudgeDistance = 1.0f; // distância de deslocamento pelas setas (na unidade atual)
 
         // Guias fixas arrastadas das réguas (coordenadas de projeto; NÃO
         // entram no projeto.ui.json — são auxílio de edição).
@@ -198,11 +302,19 @@ namespace seedui
         bool mMeasureDragging = false;
         float mMeasureX1 = 0.0f, mMeasureY1 = 0.0f;
         float mMeasureX2 = 0.0f, mMeasureY2 = 0.0f;
-        // Caneta (caminho Bezier): desenho e edição de nós.
+        // Caneta (caminho Bezier): desenho, rubber banding e edição de nós.
         bool mPenDrawing = false;
         bool mPenDragging = false;
         float mPenDragStartX = 0.0f, mPenDragStartY = 0.0f;
         float mPenDragX = 0.0f, mPenDragY = 0.0f;
+        float mPenMouseProjectX = 0.0f, mPenMouseProjectY = 0.0f;
+        int mPenHoverSegmentIndex = -1;
+        float mPenHoverT = 0.0f;
+        float mPenHoverProjX = 0.0f, mPenHoverProjY = 0.0f;
+        bool mPenSnapActive = false;
+        float mPenSnapProjX = 0.0f;
+        float mPenSnapProjY = 0.0f;
+        bool mPenSnapIsClose = false;
         int mPathEditIndex = -1;  // nó em edição (dragMode 16 = nó, 17 = alça)
         int mAlignTarget = 0; // 0 selecao, 1 elemento principal, 2 tela
         float mHorizontalSpacing = 16.0f;
@@ -216,6 +328,7 @@ namespace seedui
         bool mZoomToMouse = true; // zoom encaminha para o cursor (qualquer controle)
         bool mMarqueeContainOnly = true; // seleção exige cobertura TOTAL do elemento
         bool mColorPickerOpen = false; // janela do seletor de cor (3 modelos)
+        int mColorPickerTarget = 0;    // 0 = cor_fundo (preenchimento), 1 = cor_borda (contorno)
         float mCanvasZoom = 1.0f;
         float mCanvasPanX = 0.0f;
         float mCanvasPanY = 0.0f;

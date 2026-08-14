@@ -254,6 +254,31 @@ namespace
         check(pathPts.front().x == pathPts.back().x &&
               pathPts.front().y == pathPts.back().y,
               "caminho fechado fecha o contorno no primeiro ponto");
+        // Artefato de volume: o ponto duplicado exato no fechamento criava um
+        // segmento de comprimento ZERO na junção (normal indefinida). Agora o
+        // último ponto só é reposto quando NÃO é igual ao primeiro.
+        {
+            bool zeroLength = false;
+            for (size_t k = 1; k < pathPts.size() && !zeroLength; ++k)
+            {
+                const float dx = pathPts[k].x - pathPts[k - 1].x;
+                const float dy = pathPts[k].y - pathPts[k - 1].y;
+                if (dx * dx + dy * dy < 1e-8f) zeroLength = true;
+            }
+            check(!zeroLength,
+                  "caminho fechado não gera segmento de comprimento zero (artefato)");
+        }
+        // Tesselação em PIXELS DE TELA: o mesmo caminho em zoom 4x amostra
+        // mais pontos que em 1x — a curva fica lisa em qualquer zoom.
+        {
+            std::vector<ImVec2> p1x, p4x;
+            Geo::OutlineLocal(*Project::ResolverId(pathMode, "path_1"),
+                               p1x, 48, 1.0f);
+            Geo::OutlineLocal(*Project::ResolverId(pathMode, "path_1"),
+                               p4x, 48, 4.0f);
+            check(p4x.size() >= p1x.size(),
+                  "tesselação em pixels de tela aumenta com o zoom (sem facetas)");
+        }
         check(Project::ElementoNoPonto(pathMode, 150.0f, 175.0f) &&
               Project::ElementoNoPonto(pathMode, 150.0f, 175.0f)->id == "path_1",
               "caminho: clique no contorno seleciona");
@@ -273,6 +298,92 @@ namespace
         Geo::OutlineLocal(*Project::ResolverId(pathMode, "path_2"), openPts, 48);
         check(openPts.size() == 2,
               "caminho aberto com segmento reto gera 2 pontos");
+
+        // Alças de ENTRADA individuais (Alt+clique "quebrado"): quando o
+        // ponto tem quebrado=1, a tesselação usa cx1/cy1 próprios em vez do
+        // espelho da saída — o desenho muda para uma curva assimétrica.
+        Element pathBroken = makeElement("path_broken", "caminho");
+        pathBroken.transformacao = {
+            { "x", 0.0f }, { "y", 0.0f },
+            { "largura", 200.0f }, { "altura", 100.0f },
+            { "fechado", 0.0f },
+            { "pontos", nlohmann::json::array({
+                  nlohmann::json{ { "x", 0.0f }, { "y", 0.0f },
+                                  { "cx2", 60.0f }, { "cy2", 0.0f },
+                                  { "curva", 1.0f } },
+                  nlohmann::json{ { "x", 200.0f }, { "y", 100.0f },
+                                  { "cx2", 0.0f }, { "cy2", 0.0f },
+                                  { "curva", 1.0f },
+                                  { "quebrado", 1.0f },
+                                  { "cx1", 80.0f }, { "cy1", -40.0f } } }) }
+        };
+        std::vector<ImVec2> brokenPts;
+        Geo::OutlineLocal(pathBroken, brokenPts, 48);
+        check(brokenPts.size() > 14,
+              "caminho quebrado ainda tessela a curva");
+        bool asymmetrical = false;
+        for (size_t k = 1; k < brokenPts.size() && !asymmetrical; ++k)
+        {
+            // Espelhando o ponto pelo centro (100,50) ele não deve coincidir
+            // com a curva original — prova que a alça de entrada (cx1) foi
+            // usada em vez do espelho da saída.
+            const ImVec2& p = brokenPts[k];
+            if (fabsf((200.0f - p.x) - p.x) > 0.5f ||
+                fabsf((100.0f - p.y) - p.y) > 0.5f)
+                asymmetrical = true;
+        }
+        check(asymmetrical,
+              "alça de entrada quebrada (cx1) altera a forma da curva");
+
+        // Preenchimento do caminho FECHADO: clique DENTRO da forma também
+        // seleciona quando o caminho tem cor_fundo (como qualquer forma).
+        Element pathFill = makeElement("path_fill", "caminho");
+        pathFill.transformacao = {
+            { "x", 400.0f }, { "y", 400.0f },
+            { "largura", 200.0f }, { "altura", 120.0f },
+            { "fechado", 1.0f },
+            { "pontos", nlohmann::json::array({
+                  nlohmann::json{ { "x", 0.0f }, { "y", 0.0f },
+                                  { "cx2", 0.0f }, { "cy2", 0.0f }, { "curva", 0.0f } },
+                  nlohmann::json{ { "x", 200.0f }, { "y", 0.0f },
+                                  { "cx2", 0.0f }, { "cy2", 0.0f }, { "curva", 0.0f } },
+                  nlohmann::json{ { "x", 100.0f }, { "y", 120.0f },
+                                  { "cx2", 0.0f }, { "cy2", 0.0f }, { "curva", 0.0f } } }) }
+        };
+        pathFill.estilos["cor_fundo"] = "#336699";
+        pathMode.raiz.push_back(std::move(pathFill));
+        Element* pathFillRef = Project::ResolverId(pathMode, "path_fill");
+        check(pathFillRef &&
+              Project::ElementoNoPonto(pathMode, 450.0f, 420.0f) == pathFillRef,
+              "caminho fechado com preenchimento: clique no interior seleciona");
+        Element pathNoFill = makeElement("path_nofill", "caminho");
+        pathNoFill.transformacao = pathFillRef->transformacao;
+        Modo noFillMode;
+        noFillMode.raiz.push_back(std::move(pathNoFill));
+        check(Project::ElementoNoPonto(noFillMode, 450.0f, 420.0f) == nullptr,
+              "caminho sem cor_fundo não captura clique no interior");
+
+        // Caixa do caminho (M04 pen): PathBounds cobre o MÍN/MÁX de TODOS os
+        // pontos — inclusive os desenhados à esquerda/acima do primeiro
+        // clique, para a caixa de seleção nunca "cortar" a curva.
+        Element pathNeg = makeElement("path_neg", "caminho");
+        pathNeg.transformacao = {
+            { "x", 300.0f }, { "y", 300.0f },
+            { "largura", 1.0f }, { "altura", 1.0f },
+            { "fechado", 0.0f },
+            { "pontos", nlohmann::json::array({
+                  nlohmann::json{ { "x", 0.0f }, { "y", 0.0f },
+                                  { "cx2", 0.0f }, { "cy2", 0.0f }, { "curva", 0.0f } },
+                  nlohmann::json{ { "x", -80.0f }, { "y", -40.0f },
+                                  { "cx2", 0.0f }, { "cy2", 0.0f }, { "curva", 0.0f } },
+                  nlohmann::json{ { "x", 40.0f }, { "y", 60.0f },
+                                  { "cx2", 0.0f }, { "cy2", 0.0f }, { "curva", 0.0f } } }) }
+        };
+        float nbMinX = 0.0f, nbMinY = 0.0f, nbMaxX = 0.0f, nbMaxY = 0.0f;
+        const bool nbOk = Geo::PathBounds(pathNeg, nbMinX, nbMinY, nbMaxX, nbMaxY);
+        check(nbOk && nbMinX == -80.0f && nbMinY == -40.0f &&
+              nbMaxX == 40.0f && nbMaxY == 60.0f,
+              "PathBounds cobre pontos desenhados à esquerda/acima do primeiro");
 
         Modo groupMode;
         Element groupA = makeElement("painel_a", "painel");
@@ -390,40 +501,34 @@ namespace
             check(gx == -1.0f && gy == -1.0f,
                   "guias ignoram elementos da propria selecao");
 
-            // Moldura da tela-base: snap FORTE (tolerância 8x). Elemento a
-            // 14px da borda esquerda (dentro de 40px) encaixa na moldura,
-            // mesmo estando fora da tolerância normal de 5px.
+            // Moldura da tela-base: snap suave. Elemento a 3px da borda esquerda
+            // (dentro de 5px) encaixa suavemente na borda 0.
             Modo frameMode;
             Element fm = makeElement("move", "painel");
             fm.transformacao = { { "x", 10.0f }, { "y", 100.0f },
                                  { "largura", 100.0f }, { "altura", 40.0f } };
             frameMode.raiz.push_back(std::move(fm));
             selection = { "move" };
-            dx = -24.0f; dy = 0.0f; gx = gy = -1.0f;
+            dx = -7.0f; dy = 0.0f; gx = gy = -1.0f;
             starts = { { 10.0f, 100.0f, 100.0f, 40.0f } };
             SmartGuides::Apply(frameMode, starts, selection, dx, dy,
                                1280.0f, 720.0f, 5.0f, gx, gy);
             check(dx == -10.0f && gx == 0.0f && dy == 0.0f && gy == -1.0f,
-                  "moldura tem snap forte (8x tolerancia) e vence os demais");
+                  "moldura tem snap suave e alinha com a borda");
 
-            // Força AMPLIADA: o menor desvio do elemento à borda é 35px —
-            // dentro da tolerância ampliada (8x=40px) mas FORA da antiga
-            // (5x=25px): a moldura magnetiza de mais longe agora.
+            // Fora da tolerância suave (15px de distância): não puxa nem arremessa o elemento.
             Modo frameMode2;
             Element fm2 = makeElement("move", "painel");
             fm2.transformacao = { { "x", 40.0f }, { "y", 100.0f },
                                   { "largura", 100.0f }, { "altura", 40.0f } };
             frameMode2.raiz.push_back(std::move(fm2));
             selection = { "move" };
-            dx = -5.0f; dy = 0.0f; gx = gy = -1.0f;
+            dx = -20.0f; dy = 0.0f; gx = gy = -1.0f;
             starts = { { 40.0f, 100.0f, 100.0f, 40.0f } };
             SmartGuides::Apply(frameMode2, starts, selection, dx, dy,
                                1280.0f, 720.0f, 5.0f, gx, gy);
-            // selLeft = 35 (35 < 40); centro 85, direita 135.
-            // O ponto mais próximo da borda 0 é a esquerda (35px) — engata:
-            // dLeft = 0-35 = -35; dx += -35 -> dx = -40, esquerda em 0.
-            check(dx == -40.0f && gx == 0.0f && gy == -1.0f,
-                  "moldura: tolerancia ampliada (8x) magnetiza de mais longe");
+            check(dx == -20.0f && gx == -1.0f && gy == -1.0f,
+                  "moldura: fora da tolerancia suave nao se move");
         }
 
         // Snap de GUIA arrastada da régua (M05): a guia gruda nas laterais/
@@ -1074,6 +1179,158 @@ namespace
                   shadowBack->estilos["sombra"].value("desfoque", 0.0f) == 12.0f &&
                   shadowBack->estilos["sombra"].value("deslocamento_y", 0.0f) == -3.0f,
                   "sombra persiste com cor, deslocamento e desfoque");
+            // Gradiente: estilos.gradiente persiste (tipo, cores, ângulo).
+            Element gradPanel = makeElement("gr", "retangulo");
+            gradPanel.estilos["gradiente"] = nlohmann::json{
+                { "tipo", "radial" }, { "cor1", "#ff8800" },
+                { "cor2", "#2200aa" }, { "angulo", 45.0 } };
+            loaded2.telas[0].modos[0].raiz.push_back(std::move(gradPanel));
+            const std::string json3 = Project::Serializar(loaded2);
+            Project loaded3;
+            check(Project::Desserializar(loaded3, json3).empty(),
+                  "gradiente serializa sem erro");
+            Element* gradBack = Project::ResolverId(
+                loaded3.telas[0].modos[0], "gr");
+            check(gradBack && gradBack->estilos.contains("gradiente") &&
+                  gradBack->estilos["gradiente"].value("tipo", "") == "radial" &&
+                  gradBack->estilos["gradiente"].value("angulo", 0.0f) == 45.0f,
+                  "gradiente persiste com tipo, cores e angulo");
+            // Setas da linha (estilo CorelDRAW): estilos.setas persiste com
+            // início, fim e tamanho.
+            Element arrowLine = makeElement("al", "linha");
+            arrowLine.estilos["setas"] = nlohmann::json{
+                { "inicio", true }, { "fim", true }, { "tamanho", 18.0 } };
+            loaded2.telas[0].modos[0].raiz.push_back(std::move(arrowLine));
+            const std::string json4 = Project::Serializar(loaded2);
+            Project loaded4;
+            check(Project::Desserializar(loaded4, json4).empty(),
+                  "setas serializam sem erro");
+            Element* arrowBack = Project::ResolverId(
+                loaded4.telas[0].modos[0], "al");
+            check(arrowBack && arrowBack->estilos.contains("setas") &&
+                  arrowBack->estilos["setas"].value("inicio", false) == true &&
+                  arrowBack->estilos["setas"].value("fim", false) == true &&
+                  arrowBack->estilos["setas"].value("tamanho", 0.0f) == 18.0f,
+                  "setas persistem com inicio, fim e tamanho");
+            // Cantos: estilos.raio_quinas persiste por canto.
+            Element cornerPanel = makeElement("cp", "painel");
+            cornerPanel.estilos["raio"] = 6.0f;
+            cornerPanel.estilos["raio_quinas"] = nlohmann::json{
+                { "superior_esquerda", 2.0 }, { "superior_direita", 8.0 },
+                { "inferior_direita", 12.0 }, { "inferior_esquerda", 16.0 } };
+            loaded2.telas[0].modos[0].raiz.push_back(std::move(cornerPanel));
+            const std::string json5 = Project::Serializar(loaded2);
+            Project loaded5;
+            check(Project::Desserializar(loaded5, json5).empty(),
+                  "cantos serializam sem erro");
+            Element* cornerBack = Project::ResolverId(
+                loaded5.telas[0].modos[0], "cp");
+            check(cornerBack && cornerBack->estilos.contains("raio_quinas") &&
+                  cornerBack->estilos["raio_quinas"].value("superior_direita",
+                                                            0.0f) == 8.0f &&
+                  cornerBack->estilos["raio_quinas"].value("inferior_esquerda",
+                                                            0.0f) == 16.0f,
+                  "cantos persistem individualmente por quina");
+            // Texto (ferramenta T): conteúdo, tamanho da fonte e cor persistem.
+            Element textEl = makeElement("tx", "texto");
+            textEl.propriedades["texto"] = "Olá, SeedUI!";
+            textEl.estilos["tamanho_fonte"] = 24.0f;
+            textEl.estilos["cor_texto"] = "#ff8800";
+            loaded2.telas[0].modos[0].raiz.push_back(std::move(textEl));
+            const std::string json6 = Project::Serializar(loaded2);
+            Project loaded6;
+            check(Project::Desserializar(loaded6, json6).empty(),
+                  "texto serializa sem erro");
+            Element* textBack = Project::ResolverId(
+                loaded6.telas[0].modos[0], "tx");
+            check(textBack && textBack->propriedades.value("texto", "") ==
+                  "Olá, SeedUI!" &&
+                  textBack->estilos.value("tamanho_fonte", 0.0f) == 24.0f &&
+                  textBack->estilos.value("cor_texto", "") == "#ff8800",
+                  "texto persiste conteudo, tamanho e cor");
+        }
+
+        // Converter em caminho (Ctrl+Q): a amostragem do contorno alimenta a
+        // conversão — retângulo sem quina gera 4 pontos, elipse gera os
+        // segmentos pedidos, polígono gera `lados` e estrela `lados*2`.
+        {
+            Element rectEl = makeElement("cv_rect", "retangulo");
+            rectEl.transformacao = { { "x", 10.0f }, { "y", 20.0f },
+                                     { "largura", 200.0f }, { "altura", 100.0f } };
+            std::vector<ImVec2> rectOutline;
+            Geo::OutlineLocal(rectEl, rectOutline);
+            check(rectOutline.size() == 4,
+                  "retangulo sem quina gera 4 pontos no contorno");
+            const ImVec2 first = rectOutline[0];
+            check(fabsf(first.x) < 0.01f && fabsf(first.y) < 0.01f,
+                  "primeiro ponto do retangulo e o canto (0,0)");
+
+            Element polyEl = makeElement("cv_poly", "poligono");
+            polyEl.transformacao = { { "x", 0.0f }, { "y", 0.0f },
+                                     { "largura", 160.0f }, { "altura", 160.0f },
+                                     { "lados", 5.0f }, { "estrela", 0.0f } };
+            std::vector<ImVec2> polyOutline;
+            Geo::OutlineLocal(polyEl, polyOutline);
+            check(polyOutline.size() == 5,
+                  "poligono com 5 lados gera 5 pontos");
+
+            Element starEl = makeElement("cv_star", "poligono");
+            starEl.transformacao = { { "x", 0.0f }, { "y", 0.0f },
+                                     { "largura", 160.0f }, { "altura", 160.0f },
+                                     { "lados", 5.0f }, { "estrela", 1.0f },
+                                     { "raio_interno", 0.5f } };
+            std::vector<ImVec2> starOutline;
+            Geo::OutlineLocal(starEl, starOutline);
+            check(starOutline.size() == 10,
+                  "estrela com 5 lados gera 10 pontos");
+
+            Element ellipseEl = makeElement("cv_ellipse", "elipse");
+            ellipseEl.transformacao = { { "x", 0.0f }, { "y", 0.0f },
+                                        { "largura", 100.0f },
+                                        { "altura", 60.0f } };
+            std::vector<ImVec2> ellipseOutline;
+            Geo::OutlineLocal(ellipseEl, ellipseOutline, 16);
+            check(ellipseOutline.size() == 16,
+                  "elipse gera o numero de segmentos pedidos");
+        }
+
+        // Exportação SVG (App::GerarSVG, testável sem UI): gradiente vira
+        // <defs>/<linearGradient>, texto usa cor_texto + font-size, e a linha
+        // com setas emite os triângulos das pontas.
+        {
+            Project svgProject;
+            svgProject.CriarNovo("SVG Test", 1280, 720);
+            Modo& svgMode = svgProject.telas[0].modos[0];
+            Element gradBox = makeElement("caixa_grad", "retangulo");
+            gradBox.estilos["cor_fundo"] = "#ff0000";
+            gradBox.estilos["gradiente"] = nlohmann::json{
+                { "tipo", "linear" }, { "cor1", "#ff8800" },
+                { "cor2", "#0044cc" }, { "angulo", 90.0 } };
+            Element svgText = makeElement("rotulo", "texto");
+            svgText.propriedades["texto"] = "Olá <mundo>&";
+            svgText.estilos["tamanho_fonte"] = 28.0f;
+            svgText.estilos["cor_texto"] = "#ff8800";
+            Element arrowLine = makeElement("linha_flecha", "linha");
+            arrowLine.estilos["cor_borda"] = "#00cc00";
+            arrowLine.estilos["setas"] = nlohmann::json{
+                { "inicio", true }, { "fim", true }, { "tamanho", 14.0 } };
+            svgMode.raiz.push_back(std::move(gradBox));
+            svgMode.raiz.push_back(std::move(svgText));
+            svgMode.raiz.push_back(std::move(arrowLine));
+            const std::string svgOut = App::GerarSVG(svgProject, svgMode);
+            check(svgOut.find("<defs>") != std::string::npos &&
+                  svgOut.find("<linearGradient id=\"g_caixa_grad\"") !=
+                      std::string::npos &&
+                  svgOut.find("url(#g_caixa_grad)") != std::string::npos,
+                  "gradiente vira defs linearGradient referenciado no fill");
+            check(svgOut.find("<text x=\"0\" y=\"28\" fill=\"#ff8800\" ") !=
+                      std::string::npos &&
+                  svgOut.find("font-size=\"28\"") != std::string::npos &&
+                  svgOut.find("Olá &lt;mundo&gt;&amp;") != std::string::npos,
+                  "texto exporta com cor_texto, font-size e escape XML");
+            check(svgOut.find("linha_flecha") != std::string::npos ||
+                  svgOut.find("fill=\"#00cc00\"") != std::string::npos,
+                  "setas da linha emitem triangulos com a cor do contorno");
         }
 
         report << (failures == 0 ? "RESULT PASS" : "RESULT FAIL")

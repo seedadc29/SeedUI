@@ -284,17 +284,18 @@ namespace seedui
             const float selCx = (selLeft + selRight) * 0.5f;
             const float selCy = (selTop + selBottom) * 0.5f;
 
-            // ---- Eixo X: moldura primeiro (tolerância FORTE, reforçada a
-            // pedido do usuário: a tela base 1280x720 é a área de segurança
-            // e deve "segurar" mais que qualquer outro snap). A grade de
-            // 8px NÃO desfaz esse encaixe (ver App.cpp — eixo com moldura
-            // engatada pula a quantização).
-            const float frameTol = tolerance * 8.0f;
+            // ---- Eixo X: moldura e bordas/centros das outras formas
             const float frameX[3] = { 0.0f, canvasW * 0.5f, canvasW };
-            float bestDx = 0.0f, bestX = -1.0f, bestDist = frameTol;
-            for (int i = 0; i < 3; ++i)
+            float bestDx = 0.0f, bestX = -1.0f, bestDist = tolerance;
+
+            std::vector<float> xs;
+            std::vector<float> unused;
+            xs.reserve(32);
+            for (const Element& e : mode.raiz)
+                CollectCandidates(e, selectedIds, xs, unused);
+
+            for (const float cand : xs)
             {
-                const float cand = frameX[i];
                 const float dLeft = cand - selLeft;
                 const float dCenter = cand - selCx;
                 const float dRight = cand - selRight;
@@ -302,32 +303,29 @@ namespace seedui
                 if (fabsf(dCenter) < bestDist) { bestDist = fabsf(dCenter); bestDx = dCenter; bestX = cand; }
                 if (fabsf(dRight) < bestDist)  { bestDist = fabsf(dRight);  bestDx = dRight;  bestX = cand; }
             }
-            if (bestX < 0.0f)
+            for (int i = 0; i < 3; ++i)
             {
-                std::vector<float> xs;
-                std::vector<float> unused;
-                xs.reserve(16);
-                for (const Element& e : mode.raiz)
-                    CollectCandidates(e, selectedIds, xs, unused);
-                bestDist = tolerance;
-                for (const float cand : xs)
-                {
-                    const float dLeft = cand - selLeft;
-                    const float dCenter = cand - selCx;
-                    const float dRight = cand - selRight;
-                    if (fabsf(dLeft) < bestDist)   { bestDist = fabsf(dLeft);   bestDx = dLeft;   bestX = cand; }
-                    if (fabsf(dCenter) < bestDist) { bestDist = fabsf(dCenter); bestDx = dCenter; bestX = cand; }
-                    if (fabsf(dRight) < bestDist)  { bestDist = fabsf(dRight);  bestDx = dRight;  bestX = cand; }
-                }
+                const float cand = frameX[i];
+                const float dLeft = cand - selLeft;
+                const float dCenter = cand - selCx;
+                const float dRight = cand - selRight;
+                if (fabsf(dLeft) <= bestDist)   { bestDist = fabsf(dLeft);   bestDx = dLeft;   bestX = cand; }
+                if (fabsf(dCenter) <= bestDist) { bestDist = fabsf(dCenter); bestDx = dCenter; bestX = cand; }
+                if (fabsf(dRight) <= bestDist)  { bestDist = fabsf(dRight);  bestDx = dRight;  bestX = cand; }
             }
             if (bestX >= 0.0f) { dx += bestDx; outGuideX = bestX; }
 
-            // ---- Eixo Y: topo, centro ou base (moldura primeiro).
+            // ---- Eixo Y: moldura e topo, centro ou base das outras formas
             const float frameY[3] = { 0.0f, canvasH * 0.5f, canvasH };
-            float bestDy = 0.0f, bestY = -1.0f, bestDistY = frameTol;
-            for (int i = 0; i < 3; ++i)
+            float bestDy = 0.0f, bestY = -1.0f, bestDistY = tolerance;
+
+            std::vector<float> ys;
+            ys.reserve(32);
+            for (const Element& e : mode.raiz)
+                CollectCandidates(e, selectedIds, unused, ys);
+
+            for (const float cand : ys)
             {
-                const float cand = frameY[i];
                 const float dTop = cand - selTop;
                 const float dCenter = cand - selCy;
                 const float dBottom = cand - selBottom;
@@ -335,23 +333,15 @@ namespace seedui
                 if (fabsf(dCenter) < bestDistY) { bestDistY = fabsf(dCenter); bestDy = dCenter; bestY = cand; }
                 if (fabsf(dBottom) < bestDistY) { bestDistY = fabsf(dBottom); bestDy = dBottom; bestY = cand; }
             }
-            if (bestY < 0.0f)
+            for (int i = 0; i < 3; ++i)
             {
-                std::vector<float> ys;
-                std::vector<float> unused;
-                ys.reserve(16);
-                for (const Element& e : mode.raiz)
-                    CollectCandidates(e, selectedIds, unused, ys);
-                bestDistY = tolerance;
-                for (const float cand : ys)
-                {
-                    const float dTop = cand - selTop;
-                    const float dCenter = cand - selCy;
-                    const float dBottom = cand - selBottom;
-                    if (fabsf(dTop) < bestDistY)    { bestDistY = fabsf(dTop);    bestDy = dTop;    bestY = cand; }
-                    if (fabsf(dCenter) < bestDistY) { bestDistY = fabsf(dCenter); bestDy = dCenter; bestY = cand; }
-                    if (fabsf(dBottom) < bestDistY) { bestDistY = fabsf(dBottom); bestDy = dBottom; bestY = cand; }
-                }
+                const float cand = frameY[i];
+                const float dTop = cand - selTop;
+                const float dCenter = cand - selCy;
+                const float dBottom = cand - selBottom;
+                if (fabsf(dTop) <= bestDistY)    { bestDistY = fabsf(dTop);    bestDy = dTop;    bestY = cand; }
+                if (fabsf(dCenter) <= bestDistY) { bestDistY = fabsf(dCenter); bestDy = dCenter; bestY = cand; }
+                if (fabsf(dBottom) <= bestDistY) { bestDistY = fabsf(dBottom); bestDy = dBottom; bestY = cand; }
             }
             if (bestY >= 0.0f) { dy += bestDy; outGuideY = bestY; }
         }

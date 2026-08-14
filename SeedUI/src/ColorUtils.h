@@ -13,14 +13,21 @@ namespace seedui
 {
     namespace ColorUtils
     {
-        // "#rrggbb" (ou "rrggbb") -> rgb em 0..1. Retorna false se inválido.
-        inline bool ParseHex(const std::string& text, float rgb[3])
+        // Suporta #RGB, #RGBA, #RRGGBB e #RRGGBBAA, além de "none" e "transparent".
+        inline bool ParseHexWithAlpha(const std::string& text, float rgb[3], float& alpha)
         {
+            alpha = 1.0f;
+            if (text == "none" || text == "transparent" || text == "transparente" || text.empty())
+            {
+                rgb[0] = rgb[1] = rgb[2] = 0.0f;
+                alpha = 0.0f;
+                return true;
+            }
             const char* p = text.c_str();
             if (*p == '#') ++p;
             unsigned int value = 0;
             int digits = 0;
-            while (*p && digits < 6)
+            while (*p && digits < 8)
             {
                 const char c = *p;
                 int v = -1;
@@ -32,11 +39,53 @@ namespace seedui
                 ++p;
                 ++digits;
             }
-            if (digits != 6) return false;
-            rgb[0] = ((value >> 16) & 0xFF) / 255.0f;
-            rgb[1] = ((value >> 8) & 0xFF) / 255.0f;
-            rgb[2] = (value & 0xFF) / 255.0f;
-            return true;
+            if (digits == 8)
+            {
+                rgb[0] = ((value >> 24) & 0xFF) / 255.0f;
+                rgb[1] = ((value >> 16) & 0xFF) / 255.0f;
+                rgb[2] = ((value >> 8) & 0xFF) / 255.0f;
+                alpha = (value & 0xFF) / 255.0f;
+                return true;
+            }
+            if (digits == 6)
+            {
+                rgb[0] = ((value >> 16) & 0xFF) / 255.0f;
+                rgb[1] = ((value >> 8) & 0xFF) / 255.0f;
+                rgb[2] = (value & 0xFF) / 255.0f;
+                alpha = 1.0f;
+                return true;
+            }
+            if (digits == 3)
+            {
+                int r = (value >> 8) & 0xF;
+                int g = (value >> 4) & 0xF;
+                int b = value & 0xF;
+                rgb[0] = ((r << 4) | r) / 255.0f;
+                rgb[1] = ((g << 4) | g) / 255.0f;
+                rgb[2] = ((b << 4) | b) / 255.0f;
+                alpha = 1.0f;
+                return true;
+            }
+            if (digits == 4)
+            {
+                int r = (value >> 12) & 0xF;
+                int g = (value >> 8) & 0xF;
+                int b = (value >> 4) & 0xF;
+                int a = value & 0xF;
+                rgb[0] = ((r << 4) | r) / 255.0f;
+                rgb[1] = ((g << 4) | g) / 255.0f;
+                rgb[2] = ((b << 4) | b) / 255.0f;
+                alpha = ((a << 4) | a) / 255.0f;
+                return true;
+            }
+            return false;
+        }
+
+        // "#rrggbb" (ou "rrggbb") -> rgb em 0..1. Retorna false se inválido.
+        inline bool ParseHex(const std::string& text, float rgb[3])
+        {
+            float alpha = 1.0f;
+            return ParseHexWithAlpha(text, rgb, alpha);
         }
 
         inline std::string ToHex(float r, float g, float b)
