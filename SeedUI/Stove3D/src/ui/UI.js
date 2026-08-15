@@ -153,12 +153,9 @@ export class UIManager {
       if (!prefModal) return;
 
       // Sync UI with current engine state
-      const currentMode = this.engine.navMode || 'left';
-      const leftRadio = document.getElementById('pref-nav-left');
-      const middleRadio = document.getElementById('pref-nav-middle');
-      if (leftRadio && middleRadio) {
-        if (currentMode === 'left') leftRadio.checked = true;
-        else middleRadio.checked = true;
+      const emulateCheck = document.getElementById('pref-emulate-3-button');
+      if (emulateCheck) {
+        emulateCheck.checked = this.engine.emulate3Button !== false;
       }
 
       prefModal.classList.remove('hidden');
@@ -177,9 +174,9 @@ export class UIManager {
 
     // Save Preferences Action
     document.getElementById('btn-save-preferences')?.addEventListener('click', () => {
-      const isLeft = document.getElementById('pref-nav-left')?.checked;
-      const newMode = isLeft ? 'left' : 'middle';
-      this.engine.setNavMode(newMode);
+      const emulateCheck = document.getElementById('pref-emulate-3-button');
+      const isEmulate = emulateCheck ? emulateCheck.checked : true;
+      this.engine.setEmulate3Button(isEmulate);
       closePrefs();
     });
   }

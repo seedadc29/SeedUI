@@ -499,33 +499,38 @@
         </div>
 
         <div class="diagnostics-modal-body" style="padding: 16px;">
-          <!-- Navigation Section -->
-          <div class="diag-card" style="margin-bottom: 16px; background: rgba(0,0,0,0.25); border: 1px solid #333842; padding: 12px; border-radius: 6px;">
-            <div class="diag-card-title" style="color: #ff9800; font-weight: bold; margin-bottom: 8px;">🖱️ Navegação da Câmera (Viewport Navigation)</div>
-            <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px;">
-              <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;background:rgba(255,255,255,0.04);padding:10px;border-radius:6px;border:1px solid #3d4350;">
-                <input type="radio" name="pref-nav-mode" value="left" id="pref-nav-left" checked style="margin-top:4px;">
-                <div>
-                  <strong style="color:#ff9800;display:block;margin-bottom:2px;">Botão Esquerdo do Mouse (LMB / Alt + Clique) [Novo Padrão]</strong>
-                  <span style="font-size:11px;color:#a0a6b5;display:block;line-height:1.4;">
-                    • <b>Girar/Orbitar:</b> Clique e arraste com o Botão Esquerdo ou <code>Alt + Clique Esquerdo</code><br>
-                    • <b>Mover Câmera (Pan):</b> <code>Shift + Clique Esquerdo</code> ou <code>Shift + Alt + Clique Esquerdo</code><br>
-                    • <b>Zoom:</b> Roda do Mouse (Scroll) ou <code>Ctrl + Alt + Clique Esquerdo</code>
-                  </span>
+          <!-- Blender Input -> Mouse Section -->
+          <div class="diag-card" style="margin-bottom: 16px; background: #282830; border: 1px solid #3d4350; padding: 14px; border-radius: 6px;">
+            <div class="diag-card-title" style="color: #ff9800; font-weight: bold; font-size: 13px; margin-bottom: 12px; display:flex; align-items:center; gap:6px;">
+              <span>🖱️ Entrada (Input) ➔ Mouse</span>
+            </div>
+            
+            <div style="display:flex;flex-direction:column;gap:12px;">
+              <!-- Emulate 3 Button Mouse Checkbox -->
+              <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;background:#202026;padding:12px;border-radius:6px;border:1px solid #484e5c;">
+                <input type="checkbox" id="pref-emulate-3-button" checked style="width:16px;height:16px;margin-top:2px;accent-color:#ff9800;">
+                <div style="flex:1;">
+                  <strong style="color:#ffffff;font-size:13px;display:block;margin-bottom:4px;">Emular Mouse de 3 Botões (Emulate 3 Button Mouse)</strong>
+                  <div style="font-size:11px;color:#a5abb8;line-height:1.6;">
+                    Permite navegar e controlar a câmera 3D usando apenas o <b>Botão Esquerdo do Mouse + Teclas de Modificação</b>:<br>
+                    • <b>Girar / Orbitar a Câmera:</b> <kbd style="background:#333842;padding:1px 5px;border-radius:3px;color:#ff9800;">Alt + Clique Esquerdo</kbd><br>
+                    • <b>Mover Câmera (Pan):</b> <kbd style="background:#333842;padding:1px 5px;border-radius:3px;color:#60a5fa;">Shift + Alt + Clique Esquerdo</kbd><br>
+                    • <b>Zoom Suave (Dolly):</b> <kbd style="background:#333842;padding:1px 5px;border-radius:3px;color:#34d399;">Ctrl + Alt + Clique Esquerdo</kbd> ou Scroll
+                  </div>
                 </div>
               </label>
 
-              <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;background:rgba(255,255,255,0.04);padding:10px;border-radius:6px;border:1px solid #3d4350;">
-                <input type="radio" name="pref-nav-mode" value="middle" id="pref-nav-middle" style="margin-top:4px;">
-                <div>
-                  <strong style="color:#4a90e2;display:block;margin-bottom:2px;">Botão do Meio do Mouse (MMB / Blender Tradicional)</strong>
-                  <span style="font-size:11px;color:#a0a6b5;display:block;line-height:1.4;">
-                    • <b>Girar/Orbitar:</b> Clique e arraste com o Botão do Meio (Roda/MMB)<br>
-                    • <b>Mover Câmera (Pan):</b> <code>Shift + Clique do Meio</code><br>
-                    • <b>Zoom:</b> Roda do Mouse (Scroll)
-                  </span>
-                </div>
-              </label>
+              <!-- Secondary Options -->
+              <div style="display:flex;flex-direction:column;gap:8px;padding-left:6px;font-size:12px;color:#c0c6d4;">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                  <input type="checkbox" id="pref-continuous-grab" checked style="accent-color:#ff9800;">
+                  <span>Arrasto Contínuo (Continuous Grab)</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                  <input type="checkbox" id="pref-release-confirms" checked style="accent-color:#ff9800;">
+                  <span>Soltar para Confirmar Transformação (Release Confirms)</span>
+                </label>
+              </div>
             </div>
           </div>
 

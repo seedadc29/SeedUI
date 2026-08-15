@@ -78,47 +78,42 @@ export class Engine {
     this.controls.screenSpacePanning = true;
     this.controls.target.set(0, 0, 0);
 
-    // Default to Left Mouse Button navigation ('left') or stored preference
-    this.navMode = localStorage.getItem('stove3d_nav_mode') || 'left';
+    // Emulate 3 Button Mouse (default enabled like Blender Emulate 3-Button)
+    this.emulate3Button = localStorage.getItem('stove3d_emulate_3_button') !== 'false';
     this.updateNavControls();
 
-    // Preserve keyboard modifiers and handle dynamic Pan/Rotate/Dolly
+    // Mousedown event for Orbit / Pan / Dolly
     this.canvas.addEventListener('mousedown', (e) => {
-      if (this.navMode === 'left') {
-        if (e.button === 0) { // LMB
-          if (e.ctrlKey && e.altKey) {
-            this.controls.mouseButtons.LEFT = THREE.MOUSE.DOLLY;
-          } else if (e.shiftKey) {
-            this.controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
-          } else {
-            this.controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
-          }
-        } else if (e.button === 1) { // MMB fallback
-          if (e.ctrlKey) {
-            this.controls.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY;
-          } else if (e.shiftKey) {
-            this.controls.mouseButtons.MIDDLE = THREE.MOUSE.PAN;
-          } else {
-            this.controls.mouseButtons.MIDDLE = THREE.MOUSE.ROTATE;
-          }
+      // 1. Emulate 3 Button Mouse (Alt + Left Click)
+      if (this.emulate3Button && e.button === 0 && e.altKey) {
+        if (e.ctrlKey) {
+          this.controls.mouseButtons.LEFT = THREE.MOUSE.DOLLY;
+        } else if (e.shiftKey) {
+          this.controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
+        } else {
+          this.controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
         }
-      } else {
-        if (e.button === 1) { // MMB
-          if (e.ctrlKey) {
-            this.controls.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY;
-          } else if (e.shiftKey) {
-            this.controls.mouseButtons.MIDDLE = THREE.MOUSE.PAN;
-          } else {
-            this.controls.mouseButtons.MIDDLE = THREE.MOUSE.ROTATE;
-          }
+      } 
+      // 2. Middle Mouse Button (MMB - always available)
+      else if (e.button === 1) {
+        if (e.ctrlKey) {
+          this.controls.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY;
+        } else if (e.shiftKey) {
+          this.controls.mouseButtons.MIDDLE = THREE.MOUSE.PAN;
+        } else {
+          this.controls.mouseButtons.MIDDLE = THREE.MOUSE.ROTATE;
         }
+      } 
+      // 3. Normal Left Click (Selection)
+      else if (e.button === 0 && !e.altKey) {
+        this.controls.mouseButtons.LEFT = THREE.MOUSE.NONE;
       }
     });
 
-    // Dynamic modifier updates for smooth Ctrl+Alt Zoom and Shift Pan transitions
+    // Dynamic modifier updates while Alt is held
     window.addEventListener('keydown', (e) => {
-      if (this.navMode === 'left') {
-        if (e.ctrlKey && e.altKey) {
+      if (this.emulate3Button && e.altKey) {
+        if (e.ctrlKey) {
           this.controls.mouseButtons.LEFT = THREE.MOUSE.DOLLY;
         } else if (e.shiftKey) {
           this.controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
@@ -128,33 +123,25 @@ export class Engine {
       }
     });
 
-    window.addEventListener('keyup', () => {
-      if (this.navMode === 'left') {
-        this.controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
+    window.addEventListener('keyup', (e) => {
+      if (e.key === 'Alt' || !e.altKey) {
+        this.controls.mouseButtons.LEFT = THREE.MOUSE.NONE;
       }
     });
   }
 
-  setNavMode(mode) {
-    this.navMode = mode;
-    localStorage.setItem('stove3d_nav_mode', mode);
+  setEmulate3Button(enabled) {
+    this.emulate3Button = enabled;
+    localStorage.setItem('stove3d_emulate_3_button', enabled ? 'true' : 'false');
     this.updateNavControls();
   }
 
   updateNavControls() {
-    if (this.navMode === 'left') {
-      this.controls.mouseButtons = {
-        LEFT: THREE.MOUSE.ROTATE,
-        MIDDLE: THREE.MOUSE.ROTATE, // MMB still functional as secondary option
-        RIGHT: THREE.MOUSE.NONE
-      };
-    } else {
-      this.controls.mouseButtons = {
-        LEFT: THREE.MOUSE.NONE,
-        MIDDLE: THREE.MOUSE.ROTATE,
-        RIGHT: THREE.MOUSE.NONE
-      };
-    }
+    this.controls.mouseButtons = {
+      LEFT: this.emulate3Button ? THREE.MOUSE.ROTATE : THREE.MOUSE.NONE,
+      MIDDLE: THREE.MOUSE.ROTATE,
+      RIGHT: THREE.MOUSE.NONE
+    };
   }
 
   initLights() {

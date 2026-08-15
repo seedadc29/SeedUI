@@ -66,8 +66,8 @@ export class SelectionTools {
     canvas.addEventListener('mousedown', (e) => {
       if (e.button !== 0) return; // Left click only
       
-      // 1. If Alt is held: Camera Orbit/Pan Navigation always takes precedence!
-      if (e.altKey) {
+      // 1. If Alt is held AND Emulate 3 Button Mouse is active: Camera Orbit/Pan/Zoom always takes precedence!
+      if (e.altKey && this.engine.emulate3Button) {
         this.engine.controls.enabled = true;
         return;
       }
@@ -76,24 +76,6 @@ export class SelectionTools {
       const tc = this.uiManager.transformManager.transformControls;
       if (this.uiManager.transformManager.isTransforming || (tc && tc.axis !== null && tc.axis !== '')) {
         return;
-      }
-
-      // 3. If Left Click Navigation is active and clicking on empty space: Allow OrbitControls to navigate!
-      if (this.engine.navMode === 'left') {
-        const rect = canvas.getBoundingClientRect();
-        const mouse2D = new THREE.Vector2(
-          ((e.clientX - rect.left) / rect.width) * 2 - 1,
-          -((e.clientY - rect.top) / rect.height) * 2 + 1
-        );
-        const raycaster = new THREE.Raycaster();
-        raycaster.setFromCamera(mouse2D, this.engine.activeCamera);
-        const meshes = this.sceneManager.getAllMeshes().filter(m => m.visible);
-        const hits = raycaster.intersectObjects(meshes, false);
-
-        if (hits.length === 0) {
-          this.engine.controls.enabled = true;
-          return;
-        }
       }
 
       const rect = canvas.getBoundingClientRect();
