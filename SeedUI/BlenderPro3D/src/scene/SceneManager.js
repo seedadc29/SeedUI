@@ -69,7 +69,7 @@ export class SceneManager {
     const s = 1.1;
     const fw = s * 0.65;
     const fh = s * 0.42;
-    const fd = s * 1.25; // Expands forward towards the cube at (0, 0, 0)
+    const fd = -s * 1.25; // Expands forward along -Z (optical lens axis towards the cube)
 
     const vertices = new Float32Array([
       // 4 Frustum lines from camera apex (0,0,0) to 4 frame corners

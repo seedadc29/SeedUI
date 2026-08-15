@@ -114,8 +114,9 @@ export class Engine {
 
     // Live Camera to View Synchronization:
     // Moving the viewport while inside Camera View directly moves the 3D Camera Object!
+    this.isSyncingCamera = false;
     this.controls.addEventListener('change', () => {
-      if (this.isCameraViewActive && this.lockCameraToView && this.sceneCamera) {
+      if (this.isCameraViewActive && this.lockCameraToView && this.sceneCamera && !this.isSyncingCamera) {
         this.sceneCamera.position.copy(this.activeCamera.position);
         this.sceneCamera.quaternion.copy(this.activeCamera.quaternion);
         if (this.onCameraMoved) {
@@ -438,20 +439,27 @@ export class Engine {
       if (camBtn) camBtn.classList.add('active');
 
       if (this.sceneCamera) {
+        this.isSyncingCamera = true;
         this.activeCamera.up.set(0, 0, 1);
         this.activeCamera.position.copy(this.sceneCamera.position);
-        this.activeCamera.quaternion.copy(this.sceneCamera.quaternion);
 
-        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.sceneCamera.quaternion);
-        const lookTarget = this.sceneCamera.position.clone().add(forward.multiplyScalar(8));
+        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.sceneCamera.quaternion).normalize();
+        const lookTarget = this.sceneCamera.position.clone().add(forward.clone().multiplyScalar(8));
+
         this.controls.target.copy(lookTarget);
+        this.activeCamera.lookAt(lookTarget);
+        this.controls.update();
+
+        setTimeout(() => {
+          this.isSyncingCamera = false;
+        }, 60);
       } else {
         this.activeCamera.up.set(0, 0, 1);
-        this.activeCamera.position.set(6.5, -7.5, 5.0);
+        this.activeCamera.position.set(7.3589, -6.9258, 4.9583);
         this.controls.target.set(0, 0, 0);
         this.activeCamera.lookAt(0, 0, 0);
+        this.controls.update();
       }
-      this.controls.update();
       return;
     }
 
