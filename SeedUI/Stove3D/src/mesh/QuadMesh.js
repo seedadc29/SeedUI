@@ -369,21 +369,25 @@ export class QuadMesh {
   }
 
   computeQuadCornerNormals(v0, v1, v2, v3) {
-    const cb = new THREE.Vector3().subVectors(v2, v1);
-    const ab = new THREE.Vector3().subVectors(v0, v1);
-    const t1Normal = cb.cross(ab).normalize();
+    // Corner 0: (v1 - v0) x (v3 - v0)
+    const e01 = new THREE.Vector3().subVectors(v1, v0);
+    const e03 = new THREE.Vector3().subVectors(v3, v0);
+    const n0 = new THREE.Vector3().crossVectors(e01, e03).normalize();
 
-    const cd = new THREE.Vector3().subVectors(v0, v3);
-    const ad = new THREE.Vector3().subVectors(v2, v3);
-    const t2Normal = cd.cross(ad).normalize();
+    // Corner 1: (v2 - v1) x (v0 - v1)
+    const e12 = new THREE.Vector3().subVectors(v2, v1);
+    const e10 = new THREE.Vector3().subVectors(v0, v1);
+    const n1 = new THREE.Vector3().crossVectors(e12, e10).normalize();
 
-    // Shared diagonal vertices (v0 and v2) have unified averaged normals
-    const diagNormal = new THREE.Vector3().addVectors(t1Normal, t2Normal).normalize();
+    // Corner 2: (v3 - v2) x (v1 - v2)
+    const e23 = new THREE.Vector3().subVectors(v3, v2);
+    const e21 = new THREE.Vector3().subVectors(v1, v2);
+    const n2 = new THREE.Vector3().crossVectors(e23, e21).normalize();
 
-    const n0 = diagNormal.clone();
-    const n1 = t1Normal.clone();
-    const n2 = diagNormal.clone();
-    const n3 = t2Normal.clone();
+    // Corner 3: (v0 - v3) x (v2 - v3)
+    const e30 = new THREE.Vector3().subVectors(v0, v3);
+    const e32 = new THREE.Vector3().subVectors(v2, v3);
+    const n3 = new THREE.Vector3().crossVectors(e30, e32).normalize();
 
     return { n0, n1, n2, n3 };
   }
@@ -406,15 +410,30 @@ export class QuadMesh {
 
         const { n0, n1, n2, n3 } = this.computeQuadCornerNormals(v0, v1, v2, v3);
 
-        // Tri 1: (v0, v1, v2) -> normals (n0, n1, n2)
-        positions.push(v0.x, v0.y, v0.z, v1.x, v1.y, v1.z, v2.x, v2.y, v2.z);
-        normals.push(n0.x, n0.y, n0.z, n1.x, n1.y, n1.z, n2.x, n2.y, n2.z);
-        uvs.push(0, 0, 1, 0, 1, 1);
+        const d02 = v0.distanceToSquared(v2);
+        const d13 = v1.distanceToSquared(v3);
 
-        // Tri 2: (v0, v2, v3) -> normals (n0, n2, n3)
-        positions.push(v0.x, v0.y, v0.z, v2.x, v2.y, v2.z, v3.x, v3.y, v3.z);
-        normals.push(n0.x, n0.y, n0.z, n2.x, n2.y, n2.z, n3.x, n3.y, n3.z);
-        uvs.push(0, 0, 1, 1, 0, 1);
+        if (d13 < d02) {
+          // Tri 1: (v1, v2, v3) -> normals (n1, n2, n3)
+          positions.push(v1.x, v1.y, v1.z, v2.x, v2.y, v2.z, v3.x, v3.y, v3.z);
+          normals.push(n1.x, n1.y, n1.z, n2.x, n2.y, n2.z, n3.x, n3.y, n3.z);
+          uvs.push(1, 0, 1, 1, 0, 1);
+
+          // Tri 2: (v1, v3, v0) -> normals (n1, n3, n0)
+          positions.push(v1.x, v1.y, v1.z, v3.x, v3.y, v3.z, v0.x, v0.y, v0.z);
+          normals.push(n1.x, n1.y, n1.z, n3.x, n3.y, n3.z, n0.x, n0.y, n0.z);
+          uvs.push(1, 0, 0, 1, 0, 0);
+        } else {
+          // Tri 1: (v0, v1, v2) -> normals (n0, n1, n2)
+          positions.push(v0.x, v0.y, v0.z, v1.x, v1.y, v1.z, v2.x, v2.y, v2.z);
+          normals.push(n0.x, n0.y, n0.z, n1.x, n1.y, n1.z, n2.x, n2.y, n2.z);
+          uvs.push(0, 0, 1, 0, 1, 1);
+
+          // Tri 2: (v0, v2, v3) -> normals (n0, n2, n3)
+          positions.push(v0.x, v0.y, v0.z, v2.x, v2.y, v2.z, v3.x, v3.y, v3.z);
+          normals.push(n0.x, n0.y, n0.z, n2.x, n2.y, n2.z, n3.x, n3.y, n3.z);
+          uvs.push(0, 0, 1, 1, 0, 1);
+        }
       } else if (unique.length === 3) {
         const v0 = this.vertices[unique[0]];
         const v1 = this.vertices[unique[1]];
@@ -471,15 +490,30 @@ export class QuadMesh {
 
         const { n0, n1, n2, n3 } = this.computeQuadCornerNormals(v0, v1, v2, v3);
 
-        // Tri 1: (v0, v1, v2)
-        posAttr.setXYZ(ptr, v0.x, v0.y, v0.z); normAttr.setXYZ(ptr, n0.x, n0.y, n0.z); ptr++;
-        posAttr.setXYZ(ptr, v1.x, v1.y, v1.z); normAttr.setXYZ(ptr, n1.x, n1.y, n1.z); ptr++;
-        posAttr.setXYZ(ptr, v2.x, v2.y, v2.z); normAttr.setXYZ(ptr, n2.x, n2.y, n2.z); ptr++;
+        const d02 = v0.distanceToSquared(v2);
+        const d13 = v1.distanceToSquared(v3);
 
-        // Tri 2: (v0, v2, v3)
-        posAttr.setXYZ(ptr, v0.x, v0.y, v0.z); normAttr.setXYZ(ptr, n0.x, n0.y, n0.z); ptr++;
-        posAttr.setXYZ(ptr, v2.x, v2.y, v2.z); normAttr.setXYZ(ptr, n2.x, n2.y, n2.z); ptr++;
-        posAttr.setXYZ(ptr, v3.x, v3.y, v3.z); normAttr.setXYZ(ptr, n3.x, n3.y, n3.z); ptr++;
+        if (d13 < d02) {
+          // Tri 1: v1, v2, v3
+          posAttr.setXYZ(ptr, v1.x, v1.y, v1.z); normAttr.setXYZ(ptr, n1.x, n1.y, n1.z); ptr++;
+          posAttr.setXYZ(ptr, v2.x, v2.y, v2.z); normAttr.setXYZ(ptr, n2.x, n2.y, n2.z); ptr++;
+          posAttr.setXYZ(ptr, v3.x, v3.y, v3.z); normAttr.setXYZ(ptr, n3.x, n3.y, n3.z); ptr++;
+
+          // Tri 2: v1, v3, v0
+          posAttr.setXYZ(ptr, v1.x, v1.y, v1.z); normAttr.setXYZ(ptr, n1.x, n1.y, n1.z); ptr++;
+          posAttr.setXYZ(ptr, v3.x, v3.y, v3.z); normAttr.setXYZ(ptr, n3.x, n3.y, n3.z); ptr++;
+          posAttr.setXYZ(ptr, v0.x, v0.y, v0.z); normAttr.setXYZ(ptr, n0.x, n0.y, n0.z); ptr++;
+        } else {
+          // Tri 1: v0, v1, v2
+          posAttr.setXYZ(ptr, v0.x, v0.y, v0.z); normAttr.setXYZ(ptr, n0.x, n0.y, n0.z); ptr++;
+          posAttr.setXYZ(ptr, v1.x, v1.y, v1.z); normAttr.setXYZ(ptr, n1.x, n1.y, n1.z); ptr++;
+          posAttr.setXYZ(ptr, v2.x, v2.y, v2.z); normAttr.setXYZ(ptr, n2.x, n2.y, n2.z); ptr++;
+
+          // Tri 2: v0, v2, v3
+          posAttr.setXYZ(ptr, v0.x, v0.y, v0.z); normAttr.setXYZ(ptr, n0.x, n0.y, n0.z); ptr++;
+          posAttr.setXYZ(ptr, v2.x, v2.y, v2.z); normAttr.setXYZ(ptr, n2.x, n2.y, n2.z); ptr++;
+          posAttr.setXYZ(ptr, v3.x, v3.y, v3.z); normAttr.setXYZ(ptr, n3.x, n3.y, n3.z); ptr++;
+        }
       } else if (unique.length === 3) {
         const v0 = this.vertices[unique[0]];
         const v1 = this.vertices[unique[1]];
