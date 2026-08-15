@@ -38,7 +38,7 @@ export class Engine {
 
   initScene() {
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x282830); // Blender 4.1 Viewport Gray
+    this.scene.background = new THREE.Color(0x484848); // Blender Studio Gray
   }
 
   initRenderer() {
