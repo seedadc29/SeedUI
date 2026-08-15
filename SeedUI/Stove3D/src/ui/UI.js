@@ -66,6 +66,7 @@ export class UIManager {
     };
 
     this.initFileMenu();
+    this.initEditMenuAndPreferences();
     this.initModeTabs();
     this.initToolbar();
     this.initSubmodes();
@@ -115,6 +116,71 @@ export class UIManager {
     document.getElementById('btn-save-project')?.addEventListener('click', () => {
       dropdown.classList.add('hidden');
       if (this.exportManager) this.exportManager.saveProjectJSON();
+    });
+  }
+
+  initEditMenuAndPreferences() {
+    const editBtn = document.getElementById('btn-menu-edit');
+    const editDropdown = document.getElementById('edit-dropdown');
+
+    if (editBtn && editDropdown) {
+      editBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        editDropdown.classList.toggle('hidden');
+      });
+
+      window.addEventListener('click', (e) => {
+        if (!editDropdown.contains(e.target) && e.target !== editBtn) {
+          editDropdown.classList.add('hidden');
+        }
+      });
+    }
+
+    document.getElementById('btn-menu-undo')?.addEventListener('click', () => {
+      editDropdown?.classList.add('hidden');
+      this.historyManager.undo();
+    });
+
+    document.getElementById('btn-menu-redo')?.addEventListener('click', () => {
+      editDropdown?.classList.add('hidden');
+      this.historyManager.redo();
+    });
+
+    // Open Preferences Modal
+    const prefModal = document.getElementById('preferences-modal');
+    const openPrefs = () => {
+      editDropdown?.classList.add('hidden');
+      if (!prefModal) return;
+
+      // Sync UI with current engine state
+      const currentMode = this.engine.navMode || 'left';
+      const leftRadio = document.getElementById('pref-nav-left');
+      const middleRadio = document.getElementById('pref-nav-middle');
+      if (leftRadio && middleRadio) {
+        if (currentMode === 'left') leftRadio.checked = true;
+        else middleRadio.checked = true;
+      }
+
+      prefModal.classList.remove('hidden');
+    };
+
+    document.getElementById('btn-menu-preferences')?.addEventListener('click', openPrefs);
+    document.getElementById('btn-quick-preferences')?.addEventListener('click', openPrefs);
+
+    // Close Preferences Modal
+    const closePrefs = () => {
+      prefModal?.classList.add('hidden');
+    };
+
+    document.getElementById('btn-close-preferences')?.addEventListener('click', closePrefs);
+    document.getElementById('preferences-backdrop')?.addEventListener('click', closePrefs);
+
+    // Save Preferences Action
+    document.getElementById('btn-save-preferences')?.addEventListener('click', () => {
+      const isLeft = document.getElementById('pref-nav-left')?.checked;
+      const newMode = isLeft ? 'left' : 'middle';
+      this.engine.setNavMode(newMode);
+      closePrefs();
     });
   }
 

@@ -78,21 +78,58 @@ export class Engine {
     this.controls.screenSpacePanning = true;
     this.controls.target.set(0, 0, 0);
 
-    this.controls.mouseButtons = {
-      LEFT: THREE.MOUSE.NONE,
-      MIDDLE: THREE.MOUSE.ROTATE,
-      RIGHT: THREE.MOUSE.NONE
-    };
+    // Default to Left Mouse Button navigation ('left') or stored preference
+    this.navMode = localStorage.getItem('stove3d_nav_mode') || 'left';
+    this.updateNavControls();
 
+    // Preserve keyboard modifiers and handle dynamic Pan/Rotate/Dolly
     this.canvas.addEventListener('mousedown', (e) => {
-      if (e.button === 1) {
-        if (e.shiftKey) {
-          this.controls.mouseButtons.MIDDLE = THREE.MOUSE.PAN;
-        } else {
-          this.controls.mouseButtons.MIDDLE = THREE.MOUSE.ROTATE;
+      if (this.navMode === 'left') {
+        if (e.button === 0) { // LMB
+          if (e.shiftKey) {
+            this.controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
+          } else {
+            this.controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
+          }
+        } else if (e.button === 1) { // MMB fallback
+          if (e.shiftKey) {
+            this.controls.mouseButtons.MIDDLE = THREE.MOUSE.PAN;
+          } else {
+            this.controls.mouseButtons.MIDDLE = THREE.MOUSE.ROTATE;
+          }
+        }
+      } else {
+        if (e.button === 1) { // MMB
+          if (e.shiftKey) {
+            this.controls.mouseButtons.MIDDLE = THREE.MOUSE.PAN;
+          } else {
+            this.controls.mouseButtons.MIDDLE = THREE.MOUSE.ROTATE;
+          }
         }
       }
     });
+  }
+
+  setNavMode(mode) {
+    this.navMode = mode;
+    localStorage.setItem('stove3d_nav_mode', mode);
+    this.updateNavControls();
+  }
+
+  updateNavControls() {
+    if (this.navMode === 'left') {
+      this.controls.mouseButtons = {
+        LEFT: THREE.MOUSE.ROTATE,
+        MIDDLE: THREE.MOUSE.ROTATE, // MMB still functional as secondary option
+        RIGHT: THREE.MOUSE.NONE
+      };
+    } else {
+      this.controls.mouseButtons = {
+        LEFT: THREE.MOUSE.NONE,
+        MIDDLE: THREE.MOUSE.ROTATE,
+        RIGHT: THREE.MOUSE.NONE
+      };
+    }
   }
 
   initLights() {
