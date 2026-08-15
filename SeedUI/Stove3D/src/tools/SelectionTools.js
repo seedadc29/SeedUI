@@ -65,7 +65,12 @@ export class SelectionTools {
 
     canvas.addEventListener('mousedown', (e) => {
       if (e.button !== 0) return; // Left click only
-      if (this.uiManager.transformManager.isTransforming) return;
+      
+      // CRITICAL: If mouse is over Transform Gizmo or transforming, NEVER intercept with box selection!
+      const tc = this.uiManager.transformManager.transformControls;
+      if (this.uiManager.transformManager.isTransforming || (tc && tc.axis !== null && tc.axis !== '')) {
+        return;
+      }
 
       const rect = canvas.getBoundingClientRect();
       this.startPos = { x: e.clientX - rect.left, y: e.clientY - rect.top };

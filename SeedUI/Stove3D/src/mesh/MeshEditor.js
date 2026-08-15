@@ -271,7 +271,7 @@ export class MeshEditor {
 
     if (this.submode === 'vertex') {
       let closestIdx = -1;
-      let minDistance = 24;
+      let minDistance = 32; // Generous 32px screen threshold
 
       for (let i = 0; i < qm.vertices.length; i++) {
         const vWorld = qm.vertices[i].clone().applyMatrix4(this.activeMesh.matrixWorld);
@@ -285,6 +285,22 @@ export class MeshEditor {
           if (dist < minDistance) {
             minDistance = dist;
             closestIdx = i;
+          }
+        }
+      }
+
+      // If not within 32px, check if ray hits mesh surface and pick closest vertex of that face
+      if (closestIdx === -1) {
+        const intersects = raycaster.intersectObject(this.activeMesh, false);
+        if (intersects.length > 0 && intersects[0].point) {
+          const localHit = this.activeMesh.worldToLocal(intersects[0].point.clone());
+          let localMinDist = Infinity;
+          for (let i = 0; i < qm.vertices.length; i++) {
+            const d = qm.vertices[i].distanceTo(localHit);
+            if (d < localMinDist) {
+              localMinDist = d;
+              closestIdx = i;
+            }
           }
         }
       }
@@ -308,7 +324,7 @@ export class MeshEditor {
       }
     } else if (this.submode === 'edge') {
       let closestEdgeIdx = -1;
-      let minDistance = 20;
+      let minDistance = 28;
 
       qm.edges.forEach((edge, eIdx) => {
         const vA = qm.vertices[edge[0]].clone().applyMatrix4(this.activeMesh.matrixWorld).project(this.engine.activeCamera);

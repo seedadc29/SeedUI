@@ -5644,19 +5644,6 @@ namespace seedui
             if (ImGui::IsKeyPressed(ImGuiKey_L, false)) mCurrentTool = Tool::Ellipse;
             if (ImGui::IsKeyPressed(ImGuiKey_Z, false)) mCurrentTool = Tool::Zoom;
 
-        // Alt+G / Alt+R / Alt+S: transformação modal da seleção (estilo
-        // Blender) — mover, rotacionar ou escalonar seguindo o mouse;
-        // clique/Enter confirma, Esc/clique direito cancela.
-        if (!ImGui::GetIO().WantTextInput && ImGui::GetIO().KeyAlt)
-        {
-            if (ImGui::IsKeyPressed(ImGuiKey_G, false))
-                IniciarTransformar(TransformMode::Move);
-            if (ImGui::IsKeyPressed(ImGuiKey_R, false))
-                IniciarTransformar(TransformMode::Rotate);
-            if (ImGui::IsKeyPressed(ImGuiKey_S, false))
-                IniciarTransformar(TransformMode::Scale);
-        }
-
             // Shift+C: Converter Ponto de Ancoragem (estilo Illustrator)
             if (ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_C, false))
             {
@@ -5775,6 +5762,19 @@ namespace seedui
                     }
                 }
             }
+        }
+
+        // Alt+G / Alt+R / Alt+S: transformação modal da seleção (estilo
+        // Blender) — mover, rotacionar ou escalonar seguindo o mouse;
+        // clique/Enter confirma, Esc/clique direito cancela.
+        if (!ImGui::GetIO().WantTextInput && ImGui::GetIO().KeyAlt)
+        {
+            if (ImGui::IsKeyPressed(ImGuiKey_G, false))
+                IniciarTransformar(TransformMode::Move);
+            if (ImGui::IsKeyPressed(ImGuiKey_R, false))
+                IniciarTransformar(TransformMode::Rotate);
+            if (ImGui::IsKeyPressed(ImGuiKey_S, false))
+                IniciarTransformar(TransformMode::Scale);
         }
         // Camadas (estilo CorelDRAW): Ctrl+seta cima/baixo sobe/desce o
         // elemento na ordem de renderização (frente/trás).
