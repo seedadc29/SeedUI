@@ -13,12 +13,12 @@ export class SceneManager {
     this.onSelectionChange = null;
     this.onPrimitiveCreated = null;
 
-    // Blender 4.1 Viewport Solid Material (Option 3: 2x2 Subdivided Quad Grid)
+    // Blender 4.1 Viewport Solid Material (Flat Shading for clear polygon face visibility)
     this.defaultMaterial = new THREE.MeshStandardMaterial({
       color: 0x9096a2,
       roughness: 0.65,
       metalness: 0.05,
-      flatShading: false,
+      flatShading: true,
       side: THREE.DoubleSide
     });
 

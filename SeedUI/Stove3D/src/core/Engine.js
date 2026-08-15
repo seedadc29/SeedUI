@@ -376,25 +376,53 @@ export class Engine {
 
       if (mode === 'wireframe') {
         mesh.material.wireframe = true;
-        mesh.material.needsUpdate = true;
-      } else {
+        mesh.material.flatShading = true;
+      } else if (mode === 'solid') {
+        // Modo Sólido / Modelagem: Facetas planas com contraste nítido em todas as faces
         mesh.material.wireframe = false;
-        if (mode === 'pixel') {
-          // Nearest neighbor / pixelated style
-          if (mesh.material.map) {
-            mesh.material.map.minFilter = THREE.NearestFilter;
-            mesh.material.map.magFilter = THREE.NearestFilter;
-            mesh.material.map.needsUpdate = true;
-          }
+        mesh.material.flatShading = true;
+      } else if (mode === 'material' || mode === 'pixel') {
+        // Previsão de Material: Cor pura e textura do material sem render/sombras escuras
+        mesh.material.wireframe = false;
+        mesh.material.flatShading = (mesh.userData.shading === 'flat');
+        if (mode === 'pixel' && mesh.material.map) {
+          mesh.material.map.minFilter = THREE.NearestFilter;
+          mesh.material.map.magFilter = THREE.NearestFilter;
         }
-        mesh.material.needsUpdate = true;
+      } else if (mode === 'rendered') {
+        // Render: Iluminação realista e sombras
+        mesh.material.wireframe = false;
+        mesh.material.flatShading = (mesh.userData.shading === 'flat');
       }
+      mesh.material.needsUpdate = true;
     });
 
-    if (mode === 'rendered') {
+    // Control Scene Lights & Shadows according to mode
+    if (mode === 'solid') {
+      this.renderer.shadowMap.enabled = false;
+      this.sunLight.castShadow = false;
+      this.ambientLight.intensity = 1.1;
+      this.sunLight.intensity = 1.0;
+      this.fillLight.intensity = 0.8;
+      this.rimLight.intensity = 0.6;
+    } else if (mode === 'material' || mode === 'pixel') {
+      // Visão clara do material sem sombras escuras que escondam faces
+      this.renderer.shadowMap.enabled = false;
+      this.sunLight.castShadow = false;
+      this.ambientLight.intensity = 1.6;
+      this.sunLight.intensity = 0.8;
+      this.fillLight.intensity = 0.8;
+      this.rimLight.intensity = 0.5;
+    } else if (mode === 'rendered') {
       this.renderer.shadowMap.enabled = true;
-    } else {
-      this.renderer.shadowMap.enabled = !this.isLowSpecMode;
+      this.sunLight.castShadow = true;
+      this.ambientLight.intensity = 0.6;
+      this.sunLight.intensity = 1.4;
+      this.fillLight.intensity = 0.6;
+      this.rimLight.intensity = 0.4;
+    } else if (mode === 'wireframe') {
+      this.renderer.shadowMap.enabled = false;
+      this.sunLight.castShadow = false;
     }
   }
 

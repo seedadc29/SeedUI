@@ -421,18 +421,17 @@ export class UIManager {
   }
 
   setShading(shading) {
-    if (this.shadingManager) {
-      this.shadingManager.setShadingMode(shading);
-    } else {
-      const meshes = this.sceneManager.getAllMeshes();
-      meshes.forEach((mesh) => {
-        if (shading === 'wireframe') {
-          mesh.material.wireframe = true;
-        } else {
-          mesh.material.wireframe = false;
-        }
-      });
-    }
+    const meshes = this.sceneManager.getAllMeshes();
+    this.engine.setShadingMode(shading, meshes);
+
+    const shadingBtns = document.querySelectorAll('.shading-icon-btn');
+    shadingBtns.forEach((btn) => {
+      if (btn.dataset.shading === shading) {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
+    });
   }
 
   initCameraGizmos() {
@@ -1055,6 +1054,16 @@ export class UIManager {
         if (hintEl) {
           const badge = isProp ? '<span class="key-hint" style="color:#60a5fa">● Edição Proporcional ON</span>' : '';
           hintEl.innerHTML = `<span class="key-hint"><kbd>E</kbd> Extrusão</span> <span class="key-hint"><kbd>I</kbd> Inset</span> <span class="key-hint"><kbd>G</kbd> Mover</span> <span class="key-hint"><kbd>O</kbd> Proporcional</span> ${badge}`;
+        }
+      } else if (!e.ctrlKey && !e.altKey && (e.key === 'z' || e.key === 'Z')) {
+        // Blender Z Shortcut: Shading Switch (Shift+Z: Wireframe / Z: Material Preview sem sombras vs Solid)
+        e.preventDefault();
+        if (e.shiftKey) {
+          const next = this.engine.currentShading === 'wireframe' ? 'solid' : 'wireframe';
+          this.setShading(next);
+        } else {
+          const next = this.engine.currentShading === 'solid' ? 'material' : 'solid';
+          this.setShading(next);
         }
       }
     });

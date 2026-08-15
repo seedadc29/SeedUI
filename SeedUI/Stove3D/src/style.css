@@ -518,6 +518,7 @@ input, button, select {
   background: #8e8e98;
 }
 
+.shading-circle.material,
 .shading-circle.pixel {
   background: linear-gradient(135deg, #e0689b 50%, #5cb85c 50%);
 }
