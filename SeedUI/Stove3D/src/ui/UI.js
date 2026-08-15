@@ -37,6 +37,13 @@ export class UIManager {
       this.openOperatorPanel(mesh, type, params);
     };
 
+    // Callback when a primitive's parameters/geometry are updated
+    this.sceneManager.onMeshGeometryUpdated = (mesh) => {
+      if (this.currentSubmode !== 'object') {
+        this.meshEditor.setSubmode(this.currentSubmode);
+      }
+    };
+
     // Link selection callback
     this.sceneManager.onSelectionChange = (obj) => {
       if (this.currentSubmode !== 'object') {
@@ -690,7 +697,8 @@ export class UIManager {
       // Shift + A: Toggle Floating Retractable Context Menu
       if (e.shiftKey && (e.key === 'a' || e.key === 'A')) {
         e.preventDefault();
-        this.toggleShiftAMenu();
+        this.toggleShiftAMenu(this.lastScreenMouse.x, this.lastScreenMouse.y);
+        return;
       }
       // Undo: Ctrl + Z (without Shift)
       else if (e.ctrlKey && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) {
@@ -737,7 +745,7 @@ export class UIManager {
           document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
           sclBtn.classList.add('active');
         }
-      } else if (e.key === 'a' || e.key === 'A') {
+      } else if (!e.shiftKey && !e.ctrlKey && (e.key === 'a' || e.key === 'A')) {
         if (e.altKey) {
           if (this.currentSubmode === 'object') this.sceneManager.deselectAll();
           else this.meshEditor.deselectAll();

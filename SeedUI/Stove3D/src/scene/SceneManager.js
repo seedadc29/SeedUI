@@ -191,6 +191,10 @@ export class SceneManager {
     mesh.add(outlineMesh);
 
     this.updateStats();
+
+    if (this.onMeshGeometryUpdated) {
+      this.onMeshGeometryUpdated(mesh);
+    }
   }
 
   duplicateObject(mesh) {

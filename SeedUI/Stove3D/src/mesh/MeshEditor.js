@@ -55,20 +55,22 @@ export class MeshEditor {
           beforeVerticesState = qm.vertices.map(v => v.clone());
           this.recordInitialVerticesState();
         }
-      } else { // Drag ended
-        if (this.submode !== 'object' && this.activeMesh && this.activeMesh.userData.quadMesh && beforeVerticesState) {
+      } else { // Drag ended: commit history and re-anchor
+        if (this.submode !== 'object' && this.activeMesh && this.activeMesh.userData.quadMesh) {
           const qm = this.activeMesh.userData.quadMesh;
           const afterVerticesState = qm.vertices.map(v => v.clone());
 
           let hasChanged = false;
-          for (let i = 0; i < qm.vertices.length; i++) {
-            if (!qm.vertices[i].equals(beforeVerticesState[i])) {
-              hasChanged = true;
-              break;
+          if (beforeVerticesState) {
+            for (let i = 0; i < qm.vertices.length; i++) {
+              if (!qm.vertices[i].equals(beforeVerticesState[i])) {
+                hasChanged = true;
+                break;
+              }
             }
           }
 
-          if (hasChanged && this.historyManager) {
+          if (hasChanged && this.historyManager && beforeVerticesState) {
             const targetMesh = this.activeMesh;
             const targetQM = qm;
             const beforeV = [...beforeVerticesState];
@@ -98,6 +100,11 @@ export class MeshEditor {
           }
 
           beforeVerticesState = null;
+
+          // Crucial: Re-anchor and record current positions for subsequent transforms
+          this.anchorInitialPos.copy(this.transformAnchor.position);
+          this.recordInitialVerticesState();
+          this.updateTransformAnchor();
         }
       }
     });
@@ -123,6 +130,7 @@ export class MeshEditor {
     } else {
       this.activeMesh = this.sceneManager.getSelectedObject();
       if (this.activeMesh) {
+        this.activeMesh.updateMatrixWorld(true);
         this.rebuildEditHelpers();
         this.updateTransformAnchor();
       } else {
@@ -135,6 +143,7 @@ export class MeshEditor {
     this.clearHelpers();
     if (!this.activeMesh || !this.activeMesh.userData.quadMesh) return;
 
+    this.activeMesh.updateMatrixWorld(true);
     const qm = this.activeMesh.userData.quadMesh;
 
     // 1. Vertex Points Helper
@@ -253,6 +262,7 @@ export class MeshEditor {
   handleSelection(clientX, clientY, shiftKey, raycaster) {
     if (!this.activeMesh || this.submode === 'object' || !this.activeMesh.userData.quadMesh) return false;
 
+    this.activeMesh.updateMatrixWorld(true);
     const qm = this.activeMesh.userData.quadMesh;
     const canvas = this.engine.canvas;
     const rect = canvas.getBoundingClientRect();
@@ -424,6 +434,7 @@ export class MeshEditor {
       return;
     }
 
+    this.activeMesh.updateMatrixWorld(true);
     const qm = this.activeMesh.userData.quadMesh;
     const center = new THREE.Vector3();
     let count = 0;
@@ -456,13 +467,14 @@ export class MeshEditor {
 
   recordInitialVerticesState() {
     if (!this.activeMesh || !this.activeMesh.userData.quadMesh) return;
+    this.activeMesh.updateMatrixWorld(true);
     const qm = this.activeMesh.userData.quadMesh;
     
     this.initialVertexOffsets.clear();
     this.allInitialVertexOffsets.clear();
     this.anchorInitialPos.copy(this.transformAnchor.position);
 
-    // Record all vertices in world space for proportional editing
+    // Record all vertices in world space for accurate proportional and standard transforms
     qm.vertices.forEach((v, idx) => {
       const worldPos = v.clone().applyMatrix4(this.activeMesh.matrixWorld);
       this.allInitialVertexOffsets.set(idx, worldPos);
@@ -474,6 +486,7 @@ export class MeshEditor {
 
   applyAnchorTransform() {
     if (!this.activeMesh || this.selectedVertices.size === 0 || !this.activeMesh.userData.quadMesh) return;
+    this.activeMesh.updateMatrixWorld(true);
     const qm = this.activeMesh.userData.quadMesh;
 
     const delta = new THREE.Vector3().subVectors(this.transformAnchor.position, this.anchorInitialPos);
