@@ -221,6 +221,7 @@ namespace seedui
         std::string mAnchorElementId; // âncora de alinhamento (duplo clique)
         std::vector<CanvasTransformStart> mCanvasGroupStarts;
         TransformMode mTransformMode = TransformMode::None;
+        bool mTransformMouseCaptured = false;
         float mTransformMouseStartX = 0.0f;
         float mTransformMouseStartY = 0.0f;
         float mTransformPivotX = 0.0f;

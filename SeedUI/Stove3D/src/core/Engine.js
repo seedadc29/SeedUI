@@ -22,6 +22,7 @@ export class Engine {
     this.initControls();
     this.initLights();
     this.initHelpers();
+    this.setShadingMode('solid', []);
 
     this.bindEvents();
     this.startLoop();
@@ -42,8 +43,7 @@ export class Engine {
 
     this.renderer.setPixelRatio(this.devicePixelRatio);
     this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.enabled = false;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
   }
@@ -54,6 +54,7 @@ export class Engine {
     // Perspective Camera
     this.cameraPersp = new THREE.PerspectiveCamera(45, aspect, 0.1, 500);
     this.cameraPersp.position.set(4.5, 3.5, 5.5);
+    this.scene.add(this.cameraPersp);
     
     // Orthographic Camera
     const frustumSize = 8;
@@ -66,6 +67,16 @@ export class Engine {
       500
     );
     this.cameraOrtho.position.set(4.5, 3.5, 5.5);
+    this.scene.add(this.cameraOrtho);
+
+    // Headlight (Luz omnidirecional atrelada à câmera para iluminar todas as faces sem nenhum lado escuro)
+    this.headlightPersp = new THREE.DirectionalLight(0xffffff, 0.85);
+    this.headlightPersp.position.set(0, 0, 1);
+    this.cameraPersp.add(this.headlightPersp);
+
+    this.headlightOrtho = new THREE.DirectionalLight(0xffffff, 0.85);
+    this.headlightOrtho.position.set(0, 0, 1);
+    this.cameraOrtho.add(this.headlightOrtho);
 
     this.activeCamera = this.cameraPersp;
     this.isOrthographic = false;
@@ -257,27 +268,33 @@ export class Engine {
   }
 
   initLights() {
-    // 1. Ambient Light (Soft base)
-    this.ambientLight = new THREE.AmbientLight(0x404048, 1.0);
+    // 1. Hemisphere Light (Céu e chão uniformes para iluminar todos os ângulos igualmente)
+    this.hemiLight = new THREE.HemisphereLight(0xffffff, 0xd4dce8, 1.2);
+    this.scene.add(this.hemiLight);
+
+    // 2. Pure White Ambient Light (Garante que nenhuma face fique escura)
+    this.ambientLight = new THREE.AmbientLight(0xffffff, 0.95);
     this.scene.add(this.ambientLight);
 
-    // 2. Main Key Sun Light (Blender Top-Front-Right)
-    this.sunLight = new THREE.DirectionalLight(0xffffff, 1.25);
+    // 3. Directional Sun Light (Usado apenas no modo Rendered)
+    this.sunLight = new THREE.DirectionalLight(0xffffff, 1.2);
     this.sunLight.position.set(5, 8, 7);
     this.sunLight.castShadow = true;
     this.sunLight.shadow.mapSize.width = 1024;
     this.sunLight.shadow.mapSize.height = 1024;
     this.sunLight.shadow.bias = -0.0005;
+    this.sunLight.visible = false; // Desligado por padrão no modo Sólido/Material para eliminar sombras
     this.scene.add(this.sunLight);
 
-    // 3. Fill Light (Left-Back)
-    this.fillLight = new THREE.DirectionalLight(0xa5b8d0, 0.6);
+    // 4. Fill e Rim Lights
+    this.fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
     this.fillLight.position.set(-6, 4, -4);
+    this.fillLight.visible = false;
     this.scene.add(this.fillLight);
 
-    // 4. Top Rim Light (Top-Left)
-    this.rimLight = new THREE.DirectionalLight(0xffffff, 0.4);
+    this.rimLight = new THREE.DirectionalLight(0xffffff, 0.3);
     this.rimLight.position.set(-3, 8, 4);
+    this.rimLight.visible = false;
     this.scene.add(this.rimLight);
   }
 
@@ -399,30 +416,53 @@ export class Engine {
 
     // Control Scene Lights & Shadows according to mode
     if (mode === 'solid') {
+      // ZERO SOMBRAS: Todas as faces (frente, trás, baixo, cima) ficam 100% visíveis e brilhantes
       this.renderer.shadowMap.enabled = false;
-      this.sunLight.castShadow = false;
-      this.ambientLight.intensity = 1.1;
-      this.sunLight.intensity = 1.0;
-      this.fillLight.intensity = 0.8;
-      this.rimLight.intensity = 0.6;
+      if (this.sunLight) this.sunLight.visible = false;
+      if (this.fillLight) this.fillLight.visible = false;
+      if (this.rimLight) this.rimLight.visible = false;
+      if (this.hemiLight) {
+        this.hemiLight.visible = true;
+        this.hemiLight.intensity = 1.3;
+      }
+      if (this.ambientLight) this.ambientLight.intensity = 0.95;
+      if (this.headlightPersp) this.headlightPersp.visible = true;
+      if (this.headlightOrtho) this.headlightOrtho.visible = true;
     } else if (mode === 'material' || mode === 'pixel') {
-      // Visão clara do material sem sombras escuras que escondam faces
+      // Visão pura do material sem sombras escuras
       this.renderer.shadowMap.enabled = false;
-      this.sunLight.castShadow = false;
-      this.ambientLight.intensity = 1.6;
-      this.sunLight.intensity = 0.8;
-      this.fillLight.intensity = 0.8;
-      this.rimLight.intensity = 0.5;
+      if (this.sunLight) this.sunLight.visible = false;
+      if (this.fillLight) this.fillLight.visible = false;
+      if (this.rimLight) this.rimLight.visible = false;
+      if (this.hemiLight) {
+        this.hemiLight.visible = true;
+        this.hemiLight.intensity = 1.4;
+      }
+      if (this.ambientLight) this.ambientLight.intensity = 1.0;
+      if (this.headlightPersp) this.headlightPersp.visible = true;
+      if (this.headlightOrtho) this.headlightOrtho.visible = true;
     } else if (mode === 'rendered') {
+      // Sombras e iluminação realista de cena
       this.renderer.shadowMap.enabled = true;
-      this.sunLight.castShadow = true;
-      this.ambientLight.intensity = 0.6;
-      this.sunLight.intensity = 1.4;
-      this.fillLight.intensity = 0.6;
-      this.rimLight.intensity = 0.4;
+      if (this.sunLight) {
+        this.sunLight.visible = true;
+        this.sunLight.castShadow = true;
+      }
+      if (this.fillLight) this.fillLight.visible = true;
+      if (this.rimLight) this.rimLight.visible = true;
+      if (this.hemiLight) this.hemiLight.visible = false;
+      if (this.ambientLight) this.ambientLight.intensity = 0.4;
+      if (this.headlightPersp) this.headlightPersp.visible = false;
+      if (this.headlightOrtho) this.headlightOrtho.visible = false;
     } else if (mode === 'wireframe') {
       this.renderer.shadowMap.enabled = false;
-      this.sunLight.castShadow = false;
+      if (this.sunLight) this.sunLight.visible = false;
+      if (this.fillLight) this.fillLight.visible = false;
+      if (this.rimLight) this.rimLight.visible = false;
+      if (this.hemiLight) {
+        this.hemiLight.visible = true;
+        this.hemiLight.intensity = 1.0;
+      }
     }
   }
 

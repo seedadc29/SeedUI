@@ -3287,13 +3287,11 @@ namespace seedui
         mTransformPivotX = (minX + maxX) * 0.5f;
         mTransformPivotY = (minY + maxY) * 0.5f;
 
-        const ImVec2 mouse = ImGui::GetMousePos();
-        CanvasScreenToProject(&mProject, mouse.x, mouse.y,
-                              mTransformMouseStartX, mTransformMouseStartY,
-                              false, mCanvasZoom, mCanvasPanX, mCanvasPanY);
-        const float ddx = mTransformMouseStartX - mTransformPivotX;
-        const float ddy = mTransformMouseStartY - mTransformPivotY;
-        mTransformStartDist = std::max(0.001f, sqrtf(ddx * ddx + ddy * ddy));
+        // A posição inicial do mouse NÃO pode ser capturada aqui: este
+        // handler roda fora da janela do canvas, e CanvasScreenToProject
+        // depende de ImGui::GetWindowPos(). A captura acontece no primeiro
+        // frame de aplicação (dentro do canvas), evitando o salto inicial.
+        mTransformMouseCaptured = false;
 
         mTransformMode = modo;
         mStatusMsg = modo == TransformMode::Move
@@ -3307,6 +3305,20 @@ namespace seedui
     void App::AplicarTransformarModal(Modo& mode, float mouseX, float mouseY)
     {
         if (mTransformStarts.empty()) return;
+        // Primeiro frame de aplicação: registra o ponto de partida do mouse
+        // (já em coordenadas de projeto, convertido dentro do canvas) e não
+        // move nada — o objeto permanece estático até o mouse se mover.
+        if (!mTransformMouseCaptured)
+        {
+            mTransformMouseStartX = mouseX;
+            mTransformMouseStartY = mouseY;
+            const float ddx = mouseX - mTransformPivotX;
+            const float ddy = mouseY - mTransformPivotY;
+            mTransformStartDist =
+                std::max(0.001f, sqrtf(ddx * ddx + ddy * ddy));
+            mTransformMouseCaptured = true;
+            return;
+        }
         const float dx = mouseX - mTransformMouseStartX;
         const float dy = mouseY - mTransformMouseStartY;
         switch (mTransformMode)
@@ -3422,6 +3434,7 @@ namespace seedui
             mStatusMsgUntil = GetTime() + 3.0;
         }
         mTransformMode = TransformMode::None;
+        mTransformMouseCaptured = false;
         mTransformStarts.clear();
     }
 
