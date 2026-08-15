@@ -380,47 +380,29 @@ export class QuadMesh {
   toBufferGeometry() {
     const geo = new THREE.BufferGeometry();
     const positions = [];
-    const normals = [];
-    const uvs = [];
+    const indices = [];
 
+    // 1. Vertex Positions (Exact vertex buffer)
+    this.vertices.forEach((v) => {
+      positions.push(v.x, v.y, v.z);
+    });
+
+    // 2. Index Buffer (Shared indices for clean Quad/Triangle faces)
     this.quads.forEach((face) => {
       const unique = Array.from(new Set(face));
       if (unique.length === 4) {
-        const v0 = this.vertices[face[0]];
-        const v1 = this.vertices[face[1]];
-        const v2 = this.vertices[face[2]];
-        const v3 = this.vertices[face[3]];
-
-        const quadNormal = this.computeQuadNormal(v0, v1, v2, v3);
-
-        // Tri 1: (v0, v1, v2)
-        positions.push(v0.x, v0.y, v0.z, v1.x, v1.y, v1.z, v2.x, v2.y, v2.z);
-        normals.push(quadNormal.x, quadNormal.y, quadNormal.z, quadNormal.x, quadNormal.y, quadNormal.z, quadNormal.x, quadNormal.y, quadNormal.z);
-        uvs.push(0, 0, 1, 0, 1, 1);
-
-        // Tri 2: (v0, v2, v3)
-        positions.push(v0.x, v0.y, v0.z, v2.x, v2.y, v2.z, v3.x, v3.y, v3.z);
-        normals.push(quadNormal.x, quadNormal.y, quadNormal.z, quadNormal.x, quadNormal.y, quadNormal.z, quadNormal.x, quadNormal.y, quadNormal.z);
-        uvs.push(0, 0, 1, 1, 0, 1);
+        indices.push(unique[0], unique[1], unique[2]);
+        indices.push(unique[0], unique[2], unique[3]);
       } else if (unique.length === 3) {
-        const v0 = this.vertices[unique[0]];
-        const v1 = this.vertices[unique[1]];
-        const v2 = this.vertices[unique[2]];
-
-        const cb = new THREE.Vector3().subVectors(v2, v1);
-        const ab = new THREE.Vector3().subVectors(v0, v1);
-        const triNormal = cb.cross(ab).normalize();
-
-        positions.push(v0.x, v0.y, v0.z, v1.x, v1.y, v1.z, v2.x, v2.y, v2.z);
-        normals.push(triNormal.x, triNormal.y, triNormal.z, triNormal.x, triNormal.y, triNormal.z, triNormal.x, triNormal.y, triNormal.z);
-        uvs.push(0, 0, 1, 0, 0.5, 1);
+        indices.push(unique[0], unique[1], unique[2]);
       }
     });
 
     geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
-    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
     geo.computeBoundingBox();
+    geo.computeBoundingSphere();
 
     return geo;
   }
@@ -444,44 +426,16 @@ export class QuadMesh {
 
   updateGeometryPositions(geo, lineMesh) {
     const posAttr = geo.attributes.position;
-    const normAttr = geo.attributes.normal;
-    let ptr = 0;
-
-    this.quads.forEach((face) => {
-      const unique = Array.from(new Set(face));
-      if (unique.length === 4) {
-        const v0 = this.vertices[face[0]];
-        const v1 = this.vertices[face[1]];
-        const v2 = this.vertices[face[2]];
-        const v3 = this.vertices[face[3]];
-
-        const quadNormal = this.computeQuadNormal(v0, v1, v2, v3);
-
-        posAttr.setXYZ(ptr, v0.x, v0.y, v0.z); normAttr.setXYZ(ptr, quadNormal.x, quadNormal.y, quadNormal.z); ptr++;
-        posAttr.setXYZ(ptr, v1.x, v1.y, v1.z); normAttr.setXYZ(ptr, quadNormal.x, quadNormal.y, quadNormal.z); ptr++;
-        posAttr.setXYZ(ptr, v2.x, v2.y, v2.z); normAttr.setXYZ(ptr, quadNormal.x, quadNormal.y, quadNormal.z); ptr++;
-
-        posAttr.setXYZ(ptr, v0.x, v0.y, v0.z); normAttr.setXYZ(ptr, quadNormal.x, quadNormal.y, quadNormal.z); ptr++;
-        posAttr.setXYZ(ptr, v2.x, v2.y, v2.z); normAttr.setXYZ(ptr, quadNormal.x, quadNormal.y, quadNormal.z); ptr++;
-        posAttr.setXYZ(ptr, v3.x, v3.y, v3.z); normAttr.setXYZ(ptr, quadNormal.x, quadNormal.y, quadNormal.z); ptr++;
-      } else if (unique.length === 3) {
-        const v0 = this.vertices[unique[0]];
-        const v1 = this.vertices[unique[1]];
-        const v2 = this.vertices[unique[2]];
-
-        const cb = new THREE.Vector3().subVectors(v2, v1);
-        const ab = new THREE.Vector3().subVectors(v0, v1);
-        const triNormal = cb.cross(ab).normalize();
-
-        posAttr.setXYZ(ptr, v0.x, v0.y, v0.z); normAttr.setXYZ(ptr, triNormal.x, triNormal.y, triNormal.z); ptr++;
-        posAttr.setXYZ(ptr, v1.x, v1.y, v1.z); normAttr.setXYZ(ptr, triNormal.x, triNormal.y, triNormal.z); ptr++;
-        posAttr.setXYZ(ptr, v2.x, v2.y, v2.z); normAttr.setXYZ(ptr, triNormal.x, triNormal.y, triNormal.z); ptr++;
+    if (posAttr && posAttr.count === this.vertices.length) {
+      for (let i = 0; i < this.vertices.length; i++) {
+        const v = this.vertices[i];
+        posAttr.setXYZ(i, v.x, v.y, v.z);
       }
-    });
-
-    posAttr.needsUpdate = true;
-    normAttr.needsUpdate = true;
-    geo.computeBoundingBox();
+      posAttr.needsUpdate = true;
+      geo.computeVertexNormals();
+      geo.computeBoundingBox();
+      geo.computeBoundingSphere();
+    }
 
     // Update edge wireframe lines
     if (lineMesh && lineMesh.geometry) {
@@ -490,7 +444,7 @@ export class QuadMesh {
       this.edges.forEach((edge) => {
         const vA = this.vertices[edge[0]];
         const vB = this.vertices[edge[1]];
-        if (vA && vB && lptr < linePos.count * 3) {
+        if (vA && vB && lptr + 1 < linePos.count) {
           linePos.setXYZ(lptr++, vA.x, vA.y, vA.z);
           linePos.setXYZ(lptr++, vB.x, vB.y, vB.z);
         }
