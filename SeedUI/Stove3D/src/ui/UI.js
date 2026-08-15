@@ -81,6 +81,68 @@ export class UIManager {
     this.initRaycasting();
     this.initShortcuts();
     this.initThemeSwitcher();
+    this.initOpenCodeCLI();
+  }
+
+  initOpenCodeCLI() {
+    const input = document.getElementById('opencode-cli-input');
+    if (!input) return;
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const val = input.value.trim().toLowerCase();
+        if (!val) return;
+
+        if (val.includes('cube') || val.includes('cubo')) {
+          this.sceneManager.createMesh('cube');
+        } else if (val.includes('sphere') || val.includes('esfera')) {
+          this.sceneManager.createMesh('uvsphere');
+        } else if (val.includes('cylinder') || val.includes('cilindro')) {
+          this.sceneManager.createMesh('cylinder');
+        } else if (val.includes('plane') || val.includes('plano')) {
+          this.sceneManager.createMesh('plane');
+        } else if (val.includes('cone')) {
+          this.sceneManager.createMesh('cone');
+        } else if (val.includes('torus')) {
+          this.sceneManager.createMesh('torus');
+        } else if (val.includes('extrude') || val.includes('extrus')) {
+          this.meshEditor.extrude();
+        } else if (val.includes('bevel') || val.includes('chanfro')) {
+          this.meshEditor.bevel();
+        } else if (val.includes('loopcut') || val.includes('cut') || val.includes('corte')) {
+          this.meshEditor.loopCut();
+        } else if (val.includes('subdivide') || val.includes('subdiv')) {
+          this.meshEditor.subdivide();
+        } else if (val.includes('smooth') || val.includes('suave')) {
+          this.meshEditor.shadeSmooth();
+        } else if (val.includes('flat') || val.includes('plano')) {
+          this.meshEditor.shadeFlat();
+        } else if (val.includes('wire') || val.includes('arame')) {
+          this.sceneManager.setShadingMode('wireframe');
+        } else if (val.includes('solid') || val.includes('solido')) {
+          this.sceneManager.setShadingMode('solid');
+        } else if (val.includes('export obj')) {
+          this.exportManager?.exportOBJ();
+        } else if (val.includes('export gltf') || val.includes('export glb')) {
+          this.exportManager?.exportGLTF(null, true);
+        } else if (val.includes('del') || val.includes('clear') || val.includes('remover')) {
+          const selected = this.sceneManager.getSelectedObject();
+          if (selected) this.sceneManager.removeObject(selected);
+        }
+
+        input.value = '';
+        input.blur();
+      }
+    });
+
+    // Global Ctrl+P to focus prompt in OpenCode mode
+    window.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        input.focus();
+        input.select();
+      }
+    });
   }
 
   initThemeSwitcher() {

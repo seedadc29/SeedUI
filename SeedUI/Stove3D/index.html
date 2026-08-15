@@ -14,9 +14,43 @@
       <header class="top-header">
         <div class="header-left">
           <div class="logo">
-            <span class="logo-badge">3D</span>
-            <span class="logo-text">SEED</span>
-            <span class="logo-sub">STUDIO</span>
+            <div class="logo-standard">
+              <span class="logo-badge">3D</span>
+              <span class="logo-text">SEED</span>
+              <span class="logo-sub">STUDIO</span>
+            </div>
+            <div class="logo-opencode">
+              <svg class="opencode-brand-svg" viewBox="0 0 210 28" height="22">
+                <g fill="#777e8a">
+                  <!-- 'o' -->
+                  <path d="M0,4 h20 v20 h-20 z M5,9 h10 v10 h-10 z" fill-rule="evenodd" />
+                  <rect x="7" y="11" width="2" height="2"/><rect x="11" y="11" width="2" height="2"/><rect x="7" y="15" width="2" height="2"/><rect x="11" y="15" width="2" height="2"/>
+                  <!-- 'p' -->
+                  <path d="M24,4 h20 v15 h-15 v9 h-5 z M29,9 h10 v5 h-10 z" fill-rule="evenodd"/>
+                  <rect x="31" y="11" width="2" height="2"/><rect x="35" y="11" width="2" height="2"/>
+                  <!-- 'e' -->
+                  <path d="M48,4 h20 v20 h-20 z M53,9 h10 v3 h-10 z M53,14 h10 v5 h-10 z" fill-rule="evenodd"/>
+                  <rect x="55" y="10" width="2" height="1"/><rect x="59" y="10" width="2" height="1"/><rect x="55" y="16" width="2" height="2"/><rect x="59" y="16" width="2" height="2"/>
+                  <!-- 'n' -->
+                  <path d="M72,4 h20 v20 h-5 v-15 h-10 v15 h-5 z"/>
+                  <rect x="79" y="11" width="2" height="2"/><rect x="83" y="11" width="2" height="2"/><rect x="79" y="15" width="2" height="2"/><rect x="83" y="15" width="2" height="2"/>
+                </g>
+                <g fill="#ffffff">
+                  <!-- 'c' -->
+                  <path d="M96,4 h20 v5 h-15 v10 h15 v5 h-20 z"/>
+                  <rect x="103" y="11" width="2" height="2"/><rect x="107" y="11" width="2" height="2"/><rect x="103" y="15" width="2" height="2"/><rect x="107" y="15" width="2" height="2"/>
+                  <!-- 'o' -->
+                  <path d="M120,4 h20 v20 h-20 z M125,9 h10 v10 h-10 z" fill-rule="evenodd"/>
+                  <rect x="127" y="11" width="2" height="2"/><rect x="131" y="11" width="2" height="2"/><rect x="127" y="15" width="2" height="2"/><rect x="131" y="15" width="2" height="2"/>
+                  <!-- 'd' -->
+                  <path d="M144,4 h5 v5 h10 v-9 h5 v24 h-20 z M149,9 h10 v10 h-10 z" fill-rule="evenodd"/>
+                  <rect x="151" y="11" width="2" height="2"/><rect x="155" y="11" width="2" height="2"/><rect x="151" y="15" width="2" height="2"/><rect x="155" y="15" width="2" height="2"/>
+                  <!-- 'e' -->
+                  <path d="M168,4 h20 v20 h-20 z M173,9 h10 v3 h-10 z M173,14 h10 v5 h-10 z" fill-rule="evenodd"/>
+                  <rect x="175" y="10" width="2" height="1"/><rect x="179" y="10" width="2" height="1"/><rect x="175" y="16" width="2" height="2"/><rect x="179" y="16" width="2" height="2"/>
+                </g>
+              </svg>
+            </div>
           </div>
           <div class="header-menu">
             <div class="menu-dropdown-wrapper" style="position:relative;display:inline-block;">
@@ -360,20 +394,43 @@
             </div>
           </div>
         </aside>
+
+        <!-- OpenCode Floating Prompt Card (Exact replica of OpenCode CLI prompt) -->
+        <div class="opencode-cli-prompt" id="opencode-cli-prompt">
+          <div class="opencode-prompt-box">
+            <div class="opencode-prompt-row">
+              <span class="opencode-cursor-box">A</span>
+              <input type="text" id="opencode-cli-input" class="opencode-cli-input" placeholder='sk anything... "What is the tech stack of this project?"' autocomplete="off" spellcheck="false" />
+            </div>
+            <div class="opencode-prompt-footer">
+              <span class="oc-tag-build">Build</span>
+              <span class="oc-tag-model">Claude-4.5-Opus</span>
+              <span class="oc-tag-vendor">Evolink</span>
+            </div>
+          </div>
+          <div class="opencode-prompt-hints">
+            <span class="hint-item"><span class="hint-key">tab</span> <span class="hint-label">switch agent</span></span>
+            <span class="hint-item"><span class="hint-key">ctrl+p</span> <span class="hint-label">commands</span></span>
+          </div>
+        </div>
       </div>
 
       <!-- Bottom Status Bar -->
       <footer class="statusbar">
         <div class="status-left" id="status-hint">
-          <span class="key-hint"><kbd>Shift+A</kbd> Adicionar</span>
-          <span class="key-hint"><kbd>G</kbd> Mover</span>
-          <span class="key-hint"><kbd>R</kbd> Rotacionar</span>
-          <span class="key-hint"><kbd>S</kbd> Escalar</span>
-          <span class="key-hint"><kbd>Tab</kbd> Modo Edição</span>
-          <span class="key-hint"><kbd>Ctrl+Z</kbd> Desfazer</span>
+          <span class="oc-path-tag" id="status-path">D:\EvoLink\APIwork2</span>
+          <div class="key-hints-container">
+            <span class="key-hint"><kbd>tab</kbd> <span>switch mode</span></span>
+            <span class="key-hint"><kbd>ctrl+p</kbd> <span>commands</span></span>
+            <span class="key-hint"><kbd>shift+a</kbd> <span>add</span></span>
+            <span class="key-hint"><kbd>g</kbd> <span>move</span></span>
+            <span class="key-hint"><kbd>r</kbd> <span>rotate</span></span>
+            <span class="key-hint"><kbd>s</kbd> <span>scale</span></span>
+          </div>
         </div>
         <div class="status-right" id="status-engine-info">
-          <span>WebGL 2.0 • Three.js r180 • Pronto</span>
+          <span class="oc-version-tag">1.0.152</span>
+          <span class="standard-engine-info">WebGL 2.0 • Three.js r180 • Pronto</span>
         </div>
       </footer>
     </div>

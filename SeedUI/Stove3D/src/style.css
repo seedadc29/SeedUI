@@ -2182,4 +2182,169 @@ body.theme-opencode .diag-banner {
   border-left: 3px solid #3b82f6 !important;
 }
 
+/* Logo Switcher */
+.logo-opencode {
+  display: none;
+}
+.logo-standard {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+body.theme-opencode .logo-standard {
+  display: none !important;
+}
+body.theme-opencode .logo-opencode {
+  display: flex !important;
+  align-items: center;
+}
+
+/* OpenCode CLI Floating Prompt Card (Exact replica of OpenCode CLI prompt) */
+.opencode-cli-prompt {
+  display: none;
+}
+
+body.theme-opencode .opencode-cli-prompt {
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  bottom: 42px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 580px;
+  max-width: calc(100vw - 320px);
+  z-index: 50;
+  pointer-events: auto;
+}
+
+body.theme-opencode.sidebar-collapsed .opencode-cli-prompt {
+  max-width: calc(100vw - 80px);
+}
+
+.opencode-prompt-box {
+  background: #17181c;
+  border: 1px solid #282a30;
+  border-left: 3px solid #58a6ff;
+  border-radius: 4px;
+  padding: 12px 16px 10px 16px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.85);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.opencode-prompt-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.opencode-cursor-box {
+  background: #f8fafc;
+  color: #0c0d10;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1;
+  padding: 1px 3px;
+  border-radius: 1px;
+}
+
+.opencode-cli-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #f8fafc;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  outline: none;
+  padding: 0;
+  margin: 0;
+}
+
+.opencode-cli-input::placeholder {
+  color: #6e7681;
+}
+
+.opencode-prompt-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px;
+  padding-top: 2px;
+}
+
+.oc-tag-build {
+  color: #58a6ff;
+  font-weight: 600;
+}
+
+.oc-tag-model {
+  color: #f8fafc;
+  font-weight: 700;
+}
+
+.oc-tag-vendor {
+  color: #6e7681;
+}
+
+.opencode-prompt-hints {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  margin-top: 6px;
+  padding-right: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+}
+
+.opencode-prompt-hints .hint-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.opencode-prompt-hints .hint-key {
+  color: #f8fafc;
+  font-weight: 700;
+}
+
+.opencode-prompt-hints .hint-label {
+  color: #6e7681;
+}
+
+/* Status Bar tags */
+.oc-path-tag {
+  display: none;
+}
+.oc-version-tag {
+  display: none;
+}
+
+body.theme-opencode .oc-path-tag {
+  display: inline-block !important;
+  color: #4b5563 !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 10px !important;
+}
+
+body.theme-opencode .oc-version-tag {
+  display: inline-block !important;
+  color: #4b5563 !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 10px !important;
+}
+
+body.theme-opencode .standard-engine-info {
+  display: none !important;
+}
+
+/* Clean Professional Monospace Icons in OpenCode Theme (No Emojis) */
+body.theme-opencode .item-icon {
+  display: none !important;
+}
+
+
 
