@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <script type="module" crossorigin src="/assets/index-DUBM7V36.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-B4F_99AA.css">
+  <script type="module" crossorigin src="/assets/index-8G2iT1qP.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-CUZx62eF.css">
 </head>
 <body class="blender-body">
   <div class="blender-app" id="blender-app">
@@ -346,6 +346,31 @@
                       <button class="world-preset-btn" data-color="#e8e8ed" title="Branco Claro (#e8e8ed)">High Key</button>
                       <button class="world-preset-btn" data-color="#1b2838" title="Azul Noite (#1b2838)">Midnight</button>
                       <button class="world-preset-btn" data-color="#2d3748" title="Slate Blue (#2d3748)">Slate</button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Workspace Themes & Custom Presets Accordion -->
+                <div class="blender-accordion">
+                  <div class="accordion-head">
+                    <span class="accordion-arrow">▼</span>
+                    <span>Workspace Themes</span>
+                  </div>
+                  <div class="accordion-body">
+                    <div class="theme-preset-grid-compact" id="view-tab-theme-presets">
+                      <!-- Built-in + Custom User Presets injected dynamically -->
+                    </div>
+
+                    <!-- Save Current Theme Action -->
+                    <div class="save-theme-row">
+                      <input type="text" id="input-new-theme-name" class="blender-text-input" placeholder="Nome do Tema...">
+                      <button class="topbar-btn" id="btn-save-current-theme" title="Salvar cores e layout atuais como tema">+ Salvar</button>
+                    </div>
+
+                    <!-- Undo Deleted Theme Notification Box -->
+                    <div class="undo-theme-box hidden" id="box-undo-deleted-theme">
+                      <span id="label-deleted-theme-name">Tema excluído</span>
+                      <button class="undo-btn" id="btn-undo-delete-theme" title="Recuperar tema excluído">↩️ Desfazer</button>
                     </div>
                   </div>
                 </div>

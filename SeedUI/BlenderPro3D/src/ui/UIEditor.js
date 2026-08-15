@@ -3,19 +3,25 @@
  * 
  * Features:
  * 1. Live Theme & CSS Variable Customizer (Colors, Sizes, Borders, Fonts, Accents)
- * 2. Container Window Controls:
+ * 2. Non-blocking, Crystal-Clear Draggable Interface Customizer Window (No background blur)
+ * 3. Container Window Controls:
  *    - 📌 Pin / Unpin
  *    - 🗗 Undock / Detach into Floating Window (Draggable)
  *    - 📥 Redock back to sidebar
  *    - ➖ Retract / Collapse container
- * 3. Toolbar & Navigation Widget Undocking (Floatable Toolshelf & Navigation Cluster)
- * 4. Theme Presets (Blender Dark, Classic Dark, Light Pro, Midnight, Obsidian)
- * 5. Full localStorage persistence and Export/Import Theme JSON
+ * 4. Custom User Presets System:
+ *    - Save current theme as a preset with custom name
+ *    - Display custom presets in both UI Editor modal and View tab (N-Panel)
+ *    - Delete custom presets (🗑️)
+ *    - Undo deleted preset (↩️) to restore accidentally deleted themes
+ * 5. Toolbar & Navigation Widget Undocking
+ * 6. Full localStorage persistence and Export/Import Theme JSON
  */
 export class UIEditor {
   constructor(engine) {
     this.engine = engine;
     this.storageKey = 'blender_pro_ui_theme';
+    this.userThemesKey = 'blender_pro_user_themes';
     this.layoutKey = 'blender_pro_ui_layout';
 
     this.defaultTheme = {
@@ -37,7 +43,62 @@ export class UIEditor {
       toolshelfWidth: 38
     };
 
+    this.builtInPresets = [
+      {
+        id: 'blender-dark',
+        name: 'Blender 4.1 Dark',
+        theme: {
+          bgDarkest: '#161616', bgDark: '#222222', bgPanel: '#282828', bgViewport: '#484848',
+          bgInput: '#171717', border: '#383838', borderSubtle: '#2d2d2d',
+          accentOrange: '#ea7600', accentBlue: '#4772b3', textMain: '#d4d4d4', textMuted: '#8c8c8c',
+          borderRadius: 4, fontSize: 11
+        }
+      },
+      {
+        id: 'classic-dark',
+        name: 'Classic Charcoal',
+        theme: {
+          bgDarkest: '#121212', bgDark: '#1a1a1a', bgPanel: '#202020', bgViewport: '#333333',
+          bgInput: '#141414', border: '#303030', borderSubtle: '#242424',
+          accentOrange: '#f97316', accentBlue: '#3b82f6', textMain: '#e5e7eb', textMuted: '#9ca3af',
+          borderRadius: 2, fontSize: 11
+        }
+      },
+      {
+        id: 'midnight-blue',
+        name: 'Midnight Blue',
+        theme: {
+          bgDarkest: '#0c1218', bgDark: '#131c26', bgPanel: '#1a2634', bgViewport: '#1e293b',
+          bgInput: '#0f172a', border: '#25384d', borderSubtle: '#1b2a3a',
+          accentOrange: '#0284c7', accentBlue: '#38bdf8', textMain: '#f1f5f9', textMuted: '#94a3b8',
+          borderRadius: 6, fontSize: 11
+        }
+      },
+      {
+        id: 'obsidian',
+        name: 'Obsidian Emerald',
+        theme: {
+          bgDarkest: '#050505', bgDark: '#0e0e0e', bgPanel: '#161616', bgViewport: '#1c1c1c',
+          bgInput: '#080808', border: '#282828', borderSubtle: '#1c1c1c',
+          accentOrange: '#10b981', accentBlue: '#059669', textMain: '#f3f4f6', textMuted: '#6b7280',
+          borderRadius: 4, fontSize: 11
+        }
+      },
+      {
+        id: 'cyber-amber',
+        name: 'Cyber Amber',
+        theme: {
+          bgDarkest: '#12100e', bgDark: '#1c1917', bgPanel: '#292524', bgViewport: '#2d2825',
+          bgInput: '#171412', border: '#44403c', borderSubtle: '#2e2a27',
+          accentOrange: '#f59e0b', accentBlue: '#d97706', textMain: '#fef3c7', textMuted: '#a8a29e',
+          borderRadius: 4, fontSize: 11
+        }
+      }
+    ];
+
     this.theme = { ...this.defaultTheme };
+    this.userThemes = this.loadUserThemes();
+    this.lastDeletedTheme = null;
     this.floatingPanels = new Map();
 
     this.loadSettings();
@@ -45,6 +106,7 @@ export class UIEditor {
     this.injectContainerControls();
     this.initPreferencesModal();
     this.initFloatingWidgets();
+    this.initViewTabThemeControls();
   }
 
   // 1. Theme and CSS Variables
@@ -103,16 +165,189 @@ export class UIEditor {
     }
   }
 
+  loadUserThemes() {
+    try {
+      const saved = localStorage.getItem(this.userThemesKey);
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.warn('Could not load user themes', e);
+    }
+    return [];
+  }
+
+  saveUserThemes() {
+    try {
+      localStorage.setItem(this.userThemesKey, JSON.stringify(this.userThemes));
+    } catch (e) {
+      console.warn('Could not save user themes', e);
+    }
+  }
+
   resetTheme() {
     this.theme = { ...this.defaultTheme };
     this.applyTheme();
     this.saveSettings();
     this.syncModalInputs();
+    this.renderThemePresets();
   }
 
-  // 2. Container Window Controls (Pin, Undock, Collapse)
+  // 2. Custom User Presets Management
+  saveUserPreset(customName) {
+    const name = (customName || '').trim() || `Meu Tema ${this.userThemes.length + 1}`;
+    const newPreset = {
+      id: `custom_${Date.now()}`,
+      name: name,
+      theme: { ...this.theme }
+    };
+
+    this.userThemes.push(newPreset);
+    this.saveUserThemes();
+    this.renderThemePresets();
+    return newPreset;
+  }
+
+  deleteUserPreset(presetId) {
+    const idx = this.userThemes.findIndex(t => t.id === presetId);
+    if (idx !== -1) {
+      this.lastDeletedTheme = { ...this.userThemes[idx] };
+      this.userThemes.splice(idx, 1);
+      this.saveUserThemes();
+      this.renderThemePresets();
+      this.showUndoNotification(this.lastDeletedTheme.name);
+    }
+  }
+
+  undoDeletePreset() {
+    if (this.lastDeletedTheme) {
+      this.userThemes.push(this.lastDeletedTheme);
+      const restoredName = this.lastDeletedTheme.name;
+      this.lastDeletedTheme = null;
+      this.saveUserThemes();
+      this.renderThemePresets();
+      this.hideUndoNotification();
+    }
+  }
+
+  showUndoNotification(themeName) {
+    const boxes = [
+      document.getElementById('box-undo-deleted-theme'),
+      document.getElementById('modal-box-undo-deleted-theme')
+    ];
+    boxes.forEach(box => {
+      if (box) {
+        box.classList.remove('hidden');
+        const label = box.querySelector('span');
+        if (label) label.textContent = `Tema "${themeName}" excluído.`;
+      }
+    });
+  }
+
+  hideUndoNotification() {
+    const boxes = [
+      document.getElementById('box-undo-deleted-theme'),
+      document.getElementById('modal-box-undo-deleted-theme')
+    ];
+    boxes.forEach(box => box?.classList.add('hidden'));
+  }
+
+  // 3. Render Theme Presets (In both Modal and N-Panel View Tab)
+  renderThemePresets() {
+    const modalGrid = document.getElementById('modal-theme-presets-grid');
+    const viewTabGrid = document.getElementById('view-tab-theme-presets');
+
+    const generatePresetHTML = (isCompact = false) => {
+      let html = '';
+
+      // Built-in presets
+      this.builtInPresets.forEach((p) => {
+        html += `
+          <div class="theme-preset-card" data-preset-id="${p.id}">
+            <div class="preset-preview" style="background:${p.theme.bgDark}; border-color:${p.theme.accentOrange};"></div>
+            <span class="preset-name">${p.name}</span>
+          </div>
+        `;
+      });
+
+      // User custom presets (with delete icon)
+      this.userThemes.forEach((p) => {
+        html += `
+          <div class="theme-preset-card is-custom" data-preset-id="${p.id}">
+            <div class="preset-preview" style="background:${p.theme.bgDark}; border-color:${p.theme.accentOrange};"></div>
+            <span class="preset-name">${p.name}</span>
+            <button class="btn-delete-preset" data-delete-id="${p.id}" title="Excluir este tema customizado">🗑️</button>
+          </div>
+        `;
+      });
+
+      return html;
+    };
+
+    if (modalGrid) {
+      modalGrid.innerHTML = generatePresetHTML(false);
+      this.bindPresetClicks(modalGrid);
+    }
+
+    if (viewTabGrid) {
+      viewTabGrid.innerHTML = generatePresetHTML(true);
+      this.bindPresetClicks(viewTabGrid);
+    }
+  }
+
+  bindPresetClicks(container) {
+    container.querySelectorAll('.theme-preset-card').forEach((card) => {
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('.btn-delete-preset')) return;
+        const id = card.dataset.presetId;
+        const allPresets = [...this.builtInPresets, ...this.userThemes];
+        const found = allPresets.find(p => p.id === id);
+        if (found) {
+          this.theme = { ...this.theme, ...found.theme };
+          this.applyTheme();
+          this.saveSettings();
+          this.syncModalInputs();
+        }
+      });
+    });
+
+    container.querySelectorAll('.btn-delete-preset').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = btn.dataset.deleteId;
+        this.deleteUserPreset(id);
+      });
+    });
+  }
+
+  // 4. View Tab Theme Controls in N-Panel
+  initViewTabThemeControls() {
+    this.renderThemePresets();
+
+    const inputName = document.getElementById('input-new-theme-name');
+    const btnSave = document.getElementById('btn-save-current-theme');
+    const btnUndo = document.getElementById('btn-undo-delete-theme');
+
+    btnSave?.addEventListener('click', () => {
+      const name = inputName?.value || '';
+      this.saveUserPreset(name);
+      if (inputName) inputName.value = '';
+    });
+
+    inputName?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const name = inputName.value;
+        this.saveUserPreset(name);
+        inputName.value = '';
+      }
+    });
+
+    btnUndo?.addEventListener('click', () => {
+      this.undoDeletePreset();
+    });
+  }
+
+  // 5. Container Window Controls (Pin, Undock, Collapse)
   injectContainerControls() {
-    // 2.1 Outliner Controls
+    // 5.1 Outliner Controls
     const outlinerHeader = document.querySelector('.outliner-header');
     if (outlinerHeader && !outlinerHeader.querySelector('.container-ctrls')) {
       const ctrls = document.createElement('div');
@@ -125,7 +360,7 @@ export class UIEditor {
       outlinerHeader.querySelector('.outliner-actions')?.prepend(ctrls);
     }
 
-    // 2.2 N-Panel Controls
+    // 5.2 N-Panel Controls
     const nPanelHeader = document.querySelector('.n-panel-header');
     if (nPanelHeader && !nPanelHeader.querySelector('.container-ctrls')) {
       const ctrls = document.createElement('div');
@@ -265,7 +500,7 @@ export class UIEditor {
     let initialLeft = 0, initialTop = 0;
 
     handle.addEventListener('mousedown', (e) => {
-      if (e.target.tagName === 'BUTTON') return;
+      if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
       isDragging = true;
       startX = e.clientX;
       startY = e.clientY;
@@ -290,11 +525,10 @@ export class UIEditor {
     });
   }
 
-  // 3. Floating Navigation & Toolshelf Detach
+  // 6. Floating Navigation & Toolshelf Detach
   initFloatingWidgets() {
     const navCluster = document.getElementById('blender-nav-cluster');
     if (navCluster) {
-      // Add subtle drag grip on navigation cluster
       const grip = document.createElement('div');
       grip.className = 'widget-drag-grip';
       grip.title = 'Arraste para reposicionar na tela';
@@ -304,7 +538,7 @@ export class UIEditor {
     }
   }
 
-  // 4. Preferences & Theme Modal
+  // 7. Non-blocking, Crystal-Clear Draggable Preferences Modal
   initPreferencesModal() {
     // Add "🎨 Customizar UI" button in Topbar
     const topbarRight = document.querySelector('.topbar-right');
@@ -329,15 +563,15 @@ export class UIEditor {
       });
     }
 
-    // Modal Structure
+    // Modal Structure (Zero-blur floating dialog)
     const modal = document.createElement('div');
     modal.className = 'blender-modal-overlay hidden';
     modal.id = 'ui-customizer-modal';
     modal.innerHTML = `
-      <div class="blender-modal-dialog">
-        <div class="modal-dialog-header">
+      <div class="blender-modal-dialog" id="ui-customizer-dialog">
+        <div class="modal-dialog-header" id="ui-customizer-drag-header">
           <div class="modal-dialog-title">
-            <span>🎨 Editor & Customizador de Interface (Blender Pro)</span>
+            <span>⋮⋮ 🎨 Editor & Customizador de Interface (Blender Pro)</span>
           </div>
           <button class="modal-close-btn" id="btn-close-ui-editor">✕</button>
         </div>
@@ -355,31 +589,24 @@ export class UIEditor {
           <div class="modal-content-area">
             <!-- TAB 1: CORES -->
             <div class="modal-tab-pane" id="pane-theme-colors">
-              <div class="modal-section-title">Presets de Tema Rápidos</div>
-              <div class="theme-preset-grid">
-                <button class="theme-preset-card" data-preset="blender-dark">
-                  <div class="preset-preview" style="background:#222; border-color:#ea7600;"></div>
-                  <span>Blender 4.1 Dark</span>
-                </button>
-                <button class="theme-preset-card" data-preset="classic-dark">
-                  <div class="preset-preview" style="background:#181818; border-color:#4772b3;"></div>
-                  <span>Classic Charcoal</span>
-                </button>
-                <button class="theme-preset-card" data-preset="midnight-blue">
-                  <div class="preset-preview" style="background:#131c26; border-color:#38bdf8;"></div>
-                  <span>Midnight Blue</span>
-                </button>
-                <button class="theme-preset-card" data-preset="obsidian">
-                  <div class="preset-preview" style="background:#0a0a0a; border-color:#10b981;"></div>
-                  <span>Obsidian Emerald</span>
-                </button>
-                <button class="theme-preset-card" data-preset="cyber-amber">
-                  <div class="preset-preview" style="background:#1c1917; border-color:#f59e0b;"></div>
-                  <span>Cyber Amber</span>
-                </button>
+              <div class="modal-section-title">Predefinições de Tema</div>
+              <div class="theme-preset-grid" id="modal-theme-presets-grid">
+                <!-- Injected via renderThemePresets() -->
               </div>
 
-              <div class="modal-section-title" style="margin-top:14px;">Paleta de Cores Customizada</div>
+              <!-- Save New Theme in Modal -->
+              <div class="save-theme-row" style="margin-top:10px;">
+                <input type="text" id="modal-input-theme-name" class="blender-text-input" placeholder="Salvar tema atual com nome...">
+                <button class="topbar-btn" id="modal-btn-save-theme">+ Salvar Predefinição</button>
+              </div>
+
+              <!-- Undo Deleted Theme Notification in Modal -->
+              <div class="undo-theme-box hidden" id="modal-box-undo-deleted-theme" style="margin-top:6px;">
+                <span id="modal-label-deleted-theme-name">Tema excluído.</span>
+                <button class="undo-btn" id="modal-btn-undo-delete-theme">↩️ Desfazer</button>
+              </div>
+
+              <div class="modal-section-title" style="margin-top:16px;">Paleta de Cores em Tempo Real</div>
               <div class="color-picker-grid">
                 <div class="color-prop-row">
                   <label>Fundo da Viewport 3D:</label>
@@ -518,16 +745,20 @@ export class UIEditor {
     `;
 
     document.body.appendChild(modal);
+    
+    // Make dialog draggable by header
+    const dialog = document.getElementById('ui-customizer-dialog');
+    const dragHeader = document.getElementById('ui-customizer-drag-header');
+    if (dialog && dragHeader) {
+      this.makeDraggable(dialog, dragHeader);
+    }
+
     this.bindModalEvents();
   }
 
   bindModalEvents() {
     const modal = document.getElementById('ui-customizer-modal');
     document.getElementById('btn-close-ui-editor')?.addEventListener('click', () => this.closeModal());
-
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) this.closeModal();
-    });
 
     // Tab Navigation inside Modal
     const tabBtns = modal.querySelectorAll('.modal-nav-item');
@@ -547,6 +778,18 @@ export class UIEditor {
           if (panes[k]) panes[k].classList.toggle('hidden', k !== tab);
         });
       });
+    });
+
+    // Save & Undo in Modal
+    const modalInputName = document.getElementById('modal-input-theme-name');
+    document.getElementById('modal-btn-save-theme')?.addEventListener('click', () => {
+      const name = modalInputName?.value || '';
+      this.saveUserPreset(name);
+      if (modalInputName) modalInputName.value = '';
+    });
+
+    document.getElementById('modal-btn-undo-delete-theme')?.addEventListener('click', () => {
+      this.undoDeletePreset();
     });
 
     // Live Color Pickers
@@ -581,18 +824,9 @@ export class UIEditor {
       }
     });
 
-    // Preset Cards
-    modal.querySelectorAll('.theme-preset-card').forEach((card) => {
-      card.addEventListener('click', () => {
-        const preset = card.dataset.preset;
-        this.applyPreset(preset);
-      });
-    });
-
     // Panel Management tab buttons
     document.getElementById('mgmt-undock-outliner')?.addEventListener('click', () => {
       this.toggleUndock('outliner');
-      this.closeModal();
     });
 
     document.getElementById('mgmt-collapse-outliner')?.addEventListener('click', () => {
@@ -601,7 +835,6 @@ export class UIEditor {
 
     document.getElementById('mgmt-undock-npanel')?.addEventListener('click', () => {
       this.toggleUndock('npanel');
-      this.closeModal();
     });
 
     document.getElementById('mgmt-collapse-npanel')?.addEventListener('click', () => {
@@ -658,48 +891,6 @@ export class UIEditor {
     });
   }
 
-  applyPreset(presetName) {
-    const presets = {
-      'blender-dark': {
-        bgDarkest: '#161616', bgDark: '#222222', bgPanel: '#282828', bgViewport: '#484848',
-        bgInput: '#171717', border: '#383838', borderSubtle: '#2d2d2d',
-        accentOrange: '#ea7600', accentBlue: '#4772b3', textMain: '#d4d4d4', textMuted: '#8c8c8c',
-        borderRadius: 4, fontSize: 11
-      },
-      'classic-dark': {
-        bgDarkest: '#121212', bgDark: '#1a1a1a', bgPanel: '#202020', bgViewport: '#333333',
-        bgInput: '#141414', border: '#303030', borderSubtle: '#242424',
-        accentOrange: '#f97316', accentBlue: '#3b82f6', textMain: '#e5e7eb', textMuted: '#9ca3af',
-        borderRadius: 2, fontSize: 11
-      },
-      'midnight-blue': {
-        bgDarkest: '#0c1218', bgDark: '#131c26', bgPanel: '#1a2634', bgViewport: '#1e293b',
-        bgInput: '#0f172a', border: '#25384d', borderSubtle: '#1b2a3a',
-        accentOrange: '#0284c7', accentBlue: '#38bdf8', textMain: '#f1f5f9', textMuted: '#94a3b8',
-        borderRadius: 6, fontSize: 11
-      },
-      'obsidian': {
-        bgDarkest: '#050505', bgDark: '#0e0e0e', bgPanel: '#161616', bgViewport: '#1c1c1c',
-        bgInput: '#080808', border: '#282828', borderSubtle: '#1c1c1c',
-        accentOrange: '#10b981', accentBlue: '#059669', textMain: '#f3f4f6', textMuted: '#6b7280',
-        borderRadius: 4, fontSize: 11
-      },
-      'cyber-amber': {
-        bgDarkest: '#12100e', bgDark: '#1c1917', bgPanel: '#292524', bgViewport: '#2d2825',
-        bgInput: '#171412', border: '#44403c', borderSubtle: '#2e2a27',
-        accentOrange: '#f59e0b', accentBlue: '#d97706', textMain: '#fef3c7', textMuted: '#a8a29e',
-        borderRadius: 4, fontSize: 11
-      }
-    };
-
-    if (presets[presetName]) {
-      this.theme = { ...this.theme, ...presets[presetName] };
-      this.applyTheme();
-      this.saveSettings();
-      this.syncModalInputs();
-    }
-  }
-
   syncModalInputs() {
     const colorProps = ['bgViewport', 'bgPanel', 'bgDarkest', 'bgDark', 'accentOrange', 'accentBlue', 'border', 'textMain'];
     colorProps.forEach((prop) => {
@@ -714,6 +905,8 @@ export class UIEditor {
       if (rng) rng.value = this.theme[prop];
       if (valEl) valEl.textContent = `${this.theme[prop]}px`;
     });
+
+    this.renderThemePresets();
   }
 
   openModal() {
