@@ -171,12 +171,12 @@ export class UIManager {
       if (btnIcon) btnIcon.textContent = '💎';
       if (btnLabel) btnLabel.textContent = 'Vidro';
       
-      // Update Three.js Grid & Background for OpenCode Underground Theme
+      // Update Three.js Grid & Background for OpenCode Theme (Pitch Black + Crisp White Grid)
       if (this.engine && this.engine.scene) {
-        this.engine.scene.background = new THREE.Color(0x06070a);
+        this.engine.scene.background = new THREE.Color(0x0a0b0e);
         if (this.engine.grid) {
-          this.engine.grid.material.color.set(0x00f0ff);
-          this.engine.grid.material.opacity = 0.30;
+          this.engine.grid.material.color.set(0xffffff);
+          this.engine.grid.material.opacity = 0.16;
           this.engine.grid.material.transparent = true;
         }
       }

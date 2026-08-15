@@ -1731,8 +1731,8 @@ body.theme-opencode .menu-btn {
 
 body.theme-opencode .menu-btn:hover {
   background: #202228 !important;
-  border-color: #3b82f6 !important;
-  color: #f8fafc !important;
+  border-color: #ffffff !important;
+  color: #ffffff !important;
 }
 
 /* Header Mode Tabs — Sleek CLI Selector */
@@ -1755,20 +1755,20 @@ body.theme-opencode .mode-tab {
 }
 
 body.theme-opencode .mode-tab:hover {
-  color: #f8fafc !important;
+  color: #ffffff !important;
   background: #1c1d22 !important;
 }
 
 body.theme-opencode .mode-tab.active {
   background: #23252c !important;
-  border-color: #3b82f6 !important;
-  color: #f8fafc !important;
+  border-color: #ffffff !important;
+  color: #ffffff !important;
   font-weight: 700 !important;
-  box-shadow: inset 2px 0 0 0 #3b82f6 !important;
+  box-shadow: inset 2px 0 0 0 #ffffff !important;
 }
 
 body.theme-opencode .mode-key {
-  color: #60a5fa !important;
+  color: #ffffff !important;
   font-weight: 800 !important;
 }
 
@@ -1783,14 +1783,14 @@ body.theme-opencode .stat-badge {
 }
 
 body.theme-opencode #stat-fps {
-  color: #60a5fa !important;
+  color: #ffffff !important;
 }
 
 body.theme-opencode .diag-header-btn {
   background: #16171b !important;
   border: 1px solid #24262d !important;
-  border-left: 2.5px solid #3b82f6 !important;
-  color: #f8fafc !important;
+  border-left: 2.5px solid #ffffff !important;
+  color: #ffffff !important;
   border-radius: 4px !important;
   box-shadow: none !important;
   font-family: 'JetBrains Mono', monospace !important;
@@ -1799,14 +1799,14 @@ body.theme-opencode .diag-header-btn {
 
 body.theme-opencode .diag-header-btn:hover {
   background: #202228 !important;
-  border-color: #3b82f6 !important;
+  border-color: #ffffff !important;
 }
 
 body.theme-opencode .theme-toggle-btn {
   background: #16171b !important;
   border: 1px solid #24262d !important;
-  border-left: 2.5px solid #3b82f6 !important;
-  color: #f8fafc !important;
+  border-left: 2.5px solid #ffffff !important;
+  color: #ffffff !important;
   border-radius: 4px !important;
   font-family: 'JetBrains Mono', monospace !important;
   font-size: 10.5px !important;
@@ -1815,6 +1815,7 @@ body.theme-opencode .theme-toggle-btn {
 
 body.theme-opencode .theme-toggle-btn:hover {
   background: #202228 !important;
+  border-color: #ffffff !important;
 }
 
 /* 3D Viewport Area */
@@ -1840,7 +1841,7 @@ body.theme-opencode .left-toolbar {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   border: 1px solid #282a30 !important;
-  border-left: 3px solid #58a6ff !important;
+  border-left: 3px solid #ffffff !important;
   border-radius: 4px !important;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.85) !important;
   padding: 8px 14px 6px 14px !important;
@@ -1882,15 +1883,15 @@ body.theme-opencode .tool-btn {
 
 body.theme-opencode .tool-btn:hover {
   background: #202228 !important;
-  border-color: #58a6ff !important;
-  color: #f8fafc !important;
+  border-color: #ffffff !important;
+  color: #ffffff !important;
 }
 
 body.theme-opencode .tool-btn.active {
   background: #242730 !important;
-  border: 1px solid #58a6ff !important;
-  color: #58a6ff !important;
-  box-shadow: 0 0 8px rgba(88, 166, 255, 0.4) !important;
+  border: 1px solid #ffffff !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.3) !important;
 }
 
 /* OpenCode Dock Hints Row */
@@ -1914,7 +1915,7 @@ body.theme-opencode .toolbar-dock-hints .hint-item {
 }
 
 body.theme-opencode .toolbar-dock-hints .hint-key {
-  color: #f8fafc !important;
+  color: #ffffff !important;
   font-weight: 700 !important;
 }
 
@@ -1922,14 +1923,14 @@ body.theme-opencode .toolbar-dock-hints .hint-label {
   color: #6e7681 !important;
 }
 
-/* OpenCode Viewport Header Bar — Charcoal Bar with Blue Accent */
+/* OpenCode Viewport Header Bar — Charcoal Bar with White Accent */
 body.theme-opencode .viewport-header-bar {
   left: 14px !important;
   background: #16171b !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   border: 1px solid #24262d !important;
-  border-left: 3px solid #3b82f6 !important;
+  border-left: 3px solid #ffffff !important;
   border-radius: 4px !important;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.7) !important;
 }
@@ -1938,7 +1939,7 @@ body.theme-opencode .mode-pill {
   background: #121317 !important;
   border: 1px solid #24262d !important;
   border-radius: 3px !important;
-  color: #f8fafc !important;
+  color: #ffffff !important;
   font-family: 'JetBrains Mono', monospace !important;
   box-shadow: none !important;
 }
@@ -1957,13 +1958,13 @@ body.theme-opencode .mesh-sub-btn {
 
 body.theme-opencode .mesh-sub-btn:hover {
   background: #1c1d22 !important;
-  color: #f8fafc !important;
+  color: #ffffff !important;
 }
 
 body.theme-opencode .mesh-sub-btn.active {
   background: #242730 !important;
-  border: 1px solid #3b82f6 !important;
-  color: #60a5fa !important;
+  border: 1px solid #ffffff !important;
+  color: #ffffff !important;
   box-shadow: none !important;
 }
 
@@ -1982,13 +1983,13 @@ body.theme-opencode .v-header-btn {
 
 body.theme-opencode .v-header-btn:hover {
   background: #202228 !important;
-  color: #f8fafc !important;
+  color: #ffffff !important;
 }
 
 body.theme-opencode .v-header-btn.active {
   background: #242730 !important;
-  border-color: #3b82f6 !important;
-  color: #60a5fa !important;
+  border-color: #ffffff !important;
+  color: #ffffff !important;
 }
 
 body.theme-opencode .shading-group {
@@ -2000,16 +2001,16 @@ body.theme-opencode .shading-group {
 
 body.theme-opencode .shading-icon-btn.active {
   background: #242730 !important;
-  box-shadow: 0 0 6px rgba(59, 130, 246, 0.4) !important;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.4) !important;
 }
 
-/* OpenCode Right Sidebar — Charcoal Card with Blue Accent */
+/* OpenCode Right Sidebar — Charcoal Card with White Accent */
 body.theme-opencode .right-sidebar {
   background: #16171b !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   border: 1px solid #24262d !important;
-  border-left: 3px solid #3b82f6 !important;
+  border-left: 3px solid #ffffff !important;
   border-radius: 4px !important;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.7) !important;
 }
@@ -2018,7 +2019,7 @@ body.theme-opencode .outliner-header,
 body.theme-opencode .properties-header {
   background: #121317 !important;
   border-bottom: 1px solid #24262d !important;
-  color: #f8fafc !important;
+  color: #ffffff !important;
   font-family: 'JetBrains Mono', monospace !important;
   font-size: 11px !important;
   font-weight: 700 !important;
@@ -2031,25 +2032,25 @@ body.theme-opencode .outliner-item:hover {
 
 body.theme-opencode .outliner-item.selected {
   background: #232630 !important;
-  border: 1px solid #3b82f6 !important;
-  color: #f8fafc !important;
+  border: 1px solid #ffffff !important;
+  color: #ffffff !important;
 }
 
 body.theme-opencode .add-prim-btn {
-  background: #3b82f6 !important;
-  color: #fff !important;
+  background: #ffffff !important;
+  color: #000000 !important;
   font-family: 'JetBrains Mono', monospace !important;
   border-radius: 3px !important;
   font-weight: 700 !important;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4) !important;
+  box-shadow: 0 2px 8px rgba(255, 255, 255, 0.3) !important;
 }
 
 body.theme-opencode .add-prim-btn:hover {
-  background: #2563eb !important;
+  background: #e2e8f0 !important;
 }
 
 body.theme-opencode .category-header {
-  color: #60a5fa !important;
+  color: #ffffff !important;
   font-family: 'JetBrains Mono', monospace !important;
   font-size: 10.5px !important;
   font-weight: 700 !important;
@@ -2063,21 +2064,21 @@ body.theme-opencode .axis-field {
 }
 
 body.theme-opencode .axis-field:focus-within {
-  border-color: #3b82f6 !important;
-  box-shadow: 0 0 8px rgba(59, 130, 246, 0.35) !important;
+  border-color: #ffffff !important;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.35) !important;
 }
 
 body.theme-opencode .axis-val {
-  color: #f8fafc !important;
+  color: #ffffff !important;
   font-family: 'JetBrains Mono', monospace !important;
 }
 
 body.theme-opencode .sidebar-toggle-pill {
   background: #141519 !important;
   border: 1px solid #24262d !important;
-  border-left: 2px solid #3b82f6 !important;
+  border-left: 2px solid #ffffff !important;
   border-radius: 4px !important;
-  color: #f8fafc !important;
+  color: #ffffff !important;
   font-family: 'JetBrains Mono', monospace !important;
   box-shadow: none !important;
 }
@@ -2086,9 +2087,9 @@ body.theme-opencode .viewport-sidebar-tab {
   background: #16171b !important;
   border: 1px solid #24262d !important;
   border-right: none !important;
-  border-left: 3px solid #3b82f6 !important;
+  border-left: 3px solid #ffffff !important;
   border-radius: 4px 0 0 4px !important;
-  color: #f8fafc !important;
+  color: #ffffff !important;
   font-family: 'JetBrains Mono', monospace !important;
 }
 
@@ -2098,7 +2099,7 @@ body.theme-opencode .operator-panel {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   border: 1px solid #24262d !important;
-  border-left: 3px solid #3b82f6 !important;
+  border-left: 3px solid #ffffff !important;
   border-radius: 4px !important;
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.8) !important;
 }
@@ -2106,12 +2107,12 @@ body.theme-opencode .operator-panel {
 body.theme-opencode .operator-header {
   background: #121317 !important;
   border-bottom: 1px solid #24262d !important;
-  color: #f8fafc !important;
+  color: #ffffff !important;
   font-family: 'JetBrains Mono', monospace !important;
 }
 
 body.theme-opencode .operator-title {
-  color: #60a5fa !important;
+  color: #ffffff !important;
   font-family: 'JetBrains Mono', monospace !important;
 }
 
@@ -2119,19 +2120,19 @@ body.theme-opencode .operator-input {
   background: #101114 !important;
   border: 1px solid #24262d !important;
   border-radius: 3px !important;
-  color: #f8fafc !important;
+  color: #ffffff !important;
   font-family: 'JetBrains Mono', monospace !important;
 }
 
 body.theme-opencode .operator-input:focus {
-  border-color: #3b82f6 !important;
+  border-color: #ffffff !important;
 }
 
 /* OpenCode Camera Gizmo Bar */
 body.theme-opencode .camera-gizmo-bar {
   background: #16171b !important;
   border: 1px solid #24262d !important;
-  border-left: 2.5px solid #3b82f6 !important;
+  border-left: 2.5px solid #ffffff !important;
   border-radius: 4px !important;
   box-shadow: none !important;
 }
@@ -2146,8 +2147,8 @@ body.theme-opencode .cam-btn {
 
 body.theme-opencode .cam-btn:hover {
   background: #202228 !important;
-  border-color: #3b82f6 !important;
-  color: #f8fafc !important;
+  border-color: #ffffff !important;
+  color: #ffffff !important;
 }
 
 /* OpenCode Status Bar — Matching Bottom of OpenCode */
@@ -2176,7 +2177,7 @@ body.theme-opencode .key-hint {
 body.theme-opencode .key-hint kbd {
   background: transparent !important;
   border: none !important;
-  color: #f8fafc !important;
+  color: #ffffff !important;
   font-family: 'JetBrains Mono', monospace !important;
   font-weight: 700 !important;
   font-size: 10px !important;
@@ -2200,7 +2201,7 @@ body.theme-opencode .blender-right-click-menu {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   border: 1px solid #24262d !important;
-  border-left: 3px solid #3b82f6 !important;
+  border-left: 3px solid #ffffff !important;
   border-radius: 4px !important;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.85) !important;
 }
@@ -2209,7 +2210,7 @@ body.theme-opencode .context-menu-header,
 body.theme-opencode .rc-menu-header {
   background: #121317 !important;
   border-bottom: 1px solid #24262d !important;
-  color: #60a5fa !important;
+  color: #ffffff !important;
   font-family: 'JetBrains Mono', monospace !important;
   font-weight: 700 !important;
 }
@@ -2229,8 +2230,8 @@ body.theme-opencode .context-menu-action:hover,
 body.theme-opencode .menu-dropdown-item:hover,
 body.theme-opencode .rc-menu-item:hover {
   background: #202228 !important;
-  border-color: #3b82f6 !important;
-  color: #60a5fa !important;
+  border-color: #ffffff !important;
+  color: #ffffff !important;
 }
 
 body.theme-opencode .diag-card {
@@ -2243,7 +2244,7 @@ body.theme-opencode .diag-card {
 body.theme-opencode .diag-banner {
   background: #12141a !important;
   border: 1px solid #24262d !important;
-  border-left: 3px solid #3b82f6 !important;
+  border-left: 3px solid #ffffff !important;
 }
 
 /* Logo Switcher */
