@@ -185,6 +185,21 @@ O canvas ganhou ferramentas de precisão estilo CorelDRAW/Illustrator:
   **fixo no lugar** (seleciona, mas não se mexe). O objeto só passa a se
   mover depois que o mouse **arrasta além de ~4px** — sem deslocamentos
   acidentais no clique.
+- **Sistema de ancoragem (duplo clique, sem Shift)**: na ferramenta de
+  alinhar, escolha um elemento como **referência (âncora)** — basta dar
+  **duplo clique** no elemento (não precisa segurar Shift). Ele é marcado
+  com um **contorno violeta vibrante** e vira o ponto de referência: ao
+  aplicar QUALQUER opção de alinhamento (esquerda, centro, direita, topo,
+  base…), os demais selecionados respeitam a posição da âncora — ela fica
+  parada e os outros se alinham a ela (o exemplo: cubo azul selecionado
+  primeiro, vermelho por último; duplo clique no vermelho faz o azul se
+  alinhar à posição do vermelho). Vale para todas as opções de
+  alinhamento e para qualquer quantidade de elementos selecionados. A
+  âncora **NÃO é consumida** ao alinhar: o contorno violeta permanece para
+  você fazer 2 ou mais alinhamentos/movimentos com a mesma referência, e
+  **clicar fora da seleção não remove o violeta** (a âncora continua
+  marcada). Para remover: duplo clique de novo no elemento ou o botão
+  "Remover ancora" no painel Inspetor.
 - **Alinhar ao Conjunto (distâncias uniformes)**: no inspetor, o alvo de
   alinhamento agora tem a opção **"Conjunto"** — a referência passa a ser
   o **bounding box dos vizinhos** (elementos visíveis fora da seleção), não
@@ -298,6 +313,14 @@ finais de cada elemento.
   discreto** aparece no canto onde as réguas se cruzam. Regra central:
   **régua bloqueada ≠ régua desativada** — o bloqueio impede a *edição* da
   régua, nunca o uso das referências que ela já estabeleceu.
+- **Ocultar/mostrar linhas guia**: o menu **Exibir → Linhas guia** (ou o
+  botão de **linhas tracejadas** na barra de ferramentas principal, ao
+  lado do botão da Grade) oculta/exibe as linhas guia sobre o canvas — as
+  guias fixas das réguas e as guias inteligentes de encaixe (magenta/
+  laranja/ciano) deixam de ser desenhadas. Ocultar **NÃO desliga o snap**
+  (regra igual à da Grade): as guias continuam referência de encaixe,
+  só param de ser vistas. O botão permanece sempre no mesmo lugar da
+  barra; clicar de novo retorna as linhas à tela.
 - **Réguas sincronizadas**: as réguas horizontal e vertical agora mostram
   **coordenadas de projeto** (acompanham zoom e pan) em vez de pixels da
   janela, com ticks em passos "bonitos" (1/2/5 ×10^n) e números também na

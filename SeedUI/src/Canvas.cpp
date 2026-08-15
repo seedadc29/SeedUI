@@ -832,7 +832,8 @@ namespace seedui
                     float zoom, float panX, float panY,
                     float unidadeEmPixels,
                     const char* powerClipEmEdicaoId,
-                    const char* powerClipSelecaoDiretaId)
+                    const char* powerClipSelecaoDiretaId,
+                    const char* elementoAncoraId)
     {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         const ImVec2 min = ImGui::GetWindowPos();
@@ -1133,6 +1134,17 @@ namespace seedui
                     const ImVec2 ia(origin.x + bx0 * viewScale, origin.y + by0 * viewScale);
                     const ImVec2 ib(origin.x + bx1 * viewScale, origin.y + by1 * viewScale);
                     dl->AddRect(ia, ib, IM_COL32(255, 255, 255, 45), 0.0f, 0, 1.0f);
+                    // Âncora na seleção conjunta: caixa violeta brilhante
+                    // (a caixa azul conjunta continua por cima de todos).
+                    if (elementoAncoraId && selectedId == elementoAncoraId)
+                    {
+                        const ImU32 anchorGlow = ImGui::ColorConvertFloat4ToU32(
+                            Theme::Hex(0xbb4dff, 0.35f));
+                        const ImU32 anchorCol = ImGui::ColorConvertFloat4ToU32(
+                            Theme::Hex(0xbb4dff, 1.0f));
+                        dl->AddRect(ia, ib, anchorGlow, 0.0f, 0, 5.0f);
+                        dl->AddRect(ia, ib, anchorCol, 0.0f, 0, 2.0f);
+                    }
                     any = true;
                 }
                 if (any && uMaxX > uMinX && uMaxY > uMinY)
@@ -1236,7 +1248,32 @@ namespace seedui
                     RoundedRectPath(dl, a, b, selectionRadii);
                     dl->PathStroke(selectionLine, 1.0f, ImDrawFlags_Closed); // 1px translúcido = fio fino
                 }
-                if (!primary || selected->bloqueado) continue;
+                // ÂNCORA de alinhamento: contorno violeta vibrante (mais
+                // grosso e brilhante) POR CIMA do contorno normal — indica
+                // que o elemento foi escolhido como referência (Shift+duplo
+                // clique), até a ação de alinhamento ser efetuada.
+                const bool anchor = elementoAncoraId && selectedId == elementoAncoraId;
+                if (anchor)
+                {
+                    const ImU32 anchorCol = ImGui::ColorConvertFloat4ToU32(
+                        Theme::Hex(0xbb4dff, 1.0f));
+                    const ImU32 anchorGlow = ImGui::ColorConvertFloat4ToU32(
+                        Theme::Hex(0xbb4dff, 0.35f));
+                    if (rotated)
+                    {
+                        const ImVec2 quad[4] = { ptTL, ptTR, ptBR, ptBL };
+                        dl->AddPolyline(quad, 4, anchorGlow, ImDrawFlags_Closed, 5.0f);
+                        dl->AddPolyline(quad, 4, anchorCol, ImDrawFlags_Closed, 2.0f);
+                    }
+                    else
+                    {
+                        const ImVec2 a = ptTL;
+                        const ImVec2 b = ptBR;
+                        dl->AddRect(a, b, anchorGlow, 0.0f, 0, 5.0f);
+                        dl->AddRect(a, b, anchorCol, 0.0f, 0, 2.0f);
+                    }
+                }
+                if ((!primary && !anchor) || selected->bloqueado) continue;
 
                 // Caminho (caneta): desenha os NÓS editáveis (sem contorno
                 // laranja e sem alças de tamanho — o caminho é editado pelos
@@ -1447,6 +1484,55 @@ namespace seedui
                 }
 
             }
+            }
+        }
+        // Âncora FORA da seleção (ex.: após clicar fora): o contorno
+        // violeta permanece visível — a referência de alinhamento continua
+        // marcada até ser removida (duplo clique de novo ou botão).
+        if (elementoAncoraId && elementoAncoraId[0] &&
+            (!elementosSelecionados ||
+             std::find(elementosSelecionados->begin(),
+                       elementosSelecionados->end(),
+                       std::string(elementoAncoraId)) ==
+                 elementosSelecionados->end()))
+        {
+            const Element* anchor = FindElement(modo.raiz, elementoAncoraId);
+            if (anchor && anchor->visivel)
+            {
+                const float ax = anchor->transformacao.value("x", 0.0f);
+                const float ay = anchor->transformacao.value("y", 0.0f);
+                const float aw = anchor->transformacao.value("largura", 160.0f);
+                const float ah = anchor->transformacao.value("altura", 32.0f);
+                const float arot = Geo::ElementRotation(*anchor);
+                float apx = 0.0f, apy = 0.0f;
+                Geo::ElementPivot(*anchor, apx, apy);
+                const float arad = Geo::DegToRad(arot);
+                auto aDocToScreen = [&](float docX, float docY) -> ImVec2
+                {
+                    if (arot != 0.0f)
+                        Geo::RotatePoint(docX, docY, apx, apy, arad);
+                    return ImVec2(origin.x + docX * viewScale,
+                                  origin.y + docY * viewScale);
+                };
+                const ImVec2 aTL = aDocToScreen(ax, ay);
+                const ImVec2 aTR = aDocToScreen(ax + aw, ay);
+                const ImVec2 aBR = aDocToScreen(ax + aw, ay + ah);
+                const ImVec2 aBL = aDocToScreen(ax, ay + ah);
+                const ImU32 anchorCol = ImGui::ColorConvertFloat4ToU32(
+                    Theme::Hex(0xbb4dff, 1.0f));
+                const ImU32 anchorGlow = ImGui::ColorConvertFloat4ToU32(
+                    Theme::Hex(0xbb4dff, 0.35f));
+                if (arot != 0.0f)
+                {
+                    const ImVec2 quad[4] = { aTL, aTR, aBR, aBL };
+                    dl->AddPolyline(quad, 4, anchorGlow, ImDrawFlags_Closed, 5.0f);
+                    dl->AddPolyline(quad, 4, anchorCol, ImDrawFlags_Closed, 2.0f);
+                }
+                else
+                {
+                    dl->AddRect(aTL, aBR, anchorGlow, 0.0f, 0, 5.0f);
+                    dl->AddRect(aTL, aBR, anchorCol, 0.0f, 0, 2.0f);
+                }
             }
         }
         if (recortarAlcasNaMascara)

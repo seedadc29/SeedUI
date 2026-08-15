@@ -37,6 +37,7 @@ namespace seedui
             { IconId::Pan,       "hand" },
             { IconId::Color,     "eyedropper" },
             { IconId::Grid,      "grid-four" },
+            { IconId::Guide,     "guide" },
             { IconId::New,       "file-plus" },
             { IconId::Open,      "folder-open" },
             { IconId::Save,      "floppy-disk" },

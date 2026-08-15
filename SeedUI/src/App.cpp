@@ -2404,17 +2404,37 @@ namespace seedui
             if (Element* element = Project::ResolverId(mode, mSelectedElementId))
                 if (element->visivel) selected.push_back(element);
 
+        // ÂNCORA de alinhamento (duplo clique, sem precisar de Shift): o
+        // elemento âncora é a referência das operações — os demais
+        // selecionados respeitam a posição dele, e ele não se move. Vale
+        // para TODAS as opções de alinhamento. A âncora NÃO é consumida ao
+        // efetuar a ação (o contorno violeta permanece para múltiplos
+        // movimentos) e não é limpa ao clicar fora da seleção — só sai por
+        // duplo clique de novo ou pelo botão "Remover ancora".
+        Element* anchorElement = nullptr;
+        if (!mAnchorElementId.empty())
+        {
+            Element* candidate = Project::ResolverId(mode, mAnchorElementId);
+            if (candidate && candidate->visivel)
+                anchorElement = candidate;
+            else
+                mAnchorElementId.clear(); // elemento não existe mais
+        }
+
         const bool singleGroupToScreen = selected.size() == 1 &&
                                          selected.front()->tipo == "grupo";
-        const int alignTarget = singleGroupToScreen ? 2 : mAlignTarget;
+        const int alignTarget = anchorElement ? 1 : (singleGroupToScreen ? 2 : mAlignTarget);
 
-        if (selected.empty() ||
-            (alignTarget == 0 && selected.size() < 2) ||
-            (alignTarget == 1 && selected.size() < 2))
+        // Com âncora, basta UM elemento selecionado: a âncora (mesmo fora
+        // da seleção) é a referência e não se move.
+        const bool needsTwo = alignTarget == 1 ? !anchorElement : (alignTarget == 0);
+        if (selected.empty() || (needsTwo && selected.size() < 2))
         {
             mStatusMsg = alignTarget == 2
                 ? "Selecione um elemento para alinhar a tela"
-                : "Selecione pelo menos dois elementos para alinhar";
+                : (anchorElement
+                       ? "Selecione um elemento para alinhar a ancora"
+                       : "Selecione pelo menos dois elementos para alinhar");
             mStatusMsgUntil = GetTime() + 4.0;
             return;
         }
@@ -2432,7 +2452,9 @@ namespace seedui
             bottom = std::max(bottom, y + h);
         }
 
-        Element* primary = Project::ResolverId(mode, mSelectedElementId);
+        Element* primary = anchorElement
+            ? anchorElement // âncora manda no alinhamento (violeta)
+            : Project::ResolverId(mode, mSelectedElementId);
         if (alignTarget == 1 && (!primary || !primary->visivel))
         {
             mStatusMsg = "O elemento principal da selecao nao esta disponivel";
@@ -2593,6 +2615,8 @@ namespace seedui
         {
             mStatusMsg = "Os elementos ja estao alinhados";
         }
+        // A âncora NÃO é consumida: permanece violeta para permitir vários
+        // alinhamentos/movimentos com a mesma referência.
         mStatusMsgUntil = GetTime() + 4.0;
     }
 
@@ -3957,6 +3981,7 @@ namespace seedui
                     mSelectedElementId = mSelectedElementIds.empty()
                         ? std::string()
                         : mSelectedElementIds.back();
+                    if (mAnchorElementId == hit->id) mAnchorElementId.clear();
                 }
             }
             else if (hit)
@@ -3974,6 +3999,26 @@ namespace seedui
                     mSelectedElementIds.push_back(hit->id);
                 }
                 mSelectedElementId = hit->id;
+                // DUPLO clique (sem Shift) num elemento selecionado: define
+                // a ÂNCORA de alinhamento — não precisa segurar Shift. O
+                // primeiro clique do par mantém a seleção múltipla; o
+                // segundo marca a referência violeta.
+                if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+                {
+                    if (mAnchorElementId == hit->id)
+                    {
+                        mAnchorElementId.clear();
+                        mStatusMsg = "Âncora de alinhamento removida";
+                    }
+                    else
+                    {
+                        mAnchorElementId = hit->id;
+                        mStatusMsg = "Âncora de alinhamento definida (contorno violeta) — "
+                                     "use uma opção de alinhamento";
+                    }
+                    keepHitForDrag = false;
+                    mStatusMsgUntil = GetTime() + 5.0;
+                }
             }
             else
             {
@@ -3983,6 +4028,9 @@ namespace seedui
                 {
                     mSelectedElementIds.clear();
                     mSelectedElementId.clear();
+                    // Âncora NÃO é limpa ao clicar fora: a referência
+                    // violeta permanece até ser removida (duplo clique de
+                    // novo ou o botão "Remover ancora").
                 }
                 mCanvasMarquee = true;
                 mCanvasMarqueeAdditive = additive;
@@ -4098,6 +4146,17 @@ namespace seedui
             const float threshold = 4.0f / mCanvasZoom;
             if (dx * dx + dy * dy > threshold * threshold)
             {
+                // Se o elemento clicado faz parte de uma seleção múltipla,
+                // clona TODOS os selecionados (a cópia anda como conjunto);
+                // senão, clona apenas o elemento clicado.
+                std::vector<std::string> idsToClone;
+                if (mSelectedElementIds.size() > 1 &&
+                    std::find(mSelectedElementIds.begin(), mSelectedElementIds.end(),
+                              mRightDragElementId) != mSelectedElementIds.end())
+                    idsToClone = mSelectedElementIds;
+                else
+                    idsToClone = { mRightDragElementId };
+
                 if (Element* origA = Project::ResolverId(mode, mRightDragElementId))
                 {
                     mRightDragSourceA.id = origA->id;
@@ -4108,33 +4167,83 @@ namespace seedui
                     mRightDragSourceA.h = origA->transformacao.value("altura", 32.0f);
                 }
 
-                const std::string cloneId =
-                    Project::ClonarElemento(mode, mProject, mRightDragElementId);
-                if (!cloneId.empty())
+                // Cria os clones. Um único elemento usa a inserção no lugar
+                // (preserva contêiner/ordem); múltiplos usam o mesmo caminho
+                // do Ctrl+D (cópia profunda com IDs novos, sem duplicar
+                // filhos cujo pai também está selecionado).
+                std::vector<std::string> cloneIds;
+                if (idsToClone.size() == 1)
+                {
+                    const std::string cloneId =
+                        Project::ClonarElemento(mode, mProject, idsToClone.front());
+                    if (!cloneId.empty()) cloneIds.push_back(cloneId);
+                }
+                else
+                {
+                    const std::vector<Element> copies =
+                        Project::CopiarElementos(mode, idsToClone);
+                    if (!copies.empty())
+                        cloneIds = Project::ColarElementosOffset(
+                            mProject, mode, copies, 0.0f, 0.0f);
+                }
+                if (!cloneIds.empty())
                 {
                     mCloneDragging = true;
-                    mSelectedElementIds = { cloneId };
-                    mSelectedElementId = cloneId;
+                    mSelectedElementIds = cloneIds;
+                    // O "ativo" da seleção é o clone do elemento clicado
+                    // (base do delta do Smart Duplicate ao soltar).
+                    size_t clickedIndex = 0;
+                    for (size_t i = 0; i < idsToClone.size(); ++i)
+                        if (idsToClone[i] == mRightDragElementId) { clickedIndex = i; break; }
+                    mSelectedElementId =
+                        cloneIds[std::min(clickedIndex, cloneIds.size() - 1)];
                     mSelectedCornerMask = 0;
-                    if (Element* clone = Project::ResolverId(mode, cloneId))
+                    mCanvasDragMode = 1;
+                    mCanvasDragMouseX = mouseX;
+                    mCanvasDragMouseY = mouseY;
+                    mCanvasPrevDX = 0.0f;
+                    mCanvasPrevDY = 0.0f;
+                    mCanvasGroupStarts.clear();
+                    // Caixa conjunta dos clones (bounds combinados) para o
+                    // arrasto do conjunto.
+                    float minX = FLT_MAX, minY = FLT_MAX;
+                    float maxX = -FLT_MAX, maxY = -FLT_MAX;
+                    for (const std::string& id : cloneIds)
                     {
-                        mCanvasDragMode = 1;
-                        mCanvasDragMouseX = mouseX;
-                        mCanvasDragMouseY = mouseY;
-                        mCanvasPrevDX = 0.0f;
-                        mCanvasPrevDY = 0.0f;
-                        mCanvasDragX = clone->transformacao.value("x", 0.0f);
-                        mCanvasDragY = clone->transformacao.value("y", 0.0f);
-                        mCanvasDragW = clone->transformacao.value("largura", 160.0f);
-                        mCanvasDragH = clone->transformacao.value("altura", 32.0f);
-                        mCanvasDragRotation = Geo::ElementRotation(*clone);
-                        Geo::ElementPivot(*clone, mCanvasDragPivotX, mCanvasDragPivotY);
-                        mCanvasGroupStarts.clear();
+                        Element* clone = Project::ResolverId(mode, id);
+                        if (!clone) continue;
                         CollectTransformStarts(*clone, mCanvasGroupStarts);
-                        mProjectDirty = true;
-                        mStatusMsg = "Clone criado — arraste para posicionar";
-                        mStatusMsgUntil = GetTime() + 4.0;
+                        float bx0 = 0.0f, by0 = 0.0f, bx1 = 0.0f, by1 = 0.0f;
+                        Geo::RotatedAABB(*clone, bx0, by0, bx1, by1);
+                        minX = std::min(minX, bx0);
+                        minY = std::min(minY, by0);
+                        maxX = std::max(maxX, bx1);
+                        maxY = std::max(maxY, by1);
                     }
+                    if (maxX > minX && maxY > minY)
+                    {
+                        mCanvasDragX = minX;
+                        mCanvasDragY = minY;
+                        mCanvasDragW = maxX - minX;
+                        mCanvasDragH = maxY - minY;
+                    }
+                    else if (Element* anchor =
+                                 Project::ResolverId(mode, mSelectedElementId))
+                    {
+                        mCanvasDragX = anchor->transformacao.value("x", 0.0f);
+                        mCanvasDragY = anchor->transformacao.value("y", 0.0f);
+                        mCanvasDragW = anchor->transformacao.value("largura", 160.0f);
+                        mCanvasDragH = anchor->transformacao.value("altura", 32.0f);
+                    }
+                    mCanvasDragRotation = 0.0f;
+                    if (Element* anchor =
+                            Project::ResolverId(mode, mSelectedElementId))
+                        Geo::ElementPivot(*anchor, mCanvasDragPivotX, mCanvasDragPivotY);
+                    mProjectDirty = true;
+                    mStatusMsg = cloneIds.size() > 1
+                        ? "Conjunto clonado — arraste para posicionar"
+                        : "Clone criado — arraste para posicionar";
+                    mStatusMsgUntil = GetTime() + 4.0;
                 }
             }
         }
@@ -4238,8 +4347,8 @@ namespace seedui
 
             // CLONE DURANTE O ARRASTO (fork): o elemento é movido só com o
             // botão esquerdo; a qualquer momento, apertar o botão direito faz
-            // o ORIGINAL voltar ao ponto de partida e o CLONE assumir o
-            // arrasto — o clone segue o cursor até o usuário soltar.
+            // os ORIGINAIS voltarem ao ponto de partida e os CLONES assumirem
+            // o arrasto — a cópia segue o cursor até o usuário soltar.
             if (mCanvasDragMode == 1 && !mCanvasGroupStarts.empty() &&
                 ImGui::IsMouseDown(ImGuiMouseButton_Left) &&
                 ImGui::IsMouseClicked(ImGuiMouseButton_Right))
@@ -4260,9 +4369,30 @@ namespace seedui
                     mCloneForkSourceA.h = origEl->transformacao.value("altura", 32.0f);
                 }
 
-                const std::string cloneId =
-                    Project::ClonarElemento(mode, mProject, mSelectedElementId);
-                if (!cloneId.empty())
+                // Clona TODOS os elementos do conjunto em arrasto (seleção
+                // múltipla inclusive) — o conjunto clonado continua o arrasto.
+                std::vector<std::string> idsToClone;
+                idsToClone.reserve(mCanvasGroupStarts.size());
+                for (const CanvasTransformStart& st : mCanvasGroupStarts)
+                    idsToClone.push_back(st.id);
+                if (idsToClone.empty()) idsToClone.push_back(mSelectedElementId);
+
+                std::vector<std::string> cloneIds;
+                if (idsToClone.size() == 1)
+                {
+                    const std::string cloneId =
+                        Project::ClonarElemento(mode, mProject, idsToClone.front());
+                    if (!cloneId.empty()) cloneIds.push_back(cloneId);
+                }
+                else
+                {
+                    const std::vector<Element> copies =
+                        Project::CopiarElementos(mode, idsToClone);
+                    if (!copies.empty())
+                        cloneIds = Project::ColarElementosOffset(
+                            mProject, mode, copies, 0.0f, 0.0f);
+                }
+                if (!cloneIds.empty())
                 {
                     // Original(ais) voltam ao ponto de partida do arrasto.
                     for (const CanvasTransformStart& start : mCanvasGroupStarts)
@@ -4273,12 +4403,18 @@ namespace seedui
                             el->transformacao["y"] = start.y;
                         }
                     }
-                    // O clone assume o arrasto a partir da posição atual
-                    // (o delta volta a zero neste quadro — sem salto).
-                    if (Element* clone = Project::ResolverId(mode, cloneId))
+                    // O clone do elemento ativo assume o arrasto a partir da
+                    // posição atual (o delta volta a zero neste quadro — sem
+                    // salto).
+                    size_t activeIndex = 0;
+                    for (size_t i = 0; i < idsToClone.size(); ++i)
+                        if (idsToClone[i] == mSelectedElementId) { activeIndex = i; break; }
+                    const std::string activeCloneId =
+                        cloneIds[std::min(activeIndex, cloneIds.size() - 1)];
+                    if (Element* clone = Project::ResolverId(mode, activeCloneId))
                     {
-                        mSelectedElementId = cloneId;
-                        mSelectedElementIds = { cloneId };
+                        mSelectedElementId = activeCloneId;
+                        mSelectedElementIds = cloneIds;
                         mSelectedCornerMask = 0;
                         mCanvasDragMouseX = mouseX;
                         mCanvasDragMouseY = mouseY;
@@ -4291,12 +4427,16 @@ namespace seedui
                         mCanvasDragRotation = Geo::ElementRotation(*clone);
                         Geo::ElementPivot(*clone, mCanvasDragPivotX, mCanvasDragPivotY);
                         mCanvasGroupStarts.clear();
-                        CollectTransformStarts(*clone, mCanvasGroupStarts);
+                        for (const std::string& id : cloneIds)
+                        {
+                            if (Element* c = Project::ResolverId(mode, id))
+                                CollectTransformStarts(*c, mCanvasGroupStarts);
+                        }
                         mRightDragArmed = false;
                         mCloneDragging = false;
                         mCloneForked = true;
                         mProjectDirty = true;
-                        mStatusMsg = "Clonando — original voltou ao início; solte para posicionar";
+                        mStatusMsg = "Clonando — originais voltaram ao início; solte para posicionar";
                         mStatusMsgUntil = GetTime() + 4.0;
                     }
                 }
@@ -5734,7 +5874,8 @@ namespace seedui
                            mGridVisible, mWireframeMode,
                            mCanvasZoom, mCanvasPanX, mCanvasPanY, UnitToPixels(),
                            mPowerClipEditFrameId.c_str(),
-                           mPowerClipDirectFrameId.c_str());
+                           mPowerClipDirectFrameId.c_str(),
+                           mAnchorElementId.c_str());
 
                 // Navegação fixa do portal: independe do zoom/pan e aparece
                 // quando um filho foi acessado por Ctrl+clique ou quando o
@@ -5814,8 +5955,8 @@ namespace seedui
                 // (a janela child recorta o desenho à área do canvas).
                 // Guias FIXAS engatadas (forma->guia): laranja, mesma lógica
                 // — feedback do encaixe na régua.
-                if (mGuideSnapX >= 0.0f || mGuideSnapY >= 0.0f ||
-                    mGuideFixedSnapX >= 0.0f || mGuideFixedSnapY >= 0.0f)
+                if (mGuidesVisible && (mGuideSnapX >= 0.0f || mGuideSnapY >= 0.0f ||
+                    mGuideFixedSnapX >= 0.0f || mGuideFixedSnapY >= 0.0f))
                 {
                     ImDrawList* dl = ImGui::GetWindowDrawList();
                     const ImU32 guideColor = ImGui::ColorConvertFloat4ToU32(Theme::SmartGuide);
@@ -5872,7 +6013,7 @@ namespace seedui
             // Preview de espaçamento com Shift (estilo CorelDRAW): traços nos
             // cantos das laterais de cada objeto (ciano) + valor de cada
             // distância — o rótulo PREVISTO (engatado) ganha fundo destacado.
-            if (!mShiftGuides.empty())
+            if (mGuidesVisible && !mShiftGuides.empty())
             {
                 ImDrawList* dl = ImGui::GetWindowDrawList();
                 const ImU32 shiftColor = ImGui::ColorConvertFloat4ToU32(
@@ -6266,6 +6407,8 @@ namespace seedui
                 mRulersLocked = !mRulersLocked;
             if (ImGui::MenuItem("Grade", nullptr, mGridVisible))
                 mGridVisible = !mGridVisible;
+            if (ImGui::MenuItem("Linhas guia", nullptr, mGuidesVisible))
+                mGuidesVisible = !mGuidesVisible;
             if (ImGui::MenuItem("Wireframe (só contornos)", nullptr, mWireframeMode))
                 mWireframeMode = !mWireframeMode;
             if (ImGui::MenuItem("Snap de 8 unidades", nullptr, mSnapEnabled))
@@ -6711,6 +6854,17 @@ namespace seedui
             mGridVisible = !mGridVisible;
         if (gridWasOn) ImGui::PopStyleColor();
         ImGui::SameLine();
+        // Linhas guia visíveis/ocultas: ocultar NÃO desliga o snap (as
+        // guias continuam referência de encaixe, só deixam de ser vistas).
+        const bool guidesWereOn = mGuidesVisible;
+        if (guidesWereOn) ImGui::PushStyleColor(ImGuiCol_Button, Theme::Hex(0x4f8cff, 0.30f));
+        if (IconButton(IconId::Guide, mGuidesVisible
+                                          ? "Guias visíveis · clique para ocultar (snap continua ativo)"
+                                          : "Guias ocultas · clique para mostrar",
+                       button))
+            mGuidesVisible = !mGuidesVisible;
+        if (guidesWereOn) ImGui::PopStyleColor();
+        ImGui::SameLine();
         // Modo wireframe: só contornos (sem preenchimento e sem sombra).
         const bool wireWasOn = mWireframeMode;
         if (wireWasOn) ImGui::PushStyleColor(ImGuiCol_Button, Theme::Hex(0x4f8cff, 0.30f));
@@ -7054,6 +7208,7 @@ namespace seedui
     void App::DesenharGuias()
     {
         // Guias fixas (arrastadas das réguas): linha azul fina sobre o canvas.
+        if (!mGuidesVisible) return; // ocultas: snap continua, desenho some
         if (!mHasProject || (mGuidesH.empty() && mGuidesV.empty())) return;
         ImDrawList* dl = ImGui::GetWindowDrawList();
         const ImVec2 cmin = ImGui::GetWindowPos();
@@ -8179,6 +8334,26 @@ namespace seedui
                   : mAlignTarget == 1 ? "Mantem o elemento principal parado"
                   : mAlignTarget == 2 ? "Usa os limites da tela base"
                                       : "Centraliza no conjunto dos vizinhos (distancias uniformes)");
+                // ÂNCORA de alinhamento (Shift + duplo clique): o elemento
+                // escolhido vira a referência violeta — os demais selecionados
+                // respeitam a posição dele em TODAS as opções de alinhamento.
+                if (!mAnchorElementId.empty())
+                {
+                    ImGui::TextColored(Theme::Hex(0xbb4dff, 1.0f),
+                        "Ancora: elemento selecionado (violeta)");
+                    ImGui::SameLine();
+                    ImGui::PushStyleColor(ImGuiCol_Button, Theme::Hex(0xbb4dff, 0.30f));
+                    if (ImGui::SmallButton("Remover ancora"))
+                        mAnchorElementId.clear();
+                    ImGui::PopStyleColor();
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("Cancela a ancora — o alinhamento volta ao modo normal");
+                }
+                else
+                {
+                    ImGui::TextColored(Theme::TextDisabled,
+                        "Ancora: duplo clique no elemento de referencia (nao precisa de Shift)");
+                }
                 ImGui::Separator();
             }
 

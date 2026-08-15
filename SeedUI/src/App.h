@@ -194,6 +194,7 @@ namespace seedui
         };
         std::string mSelectedElementId;
         std::vector<std::string> mSelectedElementIds;
+        std::string mAnchorElementId; // âncora de alinhamento (duplo clique)
         std::vector<CanvasTransformStart> mCanvasGroupStarts;
         bool mCanvasMarquee = false;
         bool mCanvasMarqueeAdditive = false;
@@ -293,6 +294,7 @@ namespace seedui
         bool mRulersVisible = true;
         bool mRulersLocked = false; // bloqueio da régua (proteção contra edição)
         bool mGridVisible = true;   // ocultar a grade NÃO desliga o snap
+        bool mGuidesVisible = true; // ocultar as linhas guia NÃO desliga o snap
         bool mWireframeMode = false; // modo wireframe (só contornos)
         bool mZoomToMouse = true; // zoom encaminha para o cursor (qualquer controle)
         bool mMarqueeContainOnly = true; // seleção exige cobertura TOTAL do elemento

@@ -20,6 +20,7 @@ namespace seedui
         Pan,
         Color,
         Grid,
+        Guide,
         New,
         Open,
         Save,
