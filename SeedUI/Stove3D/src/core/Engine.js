@@ -78,13 +78,13 @@ export class Engine {
     this.controls.screenSpacePanning = true;
     this.controls.target.set(0, 0, 0);
 
-    // Standard Three.js Action Mapping:
+    // Blender Action Mapping:
     // Left Button = Rotate (0)
-    // Middle Button = Dolly/Zoom (1)
+    // Middle Button = Rotate (0)
     // Right Button = Pan (2)
     this.controls.mouseButtons = {
       LEFT: THREE.MOUSE.ROTATE,
-      MIDDLE: THREE.MOUSE.DOLLY,
+      MIDDLE: THREE.MOUSE.ROTATE,
       RIGHT: THREE.MOUSE.PAN
     };
 
@@ -166,7 +166,7 @@ export class Engine {
   updateNavControls() {
     this.controls.mouseButtons = {
       LEFT: THREE.MOUSE.ROTATE,
-      MIDDLE: THREE.MOUSE.DOLLY,
+      MIDDLE: THREE.MOUSE.ROTATE,
       RIGHT: THREE.MOUSE.PAN
     };
   }
