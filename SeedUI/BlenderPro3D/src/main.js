@@ -6,6 +6,7 @@ import { SceneManager } from './scene/SceneManager.js';
 import { MeshEditor } from './mesh/MeshEditor.js';
 import { BlenderUI } from './ui/BlenderUI.js';
 import { ViewportGizmo } from './ui/ViewportGizmo.js';
+import { UIEditor } from './ui/UIEditor.js';
 
 console.log('🚀 [BlenderPro3D] Inicializando ambiente 3D autêntico Blender 4.1...');
 
@@ -31,9 +32,12 @@ const blenderUI = new BlenderUI(engine, sceneManager, transformManager, meshEdit
 // 7. Initialize Authentic Blender 4.x Viewport Navigation Gizmo Cluster
 const viewportGizmo = new ViewportGizmo(engine);
 
+// 8. Initialize Complete Workspace & UI Customizer (Colors, Sizes, Docking, Pinning)
+const uiEditor = new UIEditor(engine);
+
 // Select default Cube
 if (sceneManager.objects.length > 0) {
   sceneManager.selectObject(sceneManager.objects[0]);
 }
 
-console.log('✨ [BlenderPro3D] Pronto e operacional com Bússola e Botões de Navegação do Blender 4.x!');
+console.log('✨ [BlenderPro3D] Pronto e operacional com Sistema de Customização de Workspace!');
