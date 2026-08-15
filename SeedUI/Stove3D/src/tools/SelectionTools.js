@@ -222,6 +222,7 @@ export class SelectionTools {
    * and all projected screen points for any 3D object.
    */
   getMeshScreenBounds(mesh, rect) {
+    if (!mesh) return null;
     const camera = this.engine.activeCamera;
     const points = [];
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
@@ -242,20 +243,28 @@ export class SelectionTools {
         }
       }
     } else {
-      if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
-      const bbox = mesh.geometry.boundingBox;
+      // General Mesh or Group (e.g. Camera Object, Light, Multi-geometry groups)
+      const box = new THREE.Box3().setFromObject(mesh);
+      if (box.isEmpty()) {
+        const vNDC = mesh.position.clone().project(camera);
+        if (vNDC.z < 1.0) {
+          const sx = (vNDC.x * 0.5 + 0.5) * rect.width;
+          const sy = (-vNDC.y * 0.5 + 0.5) * rect.height;
+          return { minX: sx - 15, maxX: sx + 15, minY: sy - 15, maxY: sy + 15, points: [{ x: sx, y: sy }] };
+        }
+        return null;
+      }
       const corners = [
-        new THREE.Vector3(bbox.min.x, bbox.min.y, bbox.min.z),
-        new THREE.Vector3(bbox.max.x, bbox.min.y, bbox.min.z),
-        new THREE.Vector3(bbox.min.x, bbox.max.y, bbox.min.z),
-        new THREE.Vector3(bbox.max.x, bbox.max.y, bbox.min.z),
-        new THREE.Vector3(bbox.min.x, bbox.min.y, bbox.max.z),
-        new THREE.Vector3(bbox.max.x, bbox.min.y, bbox.max.z),
-        new THREE.Vector3(bbox.min.x, bbox.max.y, bbox.max.z),
-        new THREE.Vector3(bbox.max.x, bbox.max.y, bbox.max.z)
+        new THREE.Vector3(box.min.x, box.min.y, box.min.z),
+        new THREE.Vector3(box.max.x, box.min.y, box.min.z),
+        new THREE.Vector3(box.min.x, box.max.y, box.min.z),
+        new THREE.Vector3(box.max.x, box.max.y, box.min.z),
+        new THREE.Vector3(box.min.x, box.min.y, box.max.z),
+        new THREE.Vector3(box.max.x, box.min.y, box.max.z),
+        new THREE.Vector3(box.min.x, box.max.y, box.max.z),
+        new THREE.Vector3(box.max.x, box.max.y, box.max.z)
       ];
       corners.forEach((c) => {
-        c.applyMatrix4(mesh.matrixWorld);
         const vNDC = c.project(camera);
         if (vNDC.z < 1.0) {
           const sx = (vNDC.x * 0.5 + 0.5) * rect.width;
@@ -269,7 +278,7 @@ export class SelectionTools {
       });
     }
 
-    if (points.length === 0) return null;
+    if (points.length === 0 || minX === Infinity) return null;
     return { minX, maxX, minY, maxY, points };
   }
 
