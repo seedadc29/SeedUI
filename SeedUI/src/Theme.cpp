@@ -1,7 +1,10 @@
 #include "Theme.h"
 
+#include "EmbeddedAssets.h"
 #include "imgui.h"
 #include "raylib.h"
+
+#include <vector>
 
 namespace seedui
 {
@@ -100,6 +103,25 @@ namespace seedui
                     io.Fonts->AddFontFromFileTTF(found, 20.0f);
                     io.FontDefault = base;
                     TraceLog(LOG_INFO, "Fonte Inter carregada: %s", found);
+                    return;
+                }
+            }
+
+            // Sem arquivo em disco: usa a fonte embutida no executavel.
+            static std::vector<unsigned char> embeddedFont;
+            if (LoadEmbeddedResource("Inter.ttf", embeddedFont) &&
+                !embeddedFont.empty())
+            {
+                ImFont* base = io.Fonts->AddFontFromMemoryTTF(
+                    embeddedFont.data(), (int)embeddedFont.size(), 15.0f);
+                if (base)
+                {
+                    io.Fonts->AddFontFromMemoryTTF(
+                        embeddedFont.data(), (int)embeddedFont.size(), 13.0f);
+                    io.Fonts->AddFontFromMemoryTTF(
+                        embeddedFont.data(), (int)embeddedFont.size(), 20.0f);
+                    io.FontDefault = base;
+                    TraceLog(LOG_INFO, "Fonte Inter carregada do recurso embutido");
                     return;
                 }
             }

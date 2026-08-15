@@ -135,6 +135,10 @@
     <ClCompile Include="$(ProjectDir)src\Manual.cpp" />
     <ClCompile Include="$(ProjectDir)src\Project.cpp" />
     <ClCompile Include="$(ProjectDir)src\ColorPicker.cpp" />
+    <ClCompile Include="$(ProjectDir)src\EmbeddedAssets.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="$(ProjectDir)SeedUI.rc" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="$(ProjectDir)ThirdParty\raylib\src\raudio.c" />

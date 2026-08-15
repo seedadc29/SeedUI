@@ -392,24 +392,50 @@ export class Engine {
       if (!mesh.material) return;
 
       if (mode === 'wireframe') {
-        mesh.material.wireframe = true;
-        mesh.material.flatShading = true;
-      } else if (mode === 'solid') {
-        // Modo Sólido / Modelagem: Facetas planas com contraste nítido em todas as faces
+        // Wireframe Limpo em Quads: Oculta a triangulação interna da GPU, exibindo apenas as arestas reais dos polígonos
         mesh.material.wireframe = false;
-        mesh.material.flatShading = true;
-      } else if (mode === 'material' || mode === 'pixel') {
-        // Previsão de Material: Cor pura e textura do material sem render/sombras escuras
+        mesh.material.colorWrite = false;
+        mesh.material.transparent = true;
+        mesh.material.opacity = 0;
+
+        mesh.children.forEach((child) => {
+          if (child.name.endsWith('_edges')) {
+            child.visible = true;
+            if (child.material) {
+              child.material.color.set(0xdddddd);
+              child.material.opacity = 1.0;
+            }
+          }
+        });
+      } else {
+        mesh.material.colorWrite = true;
+        mesh.material.transparent = false;
+        mesh.material.opacity = 1.0;
         mesh.material.wireframe = false;
-        mesh.material.flatShading = (mesh.userData.shading === 'flat');
-        if (mode === 'pixel' && mesh.material.map) {
-          mesh.material.map.minFilter = THREE.NearestFilter;
-          mesh.material.map.magFilter = THREE.NearestFilter;
+
+        if (mode === 'solid') {
+          // Modo Sólido / Modelagem: Facetas planas com contraste nítido em todas as faces
+          mesh.material.flatShading = true;
+        } else if (mode === 'material' || mode === 'pixel') {
+          // Previsão de Material: Cor pura e textura do material sem render/sombras escuras
+          mesh.material.flatShading = (mesh.userData.shading === 'flat');
+          if (mode === 'pixel' && mesh.material.map) {
+            mesh.material.map.minFilter = THREE.NearestFilter;
+            mesh.material.map.magFilter = THREE.NearestFilter;
+          }
+        } else if (mode === 'rendered') {
+          // Render: Iluminação realista e sombras
+          mesh.material.flatShading = (mesh.userData.shading === 'flat');
         }
-      } else if (mode === 'rendered') {
-        // Render: Iluminação realista e sombras
-        mesh.material.wireframe = false;
-        mesh.material.flatShading = (mesh.userData.shading === 'flat');
+
+        mesh.children.forEach((child) => {
+          if (child.name.endsWith('_edges')) {
+            if (child.material) {
+              child.material.color.set(0x383d47);
+              child.material.opacity = 0.85;
+            }
+          }
+        });
       }
       mesh.material.needsUpdate = true;
     });

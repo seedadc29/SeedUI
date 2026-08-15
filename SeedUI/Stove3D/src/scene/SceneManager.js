@@ -495,13 +495,14 @@ export class SceneManager {
   }
 
   setEditModeView(isEditMode) {
+    const isWireframe = (this.engine.currentShading === 'wireframe');
     this.objects.forEach((obj) => {
       const isSelected = this.selectedObjects.has(obj);
       obj.children.forEach((child) => {
         if (child.name.endsWith('_outline')) {
-          child.visible = !isEditMode && isSelected;
+          child.visible = !isEditMode && isSelected && !isWireframe;
         } else if (child.name.endsWith('_edges')) {
-          child.visible = isEditMode && isSelected;
+          child.visible = isWireframe || (isEditMode && isSelected);
         }
       });
     });

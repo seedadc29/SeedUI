@@ -1,5 +1,6 @@
 #include "Manual.h"
 
+#include "EmbeddedAssets.h"
 #include "Theme.h"
 #include "imgui.h"
 
@@ -37,6 +38,16 @@ namespace seedui
                     gText = ss.str();
                     gSource = p;
                     break;
+                }
+            }
+
+            if (gText.empty())
+            {
+                std::string embedded;
+                if (LoadEmbeddedText("SEEDUI_MANUAL.md", embedded))
+                {
+                    gText = std::move(embedded);
+                    gSource = "recurso embutido no executavel";
                 }
             }
         }

@@ -1,0 +1,11 @@
+// SeedUI.rc - Recursos do executavel
+// - 1 ICON: icone do programa (Explorer, barra de tarefas, titulo).
+// - RCDATA: assets embutidos (fonte, manual, icones SVG) para que o
+//   executavel funcione sozinho, sem a pasta assets ao lado.
+
+#include "SeedUI_icons.rc"
+
+1 ICON "seedui.ico"
+
+"Inter.ttf"        RCDATA "assets/fonts/Inter.ttf"
+"SEEDUI_MANUAL.md" RCDATA "assets/manual/SEEDUI_MANUAL.md"

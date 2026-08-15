@@ -2,9 +2,8 @@
 #include "nanosvg.h"
 #define NANOSVGRAST_IMPLEMENTATION
 #include "nanosvgrast.h"
-
 #include "Icons.h"
-
+#include "EmbeddedAssets.h"
 #include "Theme.h"
 #include "imgui.h"
 #include "raylib.h"
@@ -167,6 +166,7 @@ namespace seedui
 
             const std::string path = ResolveIconPath(def.file);
             std::string svg = path.empty() ? std::string() : ReadFile(path);
+            if (svg.empty()) LoadEmbeddedText(def.file, svg);
 
             if (!svg.empty())
             {

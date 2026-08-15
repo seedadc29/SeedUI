@@ -1,0 +1,40 @@
+==============================================
+  SeedUI - Pacote de Teste (build Release)
+==============================================
+
+COMO EXECUTAR
+--------------
+1. Descompacte esta pasta em qualquer lugar do computador.
+2. Dê dois cliques em "SeedUI.exe" (ou abra pelo terminal).
+   NÃO é preciso instalar nada nem ter o Visual Studio.
+
+REQUISITOS
+-----------
+- Windows 10/11 (64 bits).
+- Caso apareça erro de DLL ausente (VCRUNTIME140.dll), instale o
+  "Microsoft Visual C++ Redistributable x64" (busca simples no Google,
+  link oficial: aka.ms/vs/17/release/vc_redist.x64.exe).
+
+CONTROLES BÁSICOS
+------------------
+- F1 ............ Manual do programa (abre o arquivo de ajuda)
+- F2 ............ Renomear elemento selecionado
+- F5 ............ Modo de anotação (anotar sobre o projeto)
+- F12 ........... Capturar screenshot
+- Ctrl+S ........ Salvar projeto
+- Ctrl+Z/Ctrl+Y . Desfazer / Refazer
+- Ctrl+D ........ Duplicar seleção (repete o deslocamento em grupo)
+- Alt+G ......... Mover a seleção seguindo o mouse (clique/Enter confirma,
+                  Esc/clique direito cancela)
+- Alt+R ......... Rotacionar a seleção ao redor do centro
+- Alt+S ......... Escalonar a seleção a partir do centro
+- Shift ......... Durante Alt+G/R/S: trava eixo, passos de 15°/0.25x
+
+OBSERVAÇÕES
+------------
+- Este pacote contém APENAS o programa compilado e seus recursos visuais.
+  O código-fonte não está incluído.
+- Os arquivos do projeto criados pelo usuário (.ui.json) ficam onde o
+  programa salvar, não são modificados pelo SeedUI.
+- Para encerrar o programa: feche a janela normalmente.
+==============================================
