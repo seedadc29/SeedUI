@@ -55,6 +55,12 @@ export class TransformManager {
   }
 
   recordBeforeDragTransforms() {
+    const active = this.transformControls.object;
+    if (active && active.name === 'EditMode_TransformAnchor') {
+      this.beforeDragTransforms = [];
+      return;
+    }
+
     this.beforeDragTransforms = [];
     const targets = this.sceneManager.getSelectedObjects();
     targets.forEach((obj) => {
@@ -68,6 +74,11 @@ export class TransformManager {
   }
 
   recordAfterDragAndPushHistory() {
+    const active = this.transformControls.object;
+    if (active && active.name === 'EditMode_TransformAnchor') {
+      return;
+    }
+
     if (this.beforeDragTransforms.length === 0 || !this.historyManager) return;
 
     const afterDragTransforms = [];
@@ -122,7 +133,10 @@ export class TransformManager {
 
   recordMultiObjectStarts() {
     const active = this.transformControls.object;
-    if (!active) return;
+    if (!active || active.name === 'EditMode_TransformAnchor') {
+      this.initialOtherTransforms.clear();
+      return;
+    }
 
     this.initialActiveTransform.position.copy(active.position);
     this.initialActiveTransform.quaternion.copy(active.quaternion);
@@ -143,7 +157,7 @@ export class TransformManager {
 
   applyMultiObjectTransforms() {
     const active = this.transformControls.object;
-    if (!active || this.initialOtherTransforms.size === 0) return;
+    if (!active || active.name === 'EditMode_TransformAnchor' || this.initialOtherTransforms.size === 0) return;
 
     const deltaPos = new THREE.Vector3().subVectors(active.position, this.initialActiveTransform.position);
     const deltaRot = new THREE.Quaternion().multiplyQuaternions(
