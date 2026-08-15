@@ -1822,21 +1822,59 @@ body.theme-opencode .viewport-area {
   background: #0a0b0e !important;
 }
 
-/* OpenCode Floating Left Toolbar — Charcoal Card with Blue Accent */
+/* OpenCode Floating Bottom Tools Dock (Horizontal dock at bottom center) */
+.toolbar-dock-hints {
+  display: none;
+}
+
 body.theme-opencode .left-toolbar {
-  background: #16171b !important;
+  position: absolute !important;
+  top: auto !important;
+  bottom: 42px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  width: auto !important;
+  max-width: calc(100vw - 320px) !important;
+  height: auto !important;
+  background: #17181c !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
-  border: 1px solid #24262d !important;
-  border-left: 3px solid #3b82f6 !important;
+  border: 1px solid #282a30 !important;
+  border-left: 3px solid #58a6ff !important;
   border-radius: 4px !important;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.7) !important;
-  padding: 6px 0 !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.85) !important;
+  padding: 8px 14px 6px 14px !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 4px !important;
+  z-index: 50 !important;
+  margin: 0 !important;
+}
+
+body.theme-opencode.sidebar-collapsed .left-toolbar {
+  max-width: calc(100vw - 60px) !important;
+}
+
+body.theme-opencode .left-toolbar .tool-group {
+  display: flex !important;
+  flex-direction: row !important;
+  gap: 4px !important;
+}
+
+body.theme-opencode .left-toolbar .tool-divider {
+  width: 1px !important;
+  height: 22px !important;
+  margin: 0 6px !important;
+  background: #282a30 !important;
 }
 
 body.theme-opencode .tool-btn {
-  background: transparent !important;
-  border: 1px solid transparent !important;
+  width: 32px !important;
+  height: 30px !important;
+  background: #121316 !important;
+  border: 1px solid #23252b !important;
   border-radius: 3px !important;
   color: #8b949e !important;
   box-shadow: none !important;
@@ -1844,23 +1882,49 @@ body.theme-opencode .tool-btn {
 
 body.theme-opencode .tool-btn:hover {
   background: #202228 !important;
-  border-color: #2e313a !important;
+  border-color: #58a6ff !important;
   color: #f8fafc !important;
 }
 
 body.theme-opencode .tool-btn.active {
   background: #242730 !important;
-  border: 1px solid #3b82f6 !important;
-  color: #60a5fa !important;
-  box-shadow: 0 0 8px rgba(59, 130, 246, 0.3) !important;
+  border: 1px solid #58a6ff !important;
+  color: #58a6ff !important;
+  box-shadow: 0 0 8px rgba(88, 166, 255, 0.4) !important;
 }
 
-body.theme-opencode .tool-divider {
-  background: #24262d !important;
+/* OpenCode Dock Hints Row */
+body.theme-opencode .toolbar-dock-hints {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  width: 100% !important;
+  gap: 14px !important;
+  margin-top: 6px !important;
+  padding-top: 4px !important;
+  border-top: 1px solid #24262d !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 11px !important;
+}
+
+body.theme-opencode .toolbar-dock-hints .hint-item {
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+}
+
+body.theme-opencode .toolbar-dock-hints .hint-key {
+  color: #f8fafc !important;
+  font-weight: 700 !important;
+}
+
+body.theme-opencode .toolbar-dock-hints .hint-label {
+  color: #6e7681 !important;
 }
 
 /* OpenCode Viewport Header Bar — Charcoal Bar with Blue Accent */
 body.theme-opencode .viewport-header-bar {
+  left: 14px !important;
   background: #16171b !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
