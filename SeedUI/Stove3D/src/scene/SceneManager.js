@@ -92,6 +92,14 @@ export class SceneManager {
     gizmoLine.name = `${name}_gizmo`;
     cameraGroup.add(gizmoLine);
 
+    // 4. Invisible Hit-box Mesh for 1-Click Raycast Selection & Transform Gizmo Attaching
+    const hitBoxGeom = new THREE.BoxGeometry(fw * 2.2, fh * 2.2, Math.abs(fd) * 1.4);
+    hitBoxGeom.translate(0, 0, fd / 2);
+    const hitBoxMat = new THREE.MeshBasicMaterial({ visible: false });
+    const hitBox = new THREE.Mesh(hitBoxGeom, hitBoxMat);
+    hitBox.name = `${name}_hitbox`;
+    cameraGroup.add(hitBox);
+
     cameraGroup.userData.isCamera = true;
     cameraGroup.userData.cameraInstance = camera;
     cameraGroup.userData.primitiveType = 'camera';
@@ -566,6 +574,8 @@ export class SceneManager {
       obj.children.forEach((child) => {
         if (child.name.endsWith('_outline')) {
           child.visible = isSelected;
+        } else if (child.name.endsWith('_gizmo') && child.material) {
+          child.material.color.setHex(isSelected ? 0xff9800 : 0x38bdf8);
         }
       });
     });

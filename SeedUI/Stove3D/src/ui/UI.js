@@ -999,13 +999,22 @@ export class UIManager {
           this.diagnostics.log('SELECTION', `Clique de seleção (${this.currentSubmode}) -> ${success ? 'SUCESSO (Item Selecionado)' : 'Nenhum item atingido'}`);
         }
       } else {
-        const meshes = this.sceneManager.getAllMeshes().filter((m) => m.visible);
-        const intersects = this.raycaster.intersectObjects(meshes, false);
+        const objects = this.sceneManager.getAllMeshes().filter((m) => m.visible);
+        const intersects = this.raycaster.intersectObjects(objects, true);
 
         if (intersects.length > 0) {
-          this.sceneManager.selectObject(intersects[0].object, e.shiftKey);
+          let hitObj = intersects[0].object;
+          // Resolve root selectable object
+          while (hitObj && hitObj.parent && hitObj.parent !== this.engine.scene && !objects.includes(hitObj)) {
+            hitObj = hitObj.parent;
+          }
+          this.sceneManager.selectObject(hitObj, e.shiftKey);
+          if (this.currentMode === 'model' && this.currentSubmode === 'object') {
+            this.transformManager.attach(hitObj);
+          }
         } else {
           this.sceneManager.deselectAll();
+          this.transformManager.detach();
         }
       }
     });
