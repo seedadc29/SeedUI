@@ -39,9 +39,9 @@
   --accent-orange: #f97316;
   --accent-orange-hover: #fb923c;
 
-  --axis-x: #f59e0b;
+  --axis-x: #ef4444;
   --axis-y: #22c55e;
-  --axis-z: #00f0ff;
+  --axis-z: #3b82f6;
 
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
@@ -1117,9 +1117,9 @@ body.sidebar-collapsed .camera-gizmo-bar {
   color: #fff;
 }
 
-.axis-tag.tag-x { background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; }
-.axis-tag.tag-y { background: linear-gradient(135deg, #22c55e, #16a34a); color: #fff; }
-.axis-tag.tag-z { background: linear-gradient(135deg, #00f0ff, #0284c7); color: #0c0d10; }
+.axis-tag.tag-x { background: #ef4444; color: #ffffff !important; font-weight: 800; }
+.axis-tag.tag-y { background: #22c55e; color: #ffffff !important; font-weight: 800; }
+.axis-tag.tag-z { background: #3b82f6; color: #ffffff !important; font-weight: 800; }
 
 .axis-val {
   flex: 1;
@@ -2103,22 +2103,22 @@ body.theme-opencode .axis-val {
 }
 
 body.theme-opencode .axis-tag.tag-x {
-  background: #f59e0b !important;
-  color: #0c0d10 !important;
+  background: #ef4444 !important;
+  color: #ffffff !important;
   font-weight: 800 !important;
   border-radius: 2px 0 0 2px !important;
 }
 
 body.theme-opencode .axis-tag.tag-y {
   background: #22c55e !important;
-  color: #0c0d10 !important;
+  color: #ffffff !important;
   font-weight: 800 !important;
   border-radius: 2px 0 0 2px !important;
 }
 
 body.theme-opencode .axis-tag.tag-z {
-  background: #00f0ff !important;
-  color: #0c0d10 !important;
+  background: #3b82f6 !important;
+  color: #ffffff !important;
   font-weight: 800 !important;
   border-radius: 2px 0 0 2px !important;
 }
