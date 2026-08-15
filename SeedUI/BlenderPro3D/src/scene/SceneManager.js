@@ -55,11 +55,13 @@ export class SceneManager {
     // 1. Camera Container Group (Transformable in 3D Viewport)
     const cameraGroup = new THREE.Group();
     cameraGroup.name = name;
-    cameraGroup.position.set(6.5, -7.5, 5.0);
+    cameraGroup.up.set(0, 0, 1);
+    cameraGroup.position.set(7.3589, -6.9258, 4.9583);
     cameraGroup.lookAt(0, 0, 0);
 
     // 2. Real Perspective Camera Instance
     const camera = new THREE.PerspectiveCamera(50, 16 / 9, 0.1, 1000);
+    camera.up.set(0, 0, 1);
     cameraGroup.add(camera);
 
     // 3. Blender Iconic Camera Wireframe Gizmo (Apex at origin, frustum frame expanding forward along -Z)
