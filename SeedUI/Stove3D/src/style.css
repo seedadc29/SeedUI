@@ -1659,338 +1659,527 @@ body.sidebar-collapsed .camera-gizmo-bar {
 }
 
 /* ==========================================================================
-   TEMA 2: OPENCODE UNDERGROUND HACKER TERMINAL (RETRO-MODERN TUI)
+   TEMA 2: OPENCODE AUTHENTIC CLI (MATTE CHARCOAL + BLUE ACCENT BAR)
    ========================================================================== */
 body.theme-opencode {
   font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace !important;
-  background: #040508 !important;
-  color: #e2e8f0 !important;
+  background: #0c0d10 !important;
+  color: #f8fafc !important;
 }
 
-/* Scanline Effect */
-body.theme-opencode::before {
-  content: " ";
-  display: block;
-  position: fixed;
-  top: 0; left: 0; bottom: 0; right: 0;
-  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
-  background-size: 100% 4px;
-  z-index: 9999;
-  pointer-events: none;
-  opacity: 0.35;
+body.theme-opencode .app-container {
+  background: #0c0d10 !important;
 }
 
-/* OpenCode Header */
-body.theme-opencode .top-header {
-  background: #080a10 !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  border-bottom: 1px solid #1e293b !important;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8) !important;
-  height: 36px !important;
+/* OpenCode Stencil Logo */
+body.theme-opencode .logo {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-family: 'JetBrains Mono', monospace !important;
+  text-transform: lowercase;
 }
 
 body.theme-opencode .logo-badge {
-  background: #00f0ff !important;
-  color: #000 !important;
+  background: transparent !important;
+  color: #6b7280 !important;
   font-family: 'JetBrains Mono', monospace !important;
-  font-weight: 900 !important;
-  border-radius: 2px !important;
-  box-shadow: 0 0 10px rgba(0, 240, 255, 0.5) !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  letter-spacing: -0.5px !important;
 }
 
 body.theme-opencode .logo-text {
   font-family: 'JetBrains Mono', monospace !important;
-  color: #00f0ff !important;
-  letter-spacing: 1.5px !important;
+  color: #6b7280 !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.5px !important;
 }
 
 body.theme-opencode .logo-sub {
-  color: #ffb400 !important;
   font-family: 'JetBrains Mono', monospace !important;
+  color: #ffffff !important;
+  font-size: 13px !important;
+  font-weight: 900 !important;
+  letter-spacing: -0.5px !important;
+}
+
+/* Top Header Bar */
+body.theme-opencode .top-header {
+  height: 36px !important;
+  background: #0f1013 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-bottom: 1px solid #1f2128 !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.6) !important;
 }
 
 body.theme-opencode .menu-btn {
-  background: #0d1017 !important;
-  border: 1px solid #1e293b !important;
-  color: #94a3b8 !important;
-  border-radius: 3px !important;
-  box-shadow: none !important;
+  background: #16171b !important;
+  border: 1px solid #24262d !important;
+  color: #8b949e !important;
+  font-size: 11px !important;
   font-family: 'JetBrains Mono', monospace !important;
+  border-radius: 4px !important;
+  padding: 4px 10px !important;
+  box-shadow: none !important;
 }
 
 body.theme-opencode .menu-btn:hover {
-  background: #161c2b !important;
-  border-color: #00f0ff !important;
-  color: #00f0ff !important;
-  box-shadow: 0 0 8px rgba(0, 240, 255, 0.3) !important;
+  background: #202228 !important;
+  border-color: #3b82f6 !important;
+  color: #f8fafc !important;
 }
 
+/* Header Mode Tabs — Sleek CLI Selector */
 body.theme-opencode .mode-tabs {
-  background: #0d1017 !important;
-  border: 1px solid #1e293b !important;
-  border-radius: 3px !important;
+  background: #141519 !important;
+  border: 1px solid #24262d !important;
+  border-radius: 4px !important;
+  padding: 2px !important;
   box-shadow: none !important;
 }
 
 body.theme-opencode .mode-tab {
   background: transparent !important;
   border: 1px solid transparent !important;
-  border-radius: 2px !important;
-  color: #94a3b8 !important;
+  border-radius: 3px !important;
+  color: #8b949e !important;
   font-family: 'JetBrains Mono', monospace !important;
+  font-size: 11px !important;
+  padding: 3px 10px !important;
+}
+
+body.theme-opencode .mode-tab:hover {
+  color: #f8fafc !important;
+  background: #1c1d22 !important;
 }
 
 body.theme-opencode .mode-tab.active {
-  background: #00f0ff !important;
-  color: #000 !important;
+  background: #23252c !important;
+  border-color: #3b82f6 !important;
+  color: #f8fafc !important;
+  font-weight: 700 !important;
+  box-shadow: inset 2px 0 0 0 #3b82f6 !important;
+}
+
+body.theme-opencode .mode-key {
+  color: #60a5fa !important;
   font-weight: 800 !important;
-  box-shadow: 0 0 12px rgba(0, 240, 255, 0.6) !important;
 }
 
 body.theme-opencode .stat-badge {
-  background: #0d1017 !important;
-  border: 1px solid #1e293b !important;
-  border-radius: 2px !important;
-  color: #00ff88 !important;
+  background: #141519 !important;
+  border: 1px solid #24262d !important;
+  border-radius: 4px !important;
+  color: #8b949e !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 10px !important;
   box-shadow: none !important;
 }
 
+body.theme-opencode #stat-fps {
+  color: #60a5fa !important;
+}
+
 body.theme-opencode .diag-header-btn {
-  background: #0d1017 !important;
-  border: 1px solid #ffb400 !important;
-  color: #ffb400 !important;
-  border-radius: 2px !important;
-  box-shadow: 0 0 10px rgba(255, 180, 0, 0.3) !important;
+  background: #16171b !important;
+  border: 1px solid #24262d !important;
+  border-left: 2.5px solid #3b82f6 !important;
+  color: #f8fafc !important;
+  border-radius: 4px !important;
+  box-shadow: none !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 10.5px !important;
 }
 
 body.theme-opencode .diag-header-btn:hover {
-  background: #ffb400 !important;
-  color: #000 !important;
-  box-shadow: 0 0 15px rgba(255, 180, 0, 0.7) !important;
+  background: #202228 !important;
+  border-color: #3b82f6 !important;
 }
 
 body.theme-opencode .theme-toggle-btn {
-  background: #0d1017 !important;
-  border: 1px solid #00f0ff !important;
-  color: #00f0ff !important;
-  border-radius: 2px !important;
-  box-shadow: 0 0 10px rgba(0, 240, 255, 0.3) !important;
+  background: #16171b !important;
+  border: 1px solid #24262d !important;
+  border-left: 2.5px solid #3b82f6 !important;
+  color: #f8fafc !important;
+  border-radius: 4px !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 10.5px !important;
+  box-shadow: none !important;
 }
 
-/* OpenCode Left Toolbar */
+body.theme-opencode .theme-toggle-btn:hover {
+  background: #202228 !important;
+}
+
+/* 3D Viewport Area */
+body.theme-opencode .viewport-area {
+  background: #0a0b0e !important;
+}
+
+/* OpenCode Floating Left Toolbar — Charcoal Card with Blue Accent */
 body.theme-opencode .left-toolbar {
-  background: #080a10 !important;
+  background: #16171b !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
-  border: 1px solid #1e293b !important;
+  border: 1px solid #24262d !important;
+  border-left: 3px solid #3b82f6 !important;
   border-radius: 4px !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8) !important;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.7) !important;
+  padding: 6px 0 !important;
 }
 
 body.theme-opencode .tool-btn {
-  background: #0d1017 !important;
-  border: 1px solid #1e293b !important;
+  background: transparent !important;
+  border: 1px solid transparent !important;
   border-radius: 3px !important;
-  color: #94a3b8 !important;
+  color: #8b949e !important;
   box-shadow: none !important;
 }
 
 body.theme-opencode .tool-btn:hover {
-  background: #161c2b !important;
-  border-color: #00f0ff !important;
-  color: #00f0ff !important;
-  box-shadow: 0 0 8px rgba(0, 240, 255, 0.3) !important;
+  background: #202228 !important;
+  border-color: #2e313a !important;
+  color: #f8fafc !important;
 }
 
 body.theme-opencode .tool-btn.active {
-  background: rgba(0, 240, 255, 0.18) !important;
-  border: 1px solid #00f0ff !important;
-  color: #00f0ff !important;
-  box-shadow: 0 0 12px rgba(0, 240, 255, 0.5) !important;
+  background: #242730 !important;
+  border: 1px solid #3b82f6 !important;
+  color: #60a5fa !important;
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.3) !important;
 }
 
 body.theme-opencode .tool-divider {
-  background: #1e293b !important;
+  background: #24262d !important;
 }
 
-/* OpenCode Viewport Header Bar */
+/* OpenCode Viewport Header Bar — Charcoal Bar with Blue Accent */
 body.theme-opencode .viewport-header-bar {
-  background: #080a10 !important;
+  background: #16171b !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
-  border: 1px solid #1e293b !important;
+  border: 1px solid #24262d !important;
+  border-left: 3px solid #3b82f6 !important;
   border-radius: 4px !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8) !important;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.7) !important;
 }
 
 body.theme-opencode .mode-pill {
-  background: #0d1017 !important;
-  border: 1px solid #1e293b !important;
+  background: #121317 !important;
+  border: 1px solid #24262d !important;
   border-radius: 3px !important;
-  color: #ffb400 !important;
+  color: #f8fafc !important;
+  font-family: 'JetBrains Mono', monospace !important;
   box-shadow: none !important;
 }
 
 body.theme-opencode .mesh-submode-group {
-  background: #0d1017 !important;
-  border: 1px solid #1e293b !important;
+  background: #121317 !important;
+  border: 1px solid #24262d !important;
   border-radius: 3px !important;
 }
 
 body.theme-opencode .mesh-sub-btn {
   border-radius: 2px !important;
-  color: #94a3b8 !important;
+  color: #8b949e !important;
+  font-family: 'JetBrains Mono', monospace !important;
+}
+
+body.theme-opencode .mesh-sub-btn:hover {
+  background: #1c1d22 !important;
+  color: #f8fafc !important;
 }
 
 body.theme-opencode .mesh-sub-btn.active {
-  background: #ffb400 !important;
-  color: #000 !important;
-  box-shadow: 0 0 10px rgba(255, 180, 0, 0.5) !important;
-}
-
-body.theme-opencode .v-header-btn {
-  background: #0d1017 !important;
-  border: 1px solid #1e293b !important;
-  border-radius: 3px !important;
-  color: #94a3b8 !important;
+  background: #242730 !important;
+  border: 1px solid #3b82f6 !important;
+  color: #60a5fa !important;
   box-shadow: none !important;
 }
 
+body.theme-opencode .v-header-divider {
+  background: #24262d !important;
+}
+
+body.theme-opencode .v-header-btn {
+  background: #121317 !important;
+  border: 1px solid #24262d !important;
+  border-radius: 3px !important;
+  color: #8b949e !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  box-shadow: none !important;
+}
+
+body.theme-opencode .v-header-btn:hover {
+  background: #202228 !important;
+  color: #f8fafc !important;
+}
+
 body.theme-opencode .v-header-btn.active {
-  background: rgba(0, 240, 255, 0.15) !important;
-  border: 1px solid #00f0ff !important;
-  color: #00f0ff !important;
-  box-shadow: 0 0 10px rgba(0, 240, 255, 0.4) !important;
+  background: #242730 !important;
+  border-color: #3b82f6 !important;
+  color: #60a5fa !important;
 }
 
 body.theme-opencode .shading-group {
-  background: #0d1017 !important;
-  border: 1px solid #1e293b !important;
+  background: #121317 !important;
+  border: 1px solid #24262d !important;
   border-radius: 4px !important;
   box-shadow: none !important;
 }
 
 body.theme-opencode .shading-icon-btn.active {
-  background: rgba(0, 240, 255, 0.25) !important;
-  box-shadow: 0 0 8px rgba(0, 240, 255, 0.5) !important;
+  background: #242730 !important;
+  box-shadow: 0 0 6px rgba(59, 130, 246, 0.4) !important;
 }
 
-/* OpenCode Right Sidebar */
+/* OpenCode Right Sidebar — Charcoal Card with Blue Accent */
 body.theme-opencode .right-sidebar {
-  background: #080a10 !important;
+  background: #16171b !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
-  border: 1px solid #1e293b !important;
+  border: 1px solid #24262d !important;
+  border-left: 3px solid #3b82f6 !important;
   border-radius: 4px !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8) !important;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.7) !important;
 }
 
 body.theme-opencode .outliner-header,
 body.theme-opencode .properties-header {
-  background: #0d1017 !important;
-  border-bottom: 1px solid #1e293b !important;
-  color: #ffb400 !important;
+  background: #121317 !important;
+  border-bottom: 1px solid #24262d !important;
+  color: #f8fafc !important;
   font-family: 'JetBrains Mono', monospace !important;
-  letter-spacing: 1px !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.5px !important;
 }
 
 body.theme-opencode .outliner-item:hover {
-  background: #161c2b !important;
+  background: #1d1f25 !important;
 }
 
 body.theme-opencode .outliner-item.selected {
-  background: rgba(0, 240, 255, 0.2) !important;
-  border: 1px solid #00f0ff !important;
-  color: #00f0ff !important;
+  background: #232630 !important;
+  border: 1px solid #3b82f6 !important;
+  color: #f8fafc !important;
 }
 
 body.theme-opencode .add-prim-btn {
-  background: #00f0ff !important;
-  color: #000 !important;
+  background: #3b82f6 !important;
+  color: #fff !important;
   font-family: 'JetBrains Mono', monospace !important;
-  border-radius: 2px !important;
-  font-weight: 800 !important;
-  box-shadow: 0 0 10px rgba(0, 240, 255, 0.4) !important;
+  border-radius: 3px !important;
+  font-weight: 700 !important;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4) !important;
+}
+
+body.theme-opencode .add-prim-btn:hover {
+  background: #2563eb !important;
+}
+
+body.theme-opencode .category-header {
+  color: #60a5fa !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 10.5px !important;
+  font-weight: 700 !important;
 }
 
 body.theme-opencode .axis-field {
-  background: #0d1017 !important;
-  border: 1px solid #1e293b !important;
-  border-radius: 2px !important;
-  box-shadow: none !important;
-}
-
-body.theme-opencode .axis-field:focus-within {
-  border-color: #00f0ff !important;
-  box-shadow: 0 0 10px rgba(0, 240, 255, 0.4) !important;
-}
-
-body.theme-opencode .axis-val {
-  color: #00ff88 !important;
-  font-family: 'JetBrains Mono', monospace !important;
-}
-
-body.theme-opencode .camera-gizmo-bar {
-  background: #080a10 !important;
-  border: 1px solid #1e293b !important;
+  background: #101114 !important;
+  border: 1px solid #24262d !important;
   border-radius: 3px !important;
   box-shadow: none !important;
 }
 
-body.theme-opencode .cam-btn {
-  background: #0d1017 !important;
-  border: 1px solid #1e293b !important;
-  border-radius: 2px !important;
-  color: #94a3b8 !important;
+body.theme-opencode .axis-field:focus-within {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.35) !important;
 }
 
-body.theme-opencode .cam-btn:hover {
-  border-color: #00f0ff !important;
-  color: #00f0ff !important;
+body.theme-opencode .axis-val {
+  color: #f8fafc !important;
+  font-family: 'JetBrains Mono', monospace !important;
 }
 
-body.theme-opencode .statusbar {
-  background: #080a10 !important;
-  border-top: 1px solid #1e293b !important;
-  color: #00ff88 !important;
+body.theme-opencode .sidebar-toggle-pill {
+  background: #141519 !important;
+  border: 1px solid #24262d !important;
+  border-left: 2px solid #3b82f6 !important;
+  border-radius: 4px !important;
+  color: #f8fafc !important;
   font-family: 'JetBrains Mono', monospace !important;
   box-shadow: none !important;
 }
 
-body.theme-opencode .key-hint kbd {
-  background: #0d1017 !important;
-  border: 1px solid #1e293b !important;
-  color: #00f0ff !important;
-  border-radius: 2px !important;
+body.theme-opencode .viewport-sidebar-tab {
+  background: #16171b !important;
+  border: 1px solid #24262d !important;
+  border-right: none !important;
+  border-left: 3px solid #3b82f6 !important;
+  border-radius: 4px 0 0 4px !important;
+  color: #f8fafc !important;
+  font-family: 'JetBrains Mono', monospace !important;
 }
 
-/* OpenCode Modals & Context Menu */
+/* OpenCode Operator Panel — Exact Prompt Card Style */
+body.theme-opencode .operator-panel {
+  background: #16171b !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: 1px solid #24262d !important;
+  border-left: 3px solid #3b82f6 !important;
+  border-radius: 4px !important;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.8) !important;
+}
+
+body.theme-opencode .operator-header {
+  background: #121317 !important;
+  border-bottom: 1px solid #24262d !important;
+  color: #f8fafc !important;
+  font-family: 'JetBrains Mono', monospace !important;
+}
+
+body.theme-opencode .operator-title {
+  color: #60a5fa !important;
+  font-family: 'JetBrains Mono', monospace !important;
+}
+
+body.theme-opencode .operator-input {
+  background: #101114 !important;
+  border: 1px solid #24262d !important;
+  border-radius: 3px !important;
+  color: #f8fafc !important;
+  font-family: 'JetBrains Mono', monospace !important;
+}
+
+body.theme-opencode .operator-input:focus {
+  border-color: #3b82f6 !important;
+}
+
+/* OpenCode Camera Gizmo Bar */
+body.theme-opencode .camera-gizmo-bar {
+  background: #16171b !important;
+  border: 1px solid #24262d !important;
+  border-left: 2.5px solid #3b82f6 !important;
+  border-radius: 4px !important;
+  box-shadow: none !important;
+}
+
+body.theme-opencode .cam-btn {
+  background: #121317 !important;
+  border: 1px solid #24262d !important;
+  border-radius: 3px !important;
+  color: #8b949e !important;
+  font-family: 'JetBrains Mono', monospace !important;
+}
+
+body.theme-opencode .cam-btn:hover {
+  background: #202228 !important;
+  border-color: #3b82f6 !important;
+  color: #f8fafc !important;
+}
+
+/* OpenCode Status Bar — Matching Bottom of OpenCode */
+body.theme-opencode .statusbar {
+  height: 28px !important;
+  background: #0b0c0e !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-top: 1px solid #1a1c22 !important;
+  color: #8b949e !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 10px !important;
+  padding: 0 16px !important;
+  box-shadow: none !important;
+}
+
+body.theme-opencode .status-left {
+  gap: 16px !important;
+}
+
+body.theme-opencode .key-hint {
+  gap: 4px !important;
+  color: #6b7280 !important;
+}
+
+body.theme-opencode .key-hint kbd {
+  background: transparent !important;
+  border: none !important;
+  color: #f8fafc !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-weight: 700 !important;
+  font-size: 10px !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+}
+
+body.theme-opencode #status-engine-info {
+  color: #4b5563 !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 9.5px !important;
+}
+
+/* OpenCode Shift+A Menu, Dropdowns and Modals */
 body.theme-opencode .blender-context-menu,
 body.theme-opencode .blender-submenu,
 body.theme-opencode .menu-dropdown-content,
 body.theme-opencode .diagnostics-modal-window,
-body.theme-opencode .operator-panel {
-  background: #080a10 !important;
-  border: 1px solid #00f0ff !important;
+body.theme-opencode .blender-right-click-menu {
+  background: #16171b !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: 1px solid #24262d !important;
+  border-left: 3px solid #3b82f6 !important;
   border-radius: 4px !important;
-  box-shadow: 0 0 20px rgba(0, 240, 255, 0.3), 0 16px 48px rgba(0, 0, 0, 0.9) !important;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.85) !important;
 }
 
 body.theme-opencode .context-menu-header,
-body.theme-opencode .rc-menu-header,
-body.theme-opencode .operator-header {
-  border-bottom: 1px solid #1e293b !important;
-  color: #ffb400 !important;
+body.theme-opencode .rc-menu-header {
+  background: #121317 !important;
+  border-bottom: 1px solid #24262d !important;
+  color: #60a5fa !important;
   font-family: 'JetBrains Mono', monospace !important;
+  font-weight: 700 !important;
+}
+
+body.theme-opencode .context-menu-item,
+body.theme-opencode .context-menu-action,
+body.theme-opencode .menu-dropdown-item,
+body.theme-opencode .rc-menu-item {
+  color: #f8fafc !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 11px !important;
+  border-radius: 3px !important;
 }
 
 body.theme-opencode .context-menu-item:hover,
 body.theme-opencode .context-menu-action:hover,
 body.theme-opencode .menu-dropdown-item:hover,
 body.theme-opencode .rc-menu-item:hover {
-  background: rgba(0, 240, 255, 0.15) !important;
-  border-color: #00f0ff !important;
-  color: #00f0ff !important;
+  background: #202228 !important;
+  border-color: #3b82f6 !important;
+  color: #60a5fa !important;
 }
+
+body.theme-opencode .diag-card {
+  background: #121317 !important;
+  border: 1px solid #24262d !important;
+  border-radius: 4px !important;
+  box-shadow: none !important;
+}
+
+body.theme-opencode .diag-banner {
+  background: #12141a !important;
+  border: 1px solid #24262d !important;
+  border-left: 3px solid #3b82f6 !important;
+}
+
 
