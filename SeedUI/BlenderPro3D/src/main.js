@@ -9,14 +9,14 @@ import { BlenderUI } from './ui/BlenderUI.js';
 console.log('🚀 [BlenderPro3D] Inicializando ambiente 3D autêntico Blender 4.1...');
 
 // 1. Initialize Core Engine (Canvas, WebGL Renderer, Z-Up coordinate system)
-const canvas = document.getElementById('viewport-canvas');
-const engine = new Engine(canvas);
+const engine = new Engine('viewport-canvas');
 
 // 2. Initialize History Manager (Undo / Redo stack)
 const historyManager = new HistoryManager();
 
 // 3. Initialize Scene Manager
-const sceneManager = new SceneManager(engine, historyManager);
+const sceneManager = new SceneManager(engine);
+sceneManager.setHistoryManager(historyManager);
 
 // 4. Initialize Transform Manager (3D Translate, Rotate, Scale Gizmos)
 const transformManager = new TransformManager(engine, sceneManager, historyManager);
@@ -27,7 +27,9 @@ const meshEditor = new MeshEditor(engine, sceneManager, transformManager, histor
 // 6. Initialize Authentic Blender 4.x UI
 const blenderUI = new BlenderUI(engine, sceneManager, transformManager, meshEditor, historyManager);
 
-// 7. Initialize Default Scene (Iconic Blender Startup: Cube + Camera + Light)
-sceneManager.initDefaultScene();
+// Select default Cube
+if (sceneManager.objects.length > 0) {
+  sceneManager.selectObject(sceneManager.objects[0]);
+}
 
 console.log('✨ [BlenderPro3D] Pronto e operacional!');

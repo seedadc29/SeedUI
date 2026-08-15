@@ -5,8 +5,8 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
 
 export class Engine {
-  constructor(canvasId) {
-    this.canvas = document.getElementById(canvasId);
+  constructor(canvasOrId = 'viewport-canvas') {
+    this.canvas = typeof canvasOrId === 'string' ? document.getElementById(canvasOrId) : canvasOrId;
     this.container = this.canvas.parentElement;
     
     // Performance settings (Low-Spec PC Optimization)

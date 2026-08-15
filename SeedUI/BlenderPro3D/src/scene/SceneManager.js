@@ -107,8 +107,8 @@ export class SceneManager {
 
     this.engine.scene.add(cameraGroup);
     this.engine.sceneCamera = cameraGroup;
-    this.objects.push(cameraGroup);
     this.updateStats();
+    if (this.onSceneChange) this.onSceneChange();
 
     if (pushHistory && this.historyManager) {
       this.historyManager.push({
@@ -120,12 +120,14 @@ export class SceneManager {
           this.selectedObjects.delete(cameraGroup);
           this.selectObject(this.objects[this.objects.length - 1] || null);
           this.updateStats();
+          if (this.onSceneChange) this.onSceneChange();
         },
         redo: () => {
           this.engine.scene.add(cameraGroup);
           if (!this.objects.includes(cameraGroup)) this.objects.push(cameraGroup);
           this.selectObject(cameraGroup);
           this.updateStats();
+          if (this.onSceneChange) this.onSceneChange();
         }
       });
     }
@@ -210,6 +212,7 @@ export class SceneManager {
     this.selectObject(mesh, false);
 
     this.updateStats();
+    if (this.onSceneChange) this.onSceneChange();
 
     if (pushHistory && this.historyManager) {
       this.historyManager.push({
@@ -221,12 +224,14 @@ export class SceneManager {
           this.selectedObjects.delete(mesh);
           this.selectObject(this.objects[this.objects.length - 1] || null);
           this.updateStats();
+          if (this.onSceneChange) this.onSceneChange();
         },
         redo: () => {
           this.engine.scene.add(mesh);
           if (!this.objects.includes(mesh)) this.objects.push(mesh);
           this.selectObject(mesh);
           this.updateStats();
+          if (this.onSceneChange) this.onSceneChange();
         }
       });
     }
@@ -466,6 +471,7 @@ export class SceneManager {
     }
 
     this.updateStats();
+    if (this.onSceneChange) this.onSceneChange();
 
     if (this.historyManager) {
       this.historyManager.push({
@@ -477,6 +483,7 @@ export class SceneManager {
           });
           this.selectObjects(deletedMeshes);
           this.updateStats();
+          if (this.onSceneChange) this.onSceneChange();
         },
         redo: () => {
           deletedMeshes.forEach(m => {
@@ -487,9 +494,14 @@ export class SceneManager {
           });
           this.selectObject(this.objects[this.objects.length - 1] || null);
           this.updateStats();
+          if (this.onSceneChange) this.onSceneChange();
         }
       });
     }
+  }
+
+  removeObject(mesh) {
+    this.deleteObject(mesh);
   }
 
   toggleObjectVisibility(mesh) {
