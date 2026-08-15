@@ -381,6 +381,7 @@ export class QuadMesh {
     const geo = new THREE.BufferGeometry();
     const positions = [];
     const normals = [];
+    const uvs = [];
 
     this.quads.forEach((face) => {
       const unique = Array.from(new Set(face));
@@ -395,10 +396,12 @@ export class QuadMesh {
         // Tri 1: (v0, v1, v2)
         positions.push(v0.x, v0.y, v0.z, v1.x, v1.y, v1.z, v2.x, v2.y, v2.z);
         normals.push(quadNormal.x, quadNormal.y, quadNormal.z, quadNormal.x, quadNormal.y, quadNormal.z, quadNormal.x, quadNormal.y, quadNormal.z);
+        uvs.push(0, 0, 1, 0, 1, 1);
 
         // Tri 2: (v0, v2, v3)
         positions.push(v0.x, v0.y, v0.z, v2.x, v2.y, v2.z, v3.x, v3.y, v3.z);
         normals.push(quadNormal.x, quadNormal.y, quadNormal.z, quadNormal.x, quadNormal.y, quadNormal.z, quadNormal.x, quadNormal.y, quadNormal.z);
+        uvs.push(0, 0, 1, 1, 0, 1);
       } else if (unique.length === 3) {
         const v0 = this.vertices[unique[0]];
         const v1 = this.vertices[unique[1]];
@@ -410,11 +413,13 @@ export class QuadMesh {
 
         positions.push(v0.x, v0.y, v0.z, v1.x, v1.y, v1.z, v2.x, v2.y, v2.z);
         normals.push(triNormal.x, triNormal.y, triNormal.z, triNormal.x, triNormal.y, triNormal.z, triNormal.x, triNormal.y, triNormal.z);
+        uvs.push(0, 0, 1, 0, 0.5, 1);
       }
     });
 
     geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
     geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
     geo.computeBoundingBox();
 
     return geo;

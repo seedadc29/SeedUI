@@ -2,12 +2,14 @@ import * as THREE from 'three';
 import { SelectionTools } from '../tools/SelectionTools.js';
 
 export class UIManager {
-  constructor(engine, sceneManager, transformManager, meshEditor, historyManager) {
+  constructor(engine, sceneManager, transformManager, meshEditor, historyManager, paintManager, exportManager) {
     this.engine = engine;
     this.sceneManager = sceneManager;
     this.transformManager = transformManager;
     this.meshEditor = meshEditor;
     this.historyManager = historyManager;
+    this.paintManager = paintManager;
+    this.exportManager = exportManager;
     
     this.currentMode = 'model'; // 'model' | 'paint' | 'zoo' | 'view'
     this.currentSubmode = 'object'; // 'object' | 'vertex' | 'edge' | 'face'
@@ -39,7 +41,7 @@ export class UIManager {
     this.sceneManager.onSelectionChange = (obj) => {
       if (this.currentSubmode !== 'object') {
         this.meshEditor.setSubmode(this.currentSubmode);
-      } else if (obj && obj.visible && this.currentMode !== 'view') {
+      } else if (obj && obj.visible && this.currentMode !== 'view' && this.currentMode !== 'paint') {
         this.transformManager.attach(obj);
       } else {
         this.transformManager.detach();
@@ -56,6 +58,7 @@ export class UIManager {
       this.transformManager.updateCamera(camera);
     };
 
+    this.initFileMenu();
     this.initModeTabs();
     this.initToolbar();
     this.initSubmodes();
@@ -63,10 +66,48 @@ export class UIManager {
     this.initShadingControls();
     this.initCameraGizmos();
     this.initInspector();
+    this.initPaintUI();
     this.initShiftAContextMenu();
     this.initOperatorPanelEvents();
     this.initRaycasting();
     this.initShortcuts();
+  }
+
+  initFileMenu() {
+    const fileBtn = document.getElementById('btn-menu-file');
+    const dropdown = document.getElementById('file-dropdown');
+    if (!fileBtn || !dropdown) return;
+
+    fileBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdown.classList.toggle('hidden');
+    });
+
+    window.addEventListener('click', (e) => {
+      if (!dropdown.contains(e.target) && e.target !== fileBtn) {
+        dropdown.classList.add('hidden');
+      }
+    });
+
+    document.getElementById('btn-export-obj')?.addEventListener('click', () => {
+      dropdown.classList.add('hidden');
+      if (this.exportManager) this.exportManager.exportOBJ();
+    });
+
+    document.getElementById('btn-export-gltf')?.addEventListener('click', () => {
+      dropdown.classList.add('hidden');
+      if (this.exportManager) this.exportManager.exportGLTF(null, true);
+    });
+
+    document.getElementById('btn-export-stl')?.addEventListener('click', () => {
+      dropdown.classList.add('hidden');
+      if (this.exportManager) this.exportManager.exportSTL();
+    });
+
+    document.getElementById('btn-save-project')?.addEventListener('click', () => {
+      dropdown.classList.add('hidden');
+      if (this.exportManager) this.exportManager.saveProjectJSON();
+    });
   }
 
   initModeTabs() {
@@ -82,19 +123,83 @@ export class UIManager {
 
   setMode(mode) {
     this.currentMode = mode;
+    this.engine.currentMode = mode;
     const leftToolbar = document.getElementById('left-toolbar');
+    const paintCategory = document.getElementById('paint-category-panel');
 
     if (mode === 'model') {
       if (leftToolbar) leftToolbar.style.display = 'flex';
+      if (paintCategory) paintCategory.classList.add('hidden');
       if (this.currentSubmode === 'object' && this.sceneManager.getSelectedObject()) {
         this.transformManager.attach(this.sceneManager.getSelectedObject());
       }
+    } else if (mode === 'paint') {
+      if (leftToolbar) leftToolbar.style.display = 'flex';
+      if (paintCategory) paintCategory.classList.remove('hidden');
+      this.transformManager.detach();
+      this.meshEditor.clearHelpers();
     } else if (mode === 'view') {
       if (leftToolbar) leftToolbar.style.display = 'none';
+      if (paintCategory) paintCategory.classList.add('hidden');
       this.transformManager.detach();
       this.meshEditor.clearHelpers();
     } else {
       if (leftToolbar) leftToolbar.style.display = 'flex';
+      if (paintCategory) paintCategory.classList.add('hidden');
+    }
+  }
+
+  initPaintUI() {
+    if (!this.paintManager) return;
+
+    const brushColor = document.getElementById('paint-brush-color');
+    if (brushColor) {
+      brushColor.addEventListener('input', (e) => this.paintManager.setBrushColor(e.target.value));
+    }
+
+    const brushSize = document.getElementById('paint-brush-size');
+    const brushSizeVal = document.getElementById('paint-brush-size-val');
+    if (brushSize) {
+      brushSize.addEventListener('input', (e) => {
+        this.paintManager.setBrushSize(parseInt(e.target.value));
+        if (brushSizeVal) brushSizeVal.textContent = `${e.target.value}px`;
+      });
+    }
+
+    const brushOpacity = document.getElementById('paint-brush-opacity');
+    const brushOpacityVal = document.getElementById('paint-brush-opacity-val');
+    if (brushOpacity) {
+      brushOpacity.addEventListener('input', (e) => {
+        this.paintManager.setBrushOpacity(parseFloat(e.target.value));
+        if (brushOpacityVal) brushOpacityVal.textContent = `${Math.round(parseFloat(e.target.value) * 100)}%`;
+      });
+    }
+
+    const pixelMode = document.getElementById('paint-pixel-mode');
+    if (pixelMode) {
+      pixelMode.addEventListener('change', (e) => this.paintManager.setPixelMode(e.target.checked));
+    }
+
+    const drawBtn = document.getElementById('btn-paint-draw');
+    const eraseBtn = document.getElementById('btn-paint-erase');
+    if (drawBtn && eraseBtn) {
+      drawBtn.addEventListener('click', () => {
+        drawBtn.style.background = 'var(--accent)';
+        eraseBtn.style.background = 'var(--bg-panel)';
+        this.paintManager.setBrushMode('draw');
+      });
+      eraseBtn.addEventListener('click', () => {
+        eraseBtn.style.background = 'var(--accent)';
+        drawBtn.style.background = 'var(--bg-panel)';
+        this.paintManager.setBrushMode('erase');
+      });
+    }
+
+    const clearBtn = document.getElementById('btn-paint-clear');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        this.paintManager.clearTexture();
+      });
     }
   }
 

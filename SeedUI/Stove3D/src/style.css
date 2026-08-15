@@ -127,6 +127,52 @@ input, button, select {
   color: var(--text-primary);
 }
 
+/* Header Dropdown Menus */
+.menu-dropdown-content {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background: #1e1e24;
+  border: 1px solid var(--border-light);
+  border-radius: 5px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  padding: 4px 0;
+  min-width: 210px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+}
+
+.menu-dropdown-content.hidden {
+  display: none !important;
+}
+
+.menu-dropdown-item {
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 11.5px;
+  text-align: left;
+  padding: 7px 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.1s ease;
+}
+
+.menu-dropdown-item:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.menu-dropdown-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
 /* Mode Tabs */
 .header-center {
   display: flex;

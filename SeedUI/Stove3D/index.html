@@ -17,7 +17,16 @@
             <span class="logo-sub">STUDIO</span>
           </div>
           <div class="header-menu">
-            <button class="menu-btn" id="btn-menu-file">Arquivo</button>
+            <div class="menu-dropdown-wrapper" style="position:relative;display:inline-block;">
+              <button class="menu-btn" id="btn-menu-file">Arquivo ▾</button>
+              <div class="menu-dropdown-content hidden" id="file-dropdown">
+                <button class="menu-dropdown-item" id="btn-export-obj">📦 Exportar Wavefront (.obj)</button>
+                <button class="menu-dropdown-item" id="btn-export-gltf">🌐 Exportar GLTF / GLB (.glb)</button>
+                <button class="menu-dropdown-item" id="btn-export-stl">🖨️ Exportar STL (.stl)</button>
+                <div class="menu-dropdown-divider"></div>
+                <button class="menu-dropdown-item" id="btn-save-project">💾 Salvar Projeto (.stove)</button>
+              </div>
+            </div>
             <button class="menu-btn" id="btn-menu-edit">Editar</button>
             <button class="menu-btn" id="btn-menu-add">Adicionar</button>
             <button class="menu-btn" id="btn-menu-view">Exibir</button>
@@ -287,6 +296,40 @@
                   <div class="setting-item">
                     <span>Arestas Estruturais</span>
                     <input type="checkbox" class="styled-checkbox" id="chk-edges" checked>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Texture Paint Panel (Visible in Pintura Mode) -->
+              <div class="transform-category hidden" id="paint-category-panel">
+                <div class="category-header">
+                  <span>🎨 Pintura de Textura 3D</span>
+                </div>
+                <div class="viewport-settings-list">
+                  <div class="setting-item">
+                    <span>Cor do Pincel</span>
+                    <input type="color" class="color-box" id="paint-brush-color" value="#ff3b30">
+                  </div>
+                  <div class="setting-item">
+                    <span>Tamanho</span>
+                    <input type="range" id="paint-brush-size" min="2" max="64" value="16" style="width:70px">
+                    <span id="paint-brush-size-val" style="font-size:10px;color:var(--text-secondary)">16px</span>
+                  </div>
+                  <div class="setting-item">
+                    <span>Opacidade</span>
+                    <input type="range" id="paint-brush-opacity" min="0.1" max="1.0" step="0.05" value="1.0" style="width:70px">
+                    <span id="paint-brush-opacity-val" style="font-size:10px;color:var(--text-secondary)">100%</span>
+                  </div>
+                  <div class="setting-item">
+                    <span>Modo Pixel Art</span>
+                    <input type="checkbox" class="styled-checkbox" id="paint-pixel-mode">
+                  </div>
+                  <div style="display:flex;gap:4px;margin-top:6px;">
+                    <button class="add-prim-btn" id="btn-paint-draw" style="flex:1;background:var(--accent)">✏️ Pincel</button>
+                    <button class="add-prim-btn" id="btn-paint-erase" style="flex:1;background:var(--bg-panel)">🧹 Borracha</button>
+                  </div>
+                  <div style="margin-top:6px;">
+                    <button class="add-prim-btn" id="btn-paint-clear" style="width:100%;background:#ef444422;color:#ef4444;border-color:#ef444444">🗑️ Limpar Textura</button>
                   </div>
                 </div>
               </div>
