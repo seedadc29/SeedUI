@@ -392,13 +392,87 @@ export class QuadMesh {
     return { n0, n1, n2, n3 };
   }
 
-  // --- THREE.JS BUFFER GENERATION (OPTION 3: 2x2 SUBDIVIDED QUAD GRID) ---
+  computeAutoSmoothNormals(angleThresholdDeg = 30) {
+    const angleThresholdRad = (angleThresholdDeg * Math.PI) / 180;
+    const cosThreshold = Math.cos(angleThresholdRad);
+
+    const triNormals = [];
+    const triVertices = [];
+    const triFaceMap = [];
+
+    this.quads.forEach((face, fIdx) => {
+      const unique = Array.from(new Set(face));
+      if (unique.length === 4) {
+        const v0 = this.vertices[face[0]];
+        const v1 = this.vertices[face[1]];
+        const v2 = this.vertices[face[2]];
+        const v3 = this.vertices[face[3]];
+
+        const t0Norm = new THREE.Vector3().subVectors(v2, v1).cross(new THREE.Vector3().subVectors(v0, v1)).normalize();
+        const t1Norm = new THREE.Vector3().subVectors(v0, v3).cross(new THREE.Vector3().subVectors(v2, v3)).normalize();
+
+        triNormals.push(t0Norm);
+        triVertices.push([face[0], face[1], face[2]]);
+        triFaceMap.push(fIdx);
+
+        triNormals.push(t1Norm);
+        triVertices.push([face[0], face[2], face[3]]);
+        triFaceMap.push(fIdx);
+      } else if (unique.length === 3) {
+        const v0 = this.vertices[unique[0]];
+        const v1 = this.vertices[unique[1]];
+        const v2 = this.vertices[unique[2]];
+        const tNorm = new THREE.Vector3().subVectors(v2, v1).cross(new THREE.Vector3().subVectors(v0, v1)).normalize();
+        triNormals.push(tNorm);
+        triVertices.push([unique[0], unique[1], unique[2]]);
+        triFaceMap.push(fIdx);
+      }
+    });
+
+    const vertexNormals = [];
+
+    for (let tIdx = 0; tIdx < triNormals.length; tIdx++) {
+      const myNorm = triNormals[tIdx];
+      const myVerts = triVertices[tIdx];
+      const myFaceIdx = triFaceMap[tIdx];
+
+      for (let corner = 0; corner < 3; corner++) {
+        const vId = myVerts[corner];
+        const accumNorm = new THREE.Vector3().copy(myNorm);
+
+        for (let otherTIdx = 0; otherTIdx < triNormals.length; otherTIdx++) {
+          if (otherTIdx === tIdx) continue;
+          const otherVerts = triVertices[otherTIdx];
+          if (otherVerts.includes(vId)) {
+            const otherNorm = triNormals[otherTIdx];
+            const otherFaceIdx = triFaceMap[otherTIdx];
+            const cosAngle = myNorm.dot(otherNorm);
+
+            // Same Quad face ALWAYS shares normals; across separate faces only if <= 30 deg
+            if (myFaceIdx === otherFaceIdx || cosAngle >= cosThreshold) {
+              accumNorm.add(otherNorm);
+            }
+          }
+        }
+
+        accumNorm.normalize();
+        vertexNormals.push(accumNorm);
+      }
+    }
+
+    return vertexNormals;
+  }
+
+  // --- THREE.JS BUFFER GENERATION (BLENDER EXACT AUTO-SMOOTH) ---
 
   toBufferGeometry() {
     const geo = new THREE.BufferGeometry();
     const positions = [];
     const normals = [];
     const uvs = [];
+
+    const vertNormals = this.computeAutoSmoothNormals(30);
+    let vNormIdx = 0;
 
     this.quads.forEach((face) => {
       const unique = Array.from(new Set(face));
@@ -408,63 +482,34 @@ export class QuadMesh {
         const v2 = this.vertices[face[2]];
         const v3 = this.vertices[face[3]];
 
-        const { n0, n1, n2, n3 } = this.computeQuadCornerNormals(v0, v1, v2, v3);
+        const n0 = vertNormals[vNormIdx++];
+        const n1 = vertNormals[vNormIdx++];
+        const n2 = vertNormals[vNormIdx++];
 
-        // Midpoints
-        const m01 = new THREE.Vector3().addVectors(v0, v1).multiplyScalar(0.5);
-        const m12 = new THREE.Vector3().addVectors(v1, v2).multiplyScalar(0.5);
-        const m23 = new THREE.Vector3().addVectors(v2, v3).multiplyScalar(0.5);
-        const m30 = new THREE.Vector3().addVectors(v3, v0).multiplyScalar(0.5);
-        const mCenter = new THREE.Vector3(
-          (v0.x + v1.x + v2.x + v3.x) * 0.25,
-          (v0.y + v1.y + v2.y + v3.y) * 0.25,
-          (v0.z + v1.z + v2.z + v3.z) * 0.25
-        );
+        const n3 = vertNormals[vNormIdx++];
+        const n4 = vertNormals[vNormIdx++];
+        const n5 = vertNormals[vNormIdx++];
 
-        // Midpoint Normals
-        const n01 = new THREE.Vector3().addVectors(n0, n1).normalize();
-        const n12 = new THREE.Vector3().addVectors(n1, n2).normalize();
-        const n23 = new THREE.Vector3().addVectors(n2, n3).normalize();
-        const n30 = new THREE.Vector3().addVectors(n3, n0).normalize();
-        const nCenter = new THREE.Vector3(
-          (n0.x + n1.x + n2.x + n3.x) * 0.25,
-          (n0.y + n1.y + n2.y + n3.y) * 0.25,
-          (n0.z + n1.z + n2.z + n3.z) * 0.25
-        ).normalize();
+        // Tri 1: (v0, v1, v2)
+        positions.push(v0.x, v0.y, v0.z, v1.x, v1.y, v1.z, v2.x, v2.y, v2.z);
+        normals.push(n0.x, n0.y, n0.z, n1.x, n1.y, n1.z, n2.x, n2.y, n2.z);
+        uvs.push(0, 0, 1, 0, 1, 1);
 
-        const addTri = (pA, pB, pC, nA, nB, nC, uA, uB, uC) => {
-          positions.push(pA.x, pA.y, pA.z, pB.x, pB.y, pB.z, pC.x, pC.y, pC.z);
-          normals.push(nA.x, nA.y, nA.z, nB.x, nB.y, nB.z, nC.x, nC.y, nC.z);
-          uvs.push(uA[0], uA[1], uB[0], uB[1], uC[0], uC[1]);
-        };
-
-        // Sub-Quad 0: [v0, m01, mCenter, m30]
-        addTri(v0, m01, mCenter, n0, n01, nCenter, [0, 0], [0.5, 0], [0.5, 0.5]);
-        addTri(v0, mCenter, m30, n0, nCenter, n30, [0, 0], [0.5, 0.5], [0, 0.5]);
-
-        // Sub-Quad 1: [m01, v1, m12, mCenter]
-        addTri(m01, v1, m12, n01, n1, n12, [0.5, 0], [1, 0], [1, 0.5]);
-        addTri(m01, m12, mCenter, n01, n12, nCenter, [0.5, 0], [1, 0.5], [0.5, 0.5]);
-
-        // Sub-Quad 2: [mCenter, m12, v2, m23]
-        addTri(mCenter, m12, v2, nCenter, n12, n2, [0.5, 0.5], [1, 0.5], [1, 1]);
-        addTri(mCenter, v2, m23, nCenter, n2, n23, [0.5, 0.5], [1, 1], [0.5, 1]);
-
-        // Sub-Quad 3: [m30, mCenter, m23, v3]
-        addTri(m30, mCenter, m23, n30, nCenter, n23, [0, 0.5], [0.5, 0.5], [0.5, 1]);
-        addTri(m30, m23, v3, n30, n23, n3, [0, 0.5], [0.5, 1], [0, 1]);
-
+        // Tri 2: (v0, v2, v3)
+        positions.push(v0.x, v0.y, v0.z, v2.x, v2.y, v2.z, v3.x, v3.y, v3.z);
+        normals.push(n3.x, n3.y, n3.z, n4.x, n4.y, n4.z, n5.x, n5.y, n5.z);
+        uvs.push(0, 0, 1, 1, 0, 1);
       } else if (unique.length === 3) {
         const v0 = this.vertices[unique[0]];
         const v1 = this.vertices[unique[1]];
         const v2 = this.vertices[unique[2]];
 
-        const cb = new THREE.Vector3().subVectors(v2, v1);
-        const ab = new THREE.Vector3().subVectors(v0, v1);
-        const triNormal = cb.cross(ab).normalize();
+        const n0 = vertNormals[vNormIdx++];
+        const n1 = vertNormals[vNormIdx++];
+        const n2 = vertNormals[vNormIdx++];
 
         positions.push(v0.x, v0.y, v0.z, v1.x, v1.y, v1.z, v2.x, v2.y, v2.z);
-        normals.push(triNormal.x, triNormal.y, triNormal.z, triNormal.x, triNormal.y, triNormal.z, triNormal.x, triNormal.y, triNormal.z);
+        normals.push(n0.x, n0.y, n0.z, n1.x, n1.y, n1.z, n2.x, n2.y, n2.z);
         uvs.push(0, 0, 1, 0, 0.5, 1);
       }
     });
@@ -500,6 +545,9 @@ export class QuadMesh {
     const normAttr = geo.attributes.normal;
     let ptr = 0;
 
+    const vertNormals = this.computeAutoSmoothNormals(30);
+    let vNormIdx = 0;
+
     this.quads.forEach((face) => {
       const unique = Array.from(new Set(face));
       if (unique.length === 4) {
@@ -508,62 +556,35 @@ export class QuadMesh {
         const v2 = this.vertices[face[2]];
         const v3 = this.vertices[face[3]];
 
-        const { n0, n1, n2, n3 } = this.computeQuadCornerNormals(v0, v1, v2, v3);
+        const n0 = vertNormals[vNormIdx++];
+        const n1 = vertNormals[vNormIdx++];
+        const n2 = vertNormals[vNormIdx++];
 
-        const m01 = { x: (v0.x + v1.x) * 0.5, y: (v0.y + v1.y) * 0.5, z: (v0.z + v1.z) * 0.5 };
-        const m12 = { x: (v1.x + v2.x) * 0.5, y: (v1.y + v2.y) * 0.5, z: (v1.z + v2.z) * 0.5 };
-        const m23 = { x: (v2.x + v3.x) * 0.5, y: (v2.y + v3.y) * 0.5, z: (v2.z + v3.z) * 0.5 };
-        const m30 = { x: (v3.x + v0.x) * 0.5, y: (v3.y + v0.y) * 0.5, z: (v3.z + v0.z) * 0.5 };
-        const mCenter = {
-          x: (v0.x + v1.x + v2.x + v3.x) * 0.25,
-          y: (v0.y + v1.y + v2.y + v3.y) * 0.25,
-          z: (v0.z + v1.z + v2.z + v3.z) * 0.25
-        };
+        const n3 = vertNormals[vNormIdx++];
+        const n4 = vertNormals[vNormIdx++];
+        const n5 = vertNormals[vNormIdx++];
 
-        const n01 = new THREE.Vector3().addVectors(n0, n1).normalize();
-        const n12 = new THREE.Vector3().addVectors(n1, n2).normalize();
-        const n23 = new THREE.Vector3().addVectors(n2, n3).normalize();
-        const n30 = new THREE.Vector3().addVectors(n3, n0).normalize();
-        const nCenter = new THREE.Vector3(
-          (n0.x + n1.x + n2.x + n3.x) * 0.25,
-          (n0.y + n1.y + n2.y + n3.y) * 0.25,
-          (n0.z + n1.z + n2.z + n3.z) * 0.25
-        ).normalize();
+        // Tri 1: (v0, v1, v2)
+        posAttr.setXYZ(ptr, v0.x, v0.y, v0.z); normAttr.setXYZ(ptr, n0.x, n0.y, n0.z); ptr++;
+        posAttr.setXYZ(ptr, v1.x, v1.y, v1.z); normAttr.setXYZ(ptr, n1.x, n1.y, n1.z); ptr++;
+        posAttr.setXYZ(ptr, v2.x, v2.y, v2.z); normAttr.setXYZ(ptr, n2.x, n2.y, n2.z); ptr++;
 
-        const setTri = (pA, pB, pC, nA, nB, nC) => {
-          posAttr.setXYZ(ptr, pA.x, pA.y, pA.z); normAttr.setXYZ(ptr, nA.x, nA.y, nA.z); ptr++;
-          posAttr.setXYZ(ptr, pB.x, pB.y, pB.z); normAttr.setXYZ(ptr, nB.x, nB.y, nB.z); ptr++;
-          posAttr.setXYZ(ptr, pC.x, pC.y, pC.z); normAttr.setXYZ(ptr, nC.x, nC.y, nC.z); ptr++;
-        };
-
-        // Sub-Quad 0
-        setTri(v0, m01, mCenter, n0, n01, nCenter);
-        setTri(v0, mCenter, m30, n0, nCenter, n30);
-
-        // Sub-Quad 1
-        setTri(m01, v1, m12, n01, n1, n12);
-        setTri(m01, m12, mCenter, n01, n12, nCenter);
-
-        // Sub-Quad 2
-        setTri(mCenter, m12, v2, nCenter, n12, n2);
-        setTri(mCenter, v2, m23, nCenter, n2, n23);
-
-        // Sub-Quad 3
-        setTri(m30, mCenter, m23, n30, nCenter, n23);
-        setTri(m30, m23, v3, n30, n23, n3);
-
+        // Tri 2: (v0, v2, v3)
+        posAttr.setXYZ(ptr, v0.x, v0.y, v0.z); normAttr.setXYZ(ptr, n3.x, n3.y, n3.z); ptr++;
+        posAttr.setXYZ(ptr, v2.x, v2.y, v2.z); normAttr.setXYZ(ptr, n4.x, n4.y, n4.z); ptr++;
+        posAttr.setXYZ(ptr, v3.x, v3.y, v3.z); normAttr.setXYZ(ptr, n5.x, n5.y, n5.z); ptr++;
       } else if (unique.length === 3) {
         const v0 = this.vertices[unique[0]];
         const v1 = this.vertices[unique[1]];
         const v2 = this.vertices[unique[2]];
 
-        const cb = new THREE.Vector3().subVectors(v2, v1);
-        const ab = new THREE.Vector3().subVectors(v0, v1);
-        const triNormal = cb.cross(ab).normalize();
+        const n0 = vertNormals[vNormIdx++];
+        const n1 = vertNormals[vNormIdx++];
+        const n2 = vertNormals[vNormIdx++];
 
-        posAttr.setXYZ(ptr, v0.x, v0.y, v0.z); normAttr.setXYZ(ptr, triNormal.x, triNormal.y, triNormal.z); ptr++;
-        posAttr.setXYZ(ptr, v1.x, v1.y, v1.z); normAttr.setXYZ(ptr, triNormal.x, triNormal.y, triNormal.z); ptr++;
-        posAttr.setXYZ(ptr, v2.x, v2.y, v2.z); normAttr.setXYZ(ptr, triNormal.x, triNormal.y, triNormal.z); ptr++;
+        posAttr.setXYZ(ptr, v0.x, v0.y, v0.z); normAttr.setXYZ(ptr, n0.x, n0.y, n0.z); ptr++;
+        posAttr.setXYZ(ptr, v1.x, v1.y, v1.z); normAttr.setXYZ(ptr, n1.x, n1.y, n1.z); ptr++;
+        posAttr.setXYZ(ptr, v2.x, v2.y, v2.z); normAttr.setXYZ(ptr, n2.x, n2.y, n2.z); ptr++;
       }
     });
 
