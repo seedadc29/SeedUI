@@ -279,6 +279,13 @@ export class UIManager {
 
   setSubmode(submode) {
     this.currentSubmode = submode;
+
+    // Blender Rule: Entering Edit Mode closes/locks the Operator parameter panel
+    const opPanel = document.getElementById('operator-panel');
+    if (opPanel && submode !== 'object') {
+      opPanel.classList.add('hidden');
+    }
+
     this.meshEditor.setSubmode(submode);
 
     const modeToggleBtn = document.getElementById('btn-mode-toggle');
