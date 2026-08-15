@@ -26,6 +26,17 @@ namespace seedui
         Annotate,
     };
 
+    // Transformação modal estilo Blender (Alt+G mover / Alt+R rotacionar /
+    // Alt+S escalonar): a seleção segue o mouse até confirmar (clique/Enter)
+    // ou cancelar (Esc/clique direito, restaurando a posição original).
+    enum class TransformMode
+    {
+        None,
+        Move,
+        Rotate,
+        Scale,
+    };
+
     class App
     {
     public:
@@ -110,6 +121,10 @@ namespace seedui
         void Refazer();
         void DrawElementTree(Element& element);
         void HandleCanvasInteraction(bool canvasHovered);
+        // Transformação modal estilo Blender (Alt+G/R/S).
+        void IniciarTransformar(TransformMode modo);
+        void AplicarTransformarModal(Modo& mode, float mouseX, float mouseY);
+        void FinalizarTransformar(bool confirmar);
         void HandleGuidesInteraction(); // guias arrastadas das réguas
         void DesenharGuias();           // linhas das guias sobre o canvas
         void SnapGuias(float& dx, float& dy,
@@ -138,6 +153,13 @@ namespace seedui
             float factorH = 1.0f;
 
             std::string lastDuplicatedId;
+            // Conjunto da última duplicação em grupo (Ctrl+D com vários
+            // objetos selecionados / clone por arrasto): permite repetir o
+            // mesmo deslocamento no próximo Ctrl+D com a mesma seleção.
+            std::vector<std::string> lastDuplicatedIds;
+            // Posição de origem de cada clone do grupo (para aprender o
+            // delta quando o usuário mover o conjunto manualmente).
+            std::vector<DuplicateTransformSnapshot> duplicatedSources;
             float sourceX = 0.0f;
             float sourceY = 0.0f;
             float sourceRot = 0.0f;
@@ -153,6 +175,8 @@ namespace seedui
                 factorW = 1.0f;
                 factorH = 1.0f;
                 lastDuplicatedId.clear();
+                lastDuplicatedIds.clear();
+                duplicatedSources.clear();
                 hasSourceSnapshot = false;
             }
         };
@@ -196,6 +220,13 @@ namespace seedui
         std::vector<std::string> mSelectedElementIds;
         std::string mAnchorElementId; // âncora de alinhamento (duplo clique)
         std::vector<CanvasTransformStart> mCanvasGroupStarts;
+        TransformMode mTransformMode = TransformMode::None;
+        float mTransformMouseStartX = 0.0f;
+        float mTransformMouseStartY = 0.0f;
+        float mTransformPivotX = 0.0f;
+        float mTransformPivotY = 0.0f;
+        float mTransformStartDist = 1.0f;
+        std::vector<CanvasTransformStart> mTransformStarts;
         bool mCanvasMarquee = false;
         bool mCanvasMarqueeAdditive = false;
         float mCanvasMarqueeStartX = 0.0f;

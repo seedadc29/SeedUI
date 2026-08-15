@@ -1,0 +1,156 @@
+================================================================================
+AGENTE.TXT - PLANEJAMENTO EM MILESTONES DO MINI-EDITOR 3D (STOVE REBORN)
+================================================================================
+
+DOCUMENTO DE DIRETRIZES E CADEIA DE DESENVOLVIMENTO
+Este documento define o plano mestre de construcao do Mini-Editor 3D inspirado no Stove e no Blender.
+Cada marco (Milestone) e incremental, autocontido, executavel e testavel antes do avanco para o proximo.
+O projeto e otimizado para maximo desempenho em computadores fracos (sem GPU dedicada / video integrado)
+e suporta execucao 100% offline (Desktop .exe) e online (Navegador Web).
+
+--------------------------------------------------------------------------------
+1. REGRAS DE CONDUTA E BOAS PRATICAS
+--------------------------------------------------------------------------------
+
+1. Estrutura em Cadeia Rigorosa: Nunca pular etapas. O Milestone N depende da estabilidade e validacao do Milestone N-1.
+2. Desempenho em Primeiro Lugar (Low-Spec First):
+   - Manter consumo de memoria RAM abaixo de 150 MB.
+   - Usar renderizacao WebGL/GPU leve (Phong/Lambert e Shaders otimizados).
+   - Sem overhead de CPU em repouso (0% de CPU ociosa).
+3. Controle Total do Codigo-Fonte: Todo o codigo e modular, limpo, tipado e com separacao clara entre Logica 3D, Interface (UI) e I/O de Arquivos.
+4. Atalhos e Usabilidade Padrao Blender: Teclas G (Mover), R (Rotacionar), S (Escalar), Tab (Alternar Modos), 1/2/3 (Vertice/Aresta/Face), Ctrl+Z (Desfazer), Ctrl+Y (Refazer), Shift+A (Adicionar).
+5. Criterio de Conclusao por Marco: Cada milestone termina com testes visuais e funcionais aprovados.
+
+--------------------------------------------------------------------------------
+2. TABELA GERAL DE MILESTONES
+--------------------------------------------------------------------------------
+
+[M01] Fundacao & Viewport 3D Ultraleve            -> Status: Concluido
+[M02] Primitivas & Sistema de Transformacao       -> Status: Concluido
+[M03] Modo Modelagem: Selecao de Malha            -> Status: Concluido
+[M04] Ferramentas de Modelagem (Mesh Edit)        -> Status: Planejado
+[M05] Modo Pintura 3D (Texture & Vertex Paint)    -> Status: Planejado
+[M06] Modo Zoo (Gerenciador de Cena)              -> Status: Planejado
+[M07] Modo View & Shaders de Iluminacao           -> Status: Planejado
+[M08] Auto-UV & Empacotamento de Texturas         -> Status: Planejado
+[M09] Sistema de Arquivos & Import/Export         -> Status: Planejado
+[M10] Interface UI Estilo Blender/ImGui & Atalhos -> Status: Planejado
+[M11] Empacotamento Desktop Offline (.EXE)        -> Status: Planejado
+
+--------------------------------------------------------------------------------
+3. DETALHAMENTO DOS MILESTONES
+--------------------------------------------------------------------------------
+
+[MILESTONE 01] - FUNDACAO & VIEWPORT 3D ULTRALEVE
+- Objetivo: Criar o motor base da aplicacao com foco em consumo ultrabaixo de memoria e CPU.
+- Tarefas:
+  1. Estruturar o projeto (HTML5 / Vanilla JS / TypeScript ou Three.js otimizado).
+  2. Implementar Viewport 3D com resolucao adaptativa (devicePixelRatio <= 1.5).
+  3. Camera orbital estilo Blender (Botao do meio do mouse = Orbitar, Shift+MMB = Pan, Scroll = Zoom).
+  4. Grid de chao responsivo e eixos X/Y/Z coloridos.
+  5. Monitor de FPS / Memoria integrado para controle de desempenho.
+- Validacao: Rodar em 60 FPS estaveis com menos de 80 MB de memoria RAM em repouso.
+
+[MILESTONE 02] - PRIMITIVAS 3D & SISTEMA DE TRANSFORMACAO
+- Objetivo: Permitir a criacao e manipulacao basica de geometrias no espaco 3D.
+- Tarefas:
+  1. Gerador de geometrias basicas: Cubo, Esfera, Cilindro, Cone, Plano, Torus.
+  2. Gizmos 3D de transformacao na tela: Translacao, Rotacao e Escala.
+  3. Transformacao via atalhos do teclado (G, R, S + eixo X/Y/Z + valor numerico).
+  4. Painel de propriedades de Objeto (Posicao, Rotacao, Escala, Visibilidade).
+- Validacao: Criar, mover, rotacionar e escalar multiplos objetos na viewport sem atraso.
+
+[MILESTONE 03] - MODO MODELAGEM: SELECAO DE MALHA
+- Objetivo: Implementar a estrutura de edicao interna de geometrias poligonais (Model Mode).
+- Tarefas:
+  1. Alternancia de modos: Tab alterna entre Object Mode e Edit/Model Mode.
+  2. Submodos de selecao com teclas numericas:
+     - 1: Vertices
+     - 2: Arestas
+     - 3: Faces
+  3. Algoritmo de Raycasting acelerado para deteccao precisa do clique do mouse.
+  4. Selecao multipla (Shift + Clique), Selecao por Retangulo (Box Select B) e Inversao (Ctrl + I).
+- Validacao: Selecionar individualmente ou em grupo qualquer vertice, aresta ou face.
+
+[MILESTONE 04] - FERRAMENTAS DE MODELAGEM (MESH EDIT)
+- Objetivo: Adicionar as ferramentas classicas de modelagem poligonal 3D do Stove / Blender.
+- Tarefas:
+  1. Extrude (E): Extrusao de faces normais ou ao longo de eixos.
+  2. Inset (I): Criacao de faces internas proporcionais.
+  3. Bevel (Ctrl + B): Chanfro e arredondamento de arestas e vertices.
+  4. Subdivide: Subdivisao uniforme de malhas e poligonos.
+  5. Loop Cut (Ctrl + R): Insercao de aneis de corte ao longo da malha.
+  6. Knife Tool (K): Corte interativo ponto a ponto com finalizacao em Enter.
+  7. Proportional Editing (O): Edicao proporcional suave com ajuste de raio pelo scroll.
+- Validacao: Modelar um objeto personalizado usando apenas as ferramentas.
+
+[MILESTONE 05] - MODO PINTURA 3D (TEXTURE & VERTEX PAINT)
+- Objetivo: Pintar cores e texturas diretamente sobre o modelo 3D em tempo real.
+- Tarefas:
+  1. Ativacao do Paint Mode na interface.
+  2. Sistema de projecao de pintura (Raycast de pincel sobre a textura / UV da malha).
+  3. Configuracoes de pincel: Raio (Shift+Scroll), Forca (Ctrl+Scroll), Falloff (Ctrl+Shift+Scroll), Ruido.
+  4. Paleta de cores com Color Picker, seletor HEX/RGB e paletas retro/pixel-art.
+  5. Modo de Textura Pixelada (Nearest Neighbor) sem custo de GPU.
+- Validacao: Pintar texturas detalhadas em tempo real sobre a malha 3D sem perda de quadros.
+
+[MILESTONE 06] - MODO ZOO (GERENCIADOR DE CENA & MULTI-OBJETOS)
+- Objetivo: Organizar, alinhar e compor multiplos modelos no mesmo projeto.
+- Tarefas:
+  1. Lista de Outliner / Cena com hierarquia de objetos.
+  2. Ferramenta de Snap (aderencia a grade e vertices de outros objetos).
+  3. Visualizador de Caixas Delimitadoras (Bounding Boxes).
+  4. Bake de Escala: Aplicar rotacoes e escalas diretamente na malha.
+  5. Duplicacao rapida (Shift + D) e Juncao de Objetos (Ctrl + J).
+- Validacao: Montar uma cena com multiplos objetos posicionados com snap e escalas aplicadas.
+
+[MILESTONE 07] - MODO VIEW & SHADERS DE ILUMINACAO ULTRALEVES
+- Objetivo: Proporcionar uma visualizacao limpa e estilizada com sombras e oclusao em GPU integrada.
+- Tarefas:
+  1. View Mode: Oculta gizmos, grades e alcas, mostrando o modelo renderizado.
+  2. Iluminacao direcional configuravel (Sol / Posicao da Luz, Intensidade, Cor).
+  3. Sombras dinamicas de baixo custo com toggle on/off.
+  4. Oclusao de Ambiente simulada no Viewport (escurecimento suave de dobras).
+  5. Seletor de cor de fundo e alinhamento de camera ortografica/perspectiva (Numpad 1, 3, 7).
+- Validacao: Visualizacao fluida do render com sombras ativas em PC modesto a 60 FPS.
+
+[MILESTONE 08] - AUTO-UV & EMPACOTAMENTO DE TEXTURAS
+- Objetivo: Gerar mapas UV e empacotar texturas automaticamente para exportacao e jogos.
+- Tarefas:
+  1. Algoritmo de projecao e desdobramento UV automatico (Smart UV Unwrap).
+  2. Empacotador de ilhas UV (UV Atlas Packer) para otimizar espaco de textura.
+  3. Exportacao de textura unificada em imagem PNG (128x128 ate 2048x2048).
+- Validacao: Gerar UVs limpos e sem sobreposicao em modelos criados pelo editor.
+
+[MILESTONE 09] - SISTEMA DE ARQUIVOS & IMPORT/EXPORT
+- Objetivo: Salvar projetos localmente e exportar para formatos padrao da industria 3D.
+- Tarefas:
+  1. Formato de projeto nativo (.stove3d ou .json) contendo geometria, materiais e historico.
+  2. Exportador Wavefront OBJ (.obj + .mtl + textura): Arquivo unico com atlas ou arquivos separados.
+  3. Exportador glTF / GLB (.gltf / .glb) para Unity, Unreal, Godot e Web.
+  4. Exportador STL (.stl) para impressao 3D.
+  5. Importador de arquivos .obj e .gltf existentes para edicao.
+- Validacao: Salvar um projeto, recarregar sem perda e abrir os arquivos exportados no Blender/Godot.
+
+[MILESTONE 10] - INTERFACE DO USUARIO (UI BLENDER/IMGUI) & ATALHOS
+- Objetivo: Interface profissional, escura, moderna, minimalista e altamente responsiva.
+- Tarefas:
+  1. Barra Superior (Header): Arquivo, Editar, Adicionar, Modos (Model, Paint, Zoo, View).
+  2. Barra Lateral de Ferramentas (Toolbar com icones e dicas de atalhos).
+  3. Painel Lateral Direito (Inspetor de Propriedades, Outliner, Modificadores, Cores).
+  4. Sistema de Historico Completo de Acoes: Desfazer (Ctrl+Z) e Refazer (Ctrl+Y).
+  5. Barra de Status inferior com contagem de vertices, faces e instrucao da ferramenta.
+- Validacao: Navegar em toda a interface exclusivamente por atalhos ou cliques sem bugs.
+
+[MILESTONE 11] - EMPACOTAMENTO DESKTOP OFFLINE (.EXE VIA TAURI)
+- Objetivo: Gerar o executavel nativo do Windows leve (~5 MB) para rodar 100% offline.
+- Tarefas:
+  1. Configurar o ambiente Tauri (Rust backend + WebView2 nativa do Windows).
+  2. Integrar acesso a arquivos nativo (dialogos Abrir/Salvar do Windows).
+  3. Compilar o .exe final autocontido.
+  4. Testar funcionamento com o computador totalmente desconectado da internet.
+- Validacao: Executar o arquivo .exe gerado diretamente com duplo clique no Windows sem internet.
+
+================================================================================
+FIM DO DOCUMENTO
+================================================================================

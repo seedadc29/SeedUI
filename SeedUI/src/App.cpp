@@ -1078,29 +1078,44 @@ namespace seedui
 
     void App::AtualizarDeltaDuplicacaoManual(const Element& el)
     {
-        if (mDup.hasSourceSnapshot && mDup.lastDuplicatedId == el.id)
+        if (!mDup.hasSourceSnapshot) return;
+        // Fonte de referência do delta: snapshot individual do elemento
+        // (grupo duplicado) ou o elemento único rastreado pelo Smart
+        // Duplicate (mDup.sourceX/Y/Rot/W/H).
+        const DuplicateTransformSnapshot* src = nullptr;
+        for (const DuplicateTransformSnapshot& s : mDup.duplicatedSources)
         {
-            const float curX = el.transformacao.value("x", 0.0f);
-            const float curY = el.transformacao.value("y", 0.0f);
-            const float curRot = Geo::ElementRotation(el);
-            const float curW = el.transformacao.value("largura", 160.0f);
-            const float curH = el.transformacao.value("altura", 32.0f);
+            if (s.id == el.id) { src = &s; break; }
+        }
+        const bool isSingle = mDup.lastDuplicatedId == el.id;
+        if (!src && !isSingle) return;
 
-            const float dx = curX - mDup.sourceX;
-            const float dy = curY - mDup.sourceY;
-            const float drot = curRot - mDup.sourceRot;
-            const float fw = curW / std::max(0.01f, mDup.sourceW);
-            const float fh = curH / std::max(0.01f, mDup.sourceH);
+        const float curX = el.transformacao.value("x", 0.0f);
+        const float curY = el.transformacao.value("y", 0.0f);
+        const float curRot = Geo::ElementRotation(el);
+        const float curW = el.transformacao.value("largura", 160.0f);
+        const float curH = el.transformacao.value("altura", 32.0f);
 
-            if (fabsf(dx) > 0.001f || fabsf(dy) > 0.001f || fabsf(drot) > 0.001f ||
-                fabsf(fw - 1.0f) > 0.001f || fabsf(fh - 1.0f) > 0.001f)
-            {
-                mDup.deltaX = dx;
-                mDup.deltaY = dy;
-                mDup.deltaRot = drot;
-                mDup.factorW = fw;
-                mDup.factorH = fh;
-            }
+        const float srcX = src ? src->x : mDup.sourceX;
+        const float srcY = src ? src->y : mDup.sourceY;
+        const float srcRot = src ? src->rot : mDup.sourceRot;
+        const float srcW = src ? src->w : mDup.sourceW;
+        const float srcH = src ? src->h : mDup.sourceH;
+
+        const float dx = curX - srcX;
+        const float dy = curY - srcY;
+        const float drot = curRot - srcRot;
+        const float fw = curW / std::max(0.01f, srcW);
+        const float fh = curH / std::max(0.01f, srcH);
+
+        if (fabsf(dx) > 0.001f || fabsf(dy) > 0.001f || fabsf(drot) > 0.001f ||
+            fabsf(fw - 1.0f) > 0.001f || fabsf(fh - 1.0f) > 0.001f)
+        {
+            mDup.deltaX = dx;
+            mDup.deltaY = dy;
+            mDup.deltaRot = drot;
+            mDup.factorW = fw;
+            mDup.factorH = fh;
         }
     }
 
@@ -1125,9 +1140,23 @@ namespace seedui
         }
 
         Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+        // O Smart Duplicate continua a sequência quando a seleção é a MESMA
+        // da última duplicação: um único elemento (rastreado por id) ou um
+        // grupo inteiro (comparado como conjunto) repete o mesmo delta — os
+        // objetos acompanham em grupo a mesma ação.
+        bool sameGroup = false;
+        if (mDup.hasSourceSnapshot && ids.size() > 1 &&
+            ids.size() == mDup.lastDuplicatedIds.size())
+        {
+            std::vector<std::string> sel = ids, last = mDup.lastDuplicatedIds;
+            std::sort(sel.begin(), sel.end());
+            std::sort(last.begin(), last.end());
+            sameGroup = (sel == last);
+        }
         const bool continuingSequence =
-            ids.size() == 1 && mDup.hasSourceSnapshot &&
-            ids.front() == mDup.lastDuplicatedId;
+            mDup.hasSourceSnapshot &&
+            ((ids.size() == 1 && ids.front() == mDup.lastDuplicatedId) ||
+             sameGroup);
         if (!continuingSequence)
             mDup.ResetToDefault();
 
@@ -1154,6 +1183,22 @@ namespace seedui
                 Project::ReparentearElemento(mode, id, mPowerClipEditFrameId);
 
         if (pastedRootIds.empty()) return;
+
+        // Snapshot da posição de origem de cada clone (para aprender o delta
+        // quando o usuário mover o grupo manualmente depois do Ctrl+D).
+        mDup.duplicatedSources.clear();
+        mDup.duplicatedSources.reserve(copies.size());
+        for (size_t i = 0; i < pastedRootIds.size() && i < copies.size(); ++i)
+        {
+            DuplicateTransformSnapshot snap;
+            snap.id = pastedRootIds[i];
+            snap.x = copies[i].transformacao.value("x", 0.0f);
+            snap.y = copies[i].transformacao.value("y", 0.0f);
+            snap.rot = Geo::ElementRotation(copies[i]);
+            snap.w = copies[i].transformacao.value("largura", 160.0f);
+            snap.h = copies[i].transformacao.value("altura", 32.0f);
+            mDup.duplicatedSources.push_back(snap);
+        }
 
         if (pastedRootIds.size() == 1)
         {
@@ -1203,8 +1248,12 @@ namespace seedui
                     clone->transformacao["y"] = curY + mDup.deltaY;
                 }
             }
+            // Continua a sequência do Smart Duplicate para o GRUPO: o mesmo
+            // deslocamento se repete nos próximos Ctrl+D com a mesma seleção
+            // (e também é herdado do clone por arrasto com o botão direito).
             mDup.lastDuplicatedId.clear();
-            mDup.hasSourceSnapshot = false;
+            mDup.lastDuplicatedIds = pastedRootIds;
+            mDup.hasSourceSnapshot = true;
         }
 
         mSelectedElementIds = pastedRootIds;
@@ -3202,6 +3251,180 @@ namespace seedui
         mStatusMsgUntil = GetTime() + 3.0;
     }
 
+    void App::IniciarTransformar(TransformMode modo)
+    {
+        if (mCurrentTool != Tool::Select && mCurrentTool != Tool::Move)
+        {
+            mStatusMsg = "Alt+G/R/S funciona na ferramenta de Seleção";
+            mStatusMsgUntil = GetTime() + 4.0;
+            return;
+        }
+        if (!PossuiModoAtivo() || mSelectedElementIds.empty())
+        {
+            mStatusMsg = "Selecione um elemento para transformar (Alt+G/R/S)";
+            mStatusMsgUntil = GetTime() + 4.0;
+            return;
+        }
+        Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+        mTransformStarts.clear();
+        for (const std::string& id : mSelectedElementIds)
+        {
+            Element* el = Project::ResolverId(mode, id);
+            if (!el || el->bloqueado) continue;
+            CollectTransformStarts(*el, mTransformStarts);
+        }
+        if (mTransformStarts.empty()) return;
+
+        // Pivô = centro da caixa conjunta da seleção.
+        float minX = FLT_MAX, minY = FLT_MAX, maxX = -FLT_MAX, maxY = -FLT_MAX;
+        for (const CanvasTransformStart& s : mTransformStarts)
+        {
+            minX = std::min(minX, s.x);
+            minY = std::min(minY, s.y);
+            maxX = std::max(maxX, s.x + s.w);
+            maxY = std::max(maxY, s.y + s.h);
+        }
+        mTransformPivotX = (minX + maxX) * 0.5f;
+        mTransformPivotY = (minY + maxY) * 0.5f;
+
+        const ImVec2 mouse = ImGui::GetMousePos();
+        CanvasScreenToProject(&mProject, mouse.x, mouse.y,
+                              mTransformMouseStartX, mTransformMouseStartY,
+                              false, mCanvasZoom, mCanvasPanX, mCanvasPanY);
+        const float ddx = mTransformMouseStartX - mTransformPivotX;
+        const float ddy = mTransformMouseStartY - mTransformPivotY;
+        mTransformStartDist = std::max(0.001f, sqrtf(ddx * ddx + ddy * ddy));
+
+        mTransformMode = modo;
+        mStatusMsg = modo == TransformMode::Move
+            ? "Mover (Alt+G): mova o mouse; clique/Enter confirma, Esc cancela"
+            : modo == TransformMode::Rotate
+                ? "Rotacionar (Alt+R): mova o mouse; clique/Enter confirma, Esc cancela"
+                : "Escalonar (Alt+S): mova o mouse; clique/Enter confirma, Esc cancela";
+        mStatusMsgUntil = GetTime() + 6.0;
+    }
+
+    void App::AplicarTransformarModal(Modo& mode, float mouseX, float mouseY)
+    {
+        if (mTransformStarts.empty()) return;
+        const float dx = mouseX - mTransformMouseStartX;
+        const float dy = mouseY - mTransformMouseStartY;
+        switch (mTransformMode)
+        {
+            case TransformMode::Move:
+            {
+                float moveX = dx, moveY = dy;
+                // Shift trava o eixo ortogonal (como no arrasto normal).
+                if (ImGui::GetIO().KeyShift)
+                {
+                    if (fabsf(moveX) >= fabsf(moveY)) moveY = 0.0f;
+                    else moveX = 0.0f;
+                }
+                for (const CanvasTransformStart& st : mTransformStarts)
+                {
+                    Element* el = Project::ResolverId(mode, st.id);
+                    if (!el || el->bloqueado) continue;
+                    el->transformacao["x"] = st.x + moveX;
+                    el->transformacao["y"] = st.y + moveY;
+                }
+                break;
+            }
+            case TransformMode::Rotate:
+            {
+                const float startAngle = atan2f(mTransformMouseStartY - mTransformPivotY,
+                                                mTransformMouseStartX - mTransformPivotX);
+                const float angle = atan2f(mouseY - mTransformPivotY, mouseX - mTransformPivotX);
+                float deltaDeg = (angle - startAngle) * (180.0f / 3.14159265f);
+                // Shift trava em 15° (como na rotação por alça).
+                if (ImGui::GetIO().KeyShift)
+                    deltaDeg = roundf(deltaDeg / 15.0f) * 15.0f;
+                const float deltaRad = deltaDeg * 0.017453292519943295f;
+                const float cosA = cosf(deltaRad);
+                const float sinA = sinf(deltaRad);
+                for (const CanvasTransformStart& start : mTransformStarts)
+                {
+                    Element* element = Project::ResolverId(mode, start.id);
+                    if (!element || element->bloqueado) continue;
+                    const float dxc = start.x + start.w * 0.5f - mTransformPivotX;
+                    const float dyc = start.y + start.h * 0.5f - mTransformPivotY;
+                    const float nx = mTransformPivotX + dxc * cosA - dyc * sinA;
+                    const float ny = mTransformPivotY + dxc * sinA + dyc * cosA;
+                    element->transformacao["x"] = nx - start.w * 0.5f;
+                    element->transformacao["y"] = ny - start.h * 0.5f;
+                    element->transformacao["rotacao"] = fmodf(start.rot + deltaDeg, 360.0f);
+                }
+                break;
+            }
+            case TransformMode::Scale:
+            {
+                const float curDist = std::max(0.001f, sqrtf(
+                    (mouseX - mTransformPivotX) * (mouseX - mTransformPivotX) +
+                    (mouseY - mTransformPivotY) * (mouseY - mTransformPivotY)));
+                float factor = curDist / mTransformStartDist;
+                // Shift ajusta em passos de 0.25x.
+                if (ImGui::GetIO().KeyShift)
+                    factor = roundf(factor * 4.0f) / 4.0f;
+                factor = std::max(0.05f, std::min(64.0f, factor));
+                for (const CanvasTransformStart& start : mTransformStarts)
+                {
+                    Element* element = Project::ResolverId(mode, start.id);
+                    if (!element || element->bloqueado) continue;
+                    const float dxc = start.x + start.w * 0.5f - mTransformPivotX;
+                    const float dyc = start.y + start.h * 0.5f - mTransformPivotY;
+                    const float nw = std::max(1.0f, start.w * factor);
+                    const float nh = std::max(1.0f, start.h * factor);
+                    element->transformacao["x"] = mTransformPivotX + dxc * factor - nw * 0.5f;
+                    element->transformacao["y"] = mTransformPivotY + dyc * factor - nh * 0.5f;
+                    element->transformacao["largura"] = nw;
+                    element->transformacao["altura"] = nh;
+                }
+                break;
+            }
+            default:
+                break;
+        }
+    }
+
+    void App::FinalizarTransformar(bool confirmar)
+    {
+        if (mTransformStarts.empty())
+        {
+            mTransformMode = TransformMode::None;
+            return;
+        }
+        Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+        if (!confirmar)
+        {
+            // Cancelou: restaura posição/rotação/tamanho originais.
+            for (const CanvasTransformStart& start : mTransformStarts)
+            {
+                if (Element* el = Project::ResolverId(mode, start.id))
+                {
+                    el->transformacao["x"] = start.x;
+                    el->transformacao["y"] = start.y;
+                    el->transformacao["rotacao"] = start.rot;
+                    el->transformacao["largura"] = start.w;
+                    el->transformacao["altura"] = start.h;
+                }
+            }
+        }
+        else
+        {
+            mProjectDirty = true;
+            CapturarHistorico();
+            if (!mSelectedElementId.empty())
+            {
+                if (Element* el = Project::ResolverId(mode, mSelectedElementId))
+                    AtualizarDeltaDuplicacaoManual(*el);
+            }
+            RebuildGroupBounds(mode);
+            mStatusMsg = "Transformação aplicada";
+            mStatusMsgUntil = GetTime() + 3.0;
+        }
+        mTransformMode = TransformMode::None;
+        mTransformStarts.clear();
+    }
+
     void App::HandleCanvasInteraction(bool canvasHovered)
     {
         // Guia sendo arrastada/posicionada: a interação normal do canvas
@@ -3441,6 +3664,31 @@ namespace seedui
                     mode, mPowerClipDirectFrameId, x, y, true);
             return Project::ElementoNoPonto(mode, x, y);
         };
+
+        // TRANSFORMAÇÃO MODAL (Alt+G / Alt+R / Alt+S, estilo Blender): a
+        // seleção segue o mouse; clique esquerdo ou Enter confirma, Esc ou
+        // clique direito cancela restaurando a posição original. Enquanto o
+        // mouse está sobre o canvas, o modal domina a interação.
+        if (mTransformMode != TransformMode::None)
+        {
+            const bool escPressed = ImGui::IsKeyPressed(ImGuiKey_Escape, false);
+            const bool enterPressed = ImGui::IsKeyPressed(ImGuiKey_Enter, false) ||
+                                      ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false);
+            const bool rightClicked = canvasHovered &&
+                                      ImGui::IsMouseClicked(ImGuiMouseButton_Right);
+            const bool leftClicked = canvasHovered &&
+                                     ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+            if (escPressed || rightClicked || enterPressed || leftClicked)
+            {
+                FinalizarTransformar(!escPressed && !rightClicked);
+                return;
+            }
+            if (canvasHovered)
+            {
+                AplicarTransformarModal(mode, mouseX, mouseY);
+                return;
+            }
+        }
 
         // Ctrl + duplo clique: entra no portal; quando já está dentro, um
         // Ctrl + duplo clique fora da moldura conclui a edição.
@@ -5073,7 +5321,10 @@ namespace seedui
                     mDup.factorW = bw / std::max(0.01f, mCloneForkSourceA.w);
                     mDup.factorH = bh / std::max(0.01f, mCloneForkSourceA.h);
 
+                    // O Ctrl+D repete o mesmo deslocamento para o conjunto
+                    // clonado inteiro (não só para o elemento ativo).
                     mDup.lastDuplicatedId = b->id;
+                    mDup.lastDuplicatedIds = mSelectedElementIds;
                     mDup.sourceX = bx;
                     mDup.sourceY = by;
                     mDup.sourceRot = brot;
@@ -5109,7 +5360,10 @@ namespace seedui
                     mDup.factorW = bw / std::max(0.01f, mRightDragSourceA.w);
                     mDup.factorH = bh / std::max(0.01f, mRightDragSourceA.h);
 
+                    // O Ctrl+D repete o mesmo deslocamento para o conjunto
+                    // clonado inteiro (não só para o elemento ativo).
                     mDup.lastDuplicatedId = b->id;
+                    mDup.lastDuplicatedIds = mSelectedElementIds;
                     mDup.sourceX = bx;
                     mDup.sourceY = by;
                     mDup.sourceRot = brot;
@@ -5389,6 +5643,19 @@ namespace seedui
             if (ImGui::IsKeyPressed(ImGuiKey_M, false)) mCurrentTool = Tool::Rectangle;
             if (ImGui::IsKeyPressed(ImGuiKey_L, false)) mCurrentTool = Tool::Ellipse;
             if (ImGui::IsKeyPressed(ImGuiKey_Z, false)) mCurrentTool = Tool::Zoom;
+
+        // Alt+G / Alt+R / Alt+S: transformação modal da seleção (estilo
+        // Blender) — mover, rotacionar ou escalonar seguindo o mouse;
+        // clique/Enter confirma, Esc/clique direito cancela.
+        if (!ImGui::GetIO().WantTextInput && ImGui::GetIO().KeyAlt)
+        {
+            if (ImGui::IsKeyPressed(ImGuiKey_G, false))
+                IniciarTransformar(TransformMode::Move);
+            if (ImGui::IsKeyPressed(ImGuiKey_R, false))
+                IniciarTransformar(TransformMode::Rotate);
+            if (ImGui::IsKeyPressed(ImGuiKey_S, false))
+                IniciarTransformar(TransformMode::Scale);
+        }
 
             // Shift+C: Converter Ponto de Ancoragem (estilo Illustrator)
             if (ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_C, false))

@@ -1,0 +1,1125 @@
+/* ==========================================================================
+   STOVE 3D STUDIO — BLENDER 4.1 AESTHETICS & DESIGN SYSTEM
+   ========================================================================== */
+
+:root {
+  --bg-darkest: #18181e;
+  --bg-dark: #202026;
+  --bg-panel: #282830;
+  --bg-panel-light: #32323c;
+  --bg-hover: #3c3c46;
+  --bg-active: #484856;
+  
+  --border: #32323c;
+  --border-light: #424250;
+  --border-focus: #4772b3;
+  
+  --text-primary: #e6e6e6;
+  --text-secondary: #aaaaaa;
+  --text-muted: #6e6e78;
+  
+  --accent: #2c5da8;
+  --accent-hover: #3b74cb;
+  --accent-orange: #ff9800;
+  --accent-orange-hover: #ffa726;
+
+  --axis-x: #c73838;
+  --axis-y: #38a038;
+  --axis-z: #386fd8;
+
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+}
+
+body, html {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-darkest);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 11px;
+}
+
+input, button, select {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+}
+
+/* ==========================================================================
+   TOP HEADER BAR
+   ========================================================================== */
+.top-header {
+  height: 32px;
+  background: var(--bg-darkest);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  z-index: 100;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.logo-badge {
+  background: var(--accent-orange);
+  color: #000;
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.logo-text {
+  font-size: 12px;
+  color: #fff;
+}
+
+.logo-sub {
+  font-size: 9px;
+  color: var(--text-muted);
+}
+
+.header-menu {
+  display: flex;
+  gap: 2px;
+}
+
+.menu-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.menu-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* Mode Tabs */
+.header-center {
+  display: flex;
+  align-items: center;
+}
+
+.mode-tabs {
+  display: flex;
+  background: #121216;
+  border: 1px solid var(--border);
+  padding: 2px;
+  border-radius: 5px;
+  gap: 2px;
+}
+
+.mode-tab {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mode-tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.mode-tab.active {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.mode-key {
+  font-size: 9px;
+  opacity: 0.7;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stat-badge {
+  background: #141418;
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+
+#stat-fps {
+  color: #4ade80;
+}
+
+.icon-toggle-btn {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.icon-toggle-btn:hover {
+  background: var(--bg-hover);
+  color: #fff;
+}
+
+.icon-toggle-btn.active {
+  background: #1e3a5f;
+  border-color: var(--accent);
+  color: #93c5fd;
+}
+
+/* ==========================================================================
+   MAIN WORKSPACE
+   ========================================================================== */
+.workspace {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ==========================================================================
+   LEFT VERTICAL TOOLBAR (Blender Style)
+   ========================================================================== */
+.left-toolbar {
+  width: 38px;
+  background: var(--bg-dark);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 0;
+  gap: 4px;
+  z-index: 20;
+}
+
+.tool-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.tool-btn {
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tool-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.tool-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent-hover);
+}
+
+.tool-divider {
+  width: 20px;
+  height: 1px;
+  background: var(--border);
+  margin: 2px 0;
+}
+
+/* ==========================================================================
+   CENTER 3D VIEWPORT & INTEGRATED HEADER
+   ========================================================================== */
+.viewport-area {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: #282830;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Integrated Viewport Header Bar (Exact Blender 4.1 Header) */
+.viewport-header-bar {
+  height: 28px;
+  background: var(--bg-darkest);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  z-index: 30;
+}
+
+.viewport-header-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.submode-selector {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mode-pill {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.mode-pill:hover {
+  background: var(--bg-hover);
+}
+
+.dropdown-arrow {
+  font-size: 8px;
+  color: var(--text-muted);
+}
+
+.mesh-submode-group {
+  display: flex;
+  background: #141418;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px;
+  gap: 1px;
+}
+
+.mesh-sub-btn {
+  width: 22px;
+  height: 20px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: bold;
+  border-radius: 3px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mesh-sub-btn:hover {
+  background: var(--bg-hover);
+  color: #fff;
+}
+
+.mesh-sub-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.v-header-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  margin: 0 2px;
+}
+
+.selection-tool-group {
+  display: flex;
+  gap: 2px;
+}
+
+.v-header-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.v-header-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.v-header-btn.active {
+  background: var(--bg-panel-light);
+  color: #fff;
+  border-color: var(--border-light);
+}
+
+.v-header-menus {
+  display: flex;
+  gap: 4px;
+}
+
+.v-header-menu-item {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 11px;
+  padding: 2px 6px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.v-header-menu-item:hover {
+  background: var(--bg-hover);
+  color: #fff;
+}
+
+/* Shading 4-Circle Buttons */
+.viewport-header-right {
+  display: flex;
+  align-items: center;
+}
+
+.shading-group {
+  display: flex;
+  background: #141418;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 2px 4px;
+  gap: 4px;
+}
+
+.shading-icon-btn {
+  width: 18px;
+  height: 18px;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.shading-circle {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: block;
+}
+
+.shading-circle.wireframe {
+  border: 1.5px solid #888;
+  background: transparent;
+}
+
+.shading-circle.solid {
+  background: #8e8e98;
+}
+
+.shading-circle.pixel {
+  background: linear-gradient(135deg, #e0689b 50%, #5cb85c 50%);
+}
+
+.shading-circle.rendered {
+  background: radial-gradient(circle at 40% 40%, #ffdf7e, #e67e22);
+}
+
+.shading-icon-btn.active {
+  background: var(--accent);
+}
+
+.shading-icon-btn.active .shading-circle.solid {
+  background: #fff;
+}
+
+#viewport-canvas {
+  width: 100%;
+  flex: 1;
+  display: block;
+}
+
+/* Camera Gizmo Controls */
+.camera-gizmo-bar {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  display: flex;
+  background: rgba(20, 20, 26, 0.9);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px;
+  gap: 2px;
+  z-index: 20;
+}
+
+.cam-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 7px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.cam-btn:hover {
+  background: var(--bg-hover);
+  color: #fff;
+}
+
+/* Operator Parameter Adjustment Panel */
+.operator-panel {
+  position: absolute;
+  bottom: 14px;
+  left: 14px;
+  width: 230px;
+  background: rgba(26, 26, 32, 0.95);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  z-index: 50;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.operator-panel.hidden {
+  display: none;
+}
+
+.operator-panel.collapsed .operator-body {
+  display: none;
+}
+
+.operator-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: rgba(18, 18, 22, 0.95);
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.operator-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.operator-toggle-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.operator-body {
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.operator-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.operator-row label {
+  font-size: 10.5px;
+  color: var(--text-secondary);
+}
+
+.operator-input {
+  width: 70px;
+  background: var(--bg-darkest);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: #fff;
+  font-size: 11px;
+  padding: 2px 6px;
+  text-align: right;
+}
+
+.operator-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.operator-checkbox {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* Dedicated Sidebar Toggle Pill Button (Header) */
+.sidebar-toggle-pill {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-light);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sidebar-toggle-pill:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.sidebar-toggle-pill.collapsed {
+  background: #1e3a5f;
+  border-color: var(--accent);
+  color: #93c5fd;
+  box-shadow: 0 0 10px rgba(44, 93, 168, 0.5);
+}
+
+.toggle-pill-icon {
+  font-size: 11px;
+}
+
+.toggle-pill-text {
+  font-size: 10.5px;
+}
+
+.toggle-pill-arrow {
+  font-size: 9px;
+  color: var(--text-muted);
+}
+
+.sidebar-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+.sidebar-close-btn:hover {
+  background: var(--bg-hover);
+  color: #fff;
+}
+
+.outliner-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Floating Side Tab on Viewport edge (Blender N-Panel Handle) */
+.viewport-sidebar-tab {
+  position: absolute;
+  top: 38px;
+  right: 0;
+  background: rgba(34, 34, 42, 0.95);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border-light);
+  border-right: none;
+  border-radius: 5px 0 0 5px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  z-index: 40;
+  box-shadow: -3px 4px 16px rgba(0, 0, 0, 0.5);
+  transition: all 0.15s ease;
+}
+
+.viewport-sidebar-tab:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.viewport-sidebar-tab.hidden {
+  display: none !important;
+}
+
+/* ==========================================================================
+   RIGHT SIDEBAR (BLENDER 4.1 EXACT RETRACTABLE LAYOUT)
+   ========================================================================== */
+.right-sidebar {
+  width: 270px;
+  min-width: 270px;
+  max-width: 270px;
+  background: var(--bg-dark);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  z-index: 20;
+  flex-shrink: 0;
+}
+
+.right-sidebar.collapsed {
+  display: none !important;
+}
+
+/* Top: Outliner Panel */
+.outliner-panel {
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  max-height: 220px;
+}
+
+.outliner-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg-darkest);
+  border-bottom: 1px solid var(--border);
+}
+
+.outliner-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.add-prim-btn {
+  background: var(--accent);
+  border: 1px solid var(--accent-hover);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.add-prim-btn:hover {
+  background: var(--accent-hover);
+}
+
+.outliner-list {
+  padding: 4px 6px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+}
+
+.outliner-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+.outliner-item:hover {
+  background: var(--bg-hover);
+}
+
+.outliner-item.selected {
+  background: var(--accent);
+  color: #fff;
+}
+
+.outliner-item-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  overflow: hidden;
+}
+
+.outliner-icon {
+  font-size: 12px;
+}
+
+.outliner-name {
+  font-size: 11px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.outliner-name.muted {
+  opacity: 0.5;
+}
+
+.outliner-item-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.outliner-btn {
+  background: transparent;
+  border: none;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 3px;
+  opacity: 0.7;
+}
+
+.outliner-btn:hover {
+  opacity: 1.0;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Bottom: Properties Inspector */
+.properties-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.properties-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--bg-darkest);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.properties-body {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.transform-category {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.category-header {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* Stacked Axis Inputs (Blender Style) */
+.axis-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.axis-field {
+  display: flex;
+  align-items: center;
+  background: var(--bg-darkest);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  height: 24px;
+}
+
+.axis-field:focus-within {
+  border-color: var(--border-focus);
+}
+
+.axis-tag {
+  width: 22px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.axis-tag.tag-x { background: var(--axis-x); }
+.axis-tag.tag-y { background: var(--axis-y); }
+.axis-tag.tag-z { background: var(--axis-z); }
+
+.axis-val {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 0 8px;
+  text-align: right;
+  height: 100%;
+}
+
+.axis-val:focus {
+  outline: none;
+}
+
+.unit-tag {
+  font-size: 10px;
+  color: var(--text-muted);
+  padding-right: 6px;
+}
+
+/* Viewport Settings List */
+.viewport-settings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.setting-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.color-box {
+  width: 28px;
+  height: 20px;
+  border: 1px solid var(--border);
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.styled-checkbox {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* ==========================================================================
+   BOTTOM STATUS BAR
+   ========================================================================== */
+.statusbar {
+  height: 24px;
+  background: var(--bg-darkest);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  z-index: 100;
+}
+
+.status-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.key-hint {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.key-hint kbd {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-light);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+/* ==========================================================================
+   FLOATING RETRACTABLE BLENDER CONTEXT MENU (Shift+A)
+   ========================================================================== */
+.blender-context-menu {
+  position: fixed;
+  background: rgba(28, 28, 34, 0.98);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  z-index: 1000;
+  min-width: 170px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  animation: fadeInMenu 0.1s ease-out;
+}
+
+@keyframes fadeInMenu {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1.0); }
+}
+
+.blender-context-menu.hidden {
+  display: none;
+}
+
+.context-menu-header {
+  padding: 5px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 2px;
+}
+
+.context-menu-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: 11px;
+  transition: all 0.1s ease;
+}
+
+.context-menu-item:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.item-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.item-icon {
+  font-size: 13px;
+}
+
+.item-arrow {
+  font-size: 8px;
+  opacity: 0.7;
+}
+
+/* Submenu Flyout */
+.blender-submenu {
+  position: absolute;
+  top: -4px;
+  left: 100%;
+  margin-left: 2px;
+  background: rgba(28, 28, 34, 0.98);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  min-width: 180px;
+  padding: 4px;
+  display: none;
+  flex-direction: column;
+  gap: 1px;
+  z-index: 1001;
+}
+
+.context-menu-item.has-submenu:hover .blender-submenu {
+  display: flex;
+}
+
+.context-menu-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+  transition: all 0.1s ease;
+}
+
+.context-menu-action:hover {
+  background: var(--accent);
+  color: #fff;
+}

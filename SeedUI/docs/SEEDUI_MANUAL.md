@@ -381,6 +381,14 @@ finais de cada elemento.
 - **Mover com as setas**: as **setas do teclado** movem o(s) elemento(s)
   selecionado(s) 1 unidade por pressionada (10 com Shift). Como exigido,
   **sem modificador** para não conflitar com Ctrl+setas das camadas.
+- **Transformação modal (Alt+G / Alt+R / Alt+S, estilo Blender)**: com
+  objeto(s) selecionado(s) na ferramenta de Seleção, **Alt+G** entra em
+  modo **mover**, **Alt+R** em **rotacionar** e **Alt+S** em **escalonar**
+  — a seleção (individual ou em grupo) segue o mouse ao redor do centro
+  da caixa conjunta. **Clique esquerdo ou Enter** confirma; **Esc ou
+  clique direito** cancela e restaura a posição original. **Shift** trava:
+  eixo ortogonal (mover), passos de 15° (rotacionar) ou passos de 0.25×
+  (escalonar).
 
 ## 4. O formato do projeto
 
@@ -523,7 +531,9 @@ Se você é uma IA (ou desenvolvedor) trabalhando em um projeto SeedUI:
   seleção, mover, redimensionar, **rotação**, **redimensionar em grupo**,
   **desagrupar**, **guias inteligentes**, **cores** (paleta + seletor),
   **clone com o botão direito**, **zoom até 32×** (Ctrl+1/0/9 = 100%/tela/seleção),
-  **duplicar (Ctrl+D)**, **espelhar H/V**, **medir distância/ângulo**,
+  **duplicar (Ctrl+D — duplica a seleção inteira em grupo; repetir Ctrl+D
+  repete o mesmo deslocamento para o conjunto, inclusive herdado do clone
+  por arrasto com o botão direito)**, **espelhar H/V**, **medir distância/ângulo**,
   **sombra**, **contorno tracejado**, **elemento Linha**, **polígono/estrela
   configurável**, **caneta Bezier** com edição de nós, **modo wireframe**,
   **gradientes** (linear/radial), **Selecionar tudo (Ctrl+A)**, **exportar
