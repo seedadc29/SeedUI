@@ -86,13 +86,17 @@ export class Engine {
     this.canvas.addEventListener('mousedown', (e) => {
       if (this.navMode === 'left') {
         if (e.button === 0) { // LMB
-          if (e.shiftKey) {
+          if (e.ctrlKey && e.altKey) {
+            this.controls.mouseButtons.LEFT = THREE.MOUSE.DOLLY;
+          } else if (e.shiftKey) {
             this.controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
           } else {
             this.controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
           }
         } else if (e.button === 1) { // MMB fallback
-          if (e.shiftKey) {
+          if (e.ctrlKey) {
+            this.controls.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY;
+          } else if (e.shiftKey) {
             this.controls.mouseButtons.MIDDLE = THREE.MOUSE.PAN;
           } else {
             this.controls.mouseButtons.MIDDLE = THREE.MOUSE.ROTATE;
@@ -100,12 +104,33 @@ export class Engine {
         }
       } else {
         if (e.button === 1) { // MMB
-          if (e.shiftKey) {
+          if (e.ctrlKey) {
+            this.controls.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY;
+          } else if (e.shiftKey) {
             this.controls.mouseButtons.MIDDLE = THREE.MOUSE.PAN;
           } else {
             this.controls.mouseButtons.MIDDLE = THREE.MOUSE.ROTATE;
           }
         }
+      }
+    });
+
+    // Dynamic modifier updates for smooth Ctrl+Alt Zoom and Shift Pan transitions
+    window.addEventListener('keydown', (e) => {
+      if (this.navMode === 'left') {
+        if (e.ctrlKey && e.altKey) {
+          this.controls.mouseButtons.LEFT = THREE.MOUSE.DOLLY;
+        } else if (e.shiftKey) {
+          this.controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
+        } else {
+          this.controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
+        }
+      }
+    });
+
+    window.addEventListener('keyup', () => {
+      if (this.navMode === 'left') {
+        this.controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
       }
     });
   }
