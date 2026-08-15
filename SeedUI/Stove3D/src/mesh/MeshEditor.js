@@ -271,34 +271,61 @@ export class MeshEditor {
 
     if (this.submode === 'vertex') {
       let closestIdx = -1;
-      let minDistance = 32; // Generous 32px screen threshold
 
-      for (let i = 0; i < qm.vertices.length; i++) {
-        const vWorld = qm.vertices[i].clone().applyMatrix4(this.activeMesh.matrixWorld);
-        const vNDC = vWorld.project(this.engine.activeCamera);
+      // 1. Direct Points Raycasting (Hardware Accelerated)
+      if (this.vertexPoints) {
+        raycaster.params.Points.threshold = 0.45;
+        const ptIntersects = raycaster.intersectObject(this.vertexPoints, false);
+        if (ptIntersects.length > 0 && ptIntersects[0].index !== undefined) {
+          closestIdx = ptIntersects[0].index;
+        }
+      }
 
-        if (vNDC.z < 1.0) {
-          const screenX = (vNDC.x * 0.5 + 0.5) * rect.width;
-          const screenY = (-vNDC.y * 0.5 + 0.5) * rect.height;
-
-          const dist = Math.hypot(mouseX - screenX, mouseY - screenY);
-          if (dist < minDistance) {
-            minDistance = dist;
+      // 2. 3D Ray-to-Point Proximity (World Space)
+      if (closestIdx === -1) {
+        const ray = raycaster.ray;
+        let minRayDist = 0.5;
+        for (let i = 0; i < qm.vertices.length; i++) {
+          const vWorld = qm.vertices[i].clone().applyMatrix4(this.activeMesh.matrixWorld);
+          const d = ray.distanceToPoint(vWorld);
+          if (d < minRayDist) {
+            minRayDist = d;
             closestIdx = i;
           }
         }
       }
 
-      // If not within 32px, check if ray hits mesh surface and pick closest vertex of that face
+      // 3. Surface Collision Raycast (Closest Vertex of Clicked Face)
       if (closestIdx === -1) {
         const intersects = raycaster.intersectObject(this.activeMesh, false);
         if (intersects.length > 0 && intersects[0].point) {
-          const localHit = this.activeMesh.worldToLocal(intersects[0].point.clone());
-          let localMinDist = Infinity;
+          const hitPoint = intersects[0].point;
+          let minHitDist = Infinity;
           for (let i = 0; i < qm.vertices.length; i++) {
-            const d = qm.vertices[i].distanceTo(localHit);
-            if (d < localMinDist) {
-              localMinDist = d;
+            const vWorld = qm.vertices[i].clone().applyMatrix4(this.activeMesh.matrixWorld);
+            const d = hitPoint.distanceTo(vWorld);
+            if (d < minHitDist) {
+              minHitDist = d;
+              closestIdx = i;
+            }
+          }
+        }
+      }
+
+      // 4. 2D Screen-space Projection Fallback (50px generous radius)
+      if (closestIdx === -1) {
+        let min2DDist = 50;
+        for (let i = 0; i < qm.vertices.length; i++) {
+          const vWorld = qm.vertices[i].clone().applyMatrix4(this.activeMesh.matrixWorld);
+          const vNDC = vWorld.project(this.engine.activeCamera);
+
+          if (vNDC.z < 1.0) {
+            const screenX = (vNDC.x * 0.5 + 0.5) * rect.width;
+            const screenY = (-vNDC.y * 0.5 + 0.5) * rect.height;
+
+            const dist = Math.hypot(mouseX - screenX, mouseY - screenY);
+            if (dist < min2DDist) {
+              min2DDist = dist;
               closestIdx = i;
             }
           }
@@ -324,31 +351,51 @@ export class MeshEditor {
       }
     } else if (this.submode === 'edge') {
       let closestEdgeIdx = -1;
-      let minDistance = 28;
+      const ray = raycaster.ray;
+      let minRayDist = 0.4;
 
+      // 1. 3D Ray-to-Segment Proximity
       qm.edges.forEach((edge, eIdx) => {
-        const vA = qm.vertices[edge[0]].clone().applyMatrix4(this.activeMesh.matrixWorld).project(this.engine.activeCamera);
-        const vB = qm.vertices[edge[1]].clone().applyMatrix4(this.activeMesh.matrixWorld).project(this.engine.activeCamera);
-
-        if (vA.z < 1.0 && vB.z < 1.0) {
-          const ax = (vA.x * 0.5 + 0.5) * rect.width;
-          const ay = (-vA.y * 0.5 + 0.5) * rect.height;
-          const bx = (vB.x * 0.5 + 0.5) * rect.width;
-          const by = (-vB.y * 0.5 + 0.5) * rect.height;
-
-          const l2 = (bx - ax) * (bx - ax) + (by - ay) * (by - ay);
-          let t = ((mouseX - ax) * (bx - ax) + (mouseY - ay) * (by - ay)) / (l2 || 1);
-          t = Math.max(0, Math.min(1, t));
-          const projX = ax + t * (bx - ax);
-          const projY = ay + t * (by - ay);
-          const dist = Math.hypot(mouseX - projX, mouseY - projY);
-
-          if (dist < minDistance) {
-            minDistance = dist;
-            closestEdgeIdx = eIdx;
-          }
+        const vA = qm.vertices[edge[0]].clone().applyMatrix4(this.activeMesh.matrixWorld);
+        const vB = qm.vertices[edge[1]].clone().applyMatrix4(this.activeMesh.matrixWorld);
+        const line = new THREE.Line3(vA, vB);
+        const ptOnRay = new THREE.Vector3();
+        const ptOnLine = new THREE.Vector3();
+        ray.distanceSqToSegment(line.start, line.end, ptOnRay, ptOnLine);
+        const d = ptOnRay.distanceTo(ptOnLine);
+        if (d < minRayDist) {
+          minRayDist = d;
+          closestEdgeIdx = eIdx;
         }
       });
+
+      // 2. 2D Screen-space Projection Fallback
+      if (closestEdgeIdx === -1) {
+        let min2DDist = 35;
+        qm.edges.forEach((edge, eIdx) => {
+          const vA = qm.vertices[edge[0]].clone().applyMatrix4(this.activeMesh.matrixWorld).project(this.engine.activeCamera);
+          const vB = qm.vertices[edge[1]].clone().applyMatrix4(this.activeMesh.matrixWorld).project(this.engine.activeCamera);
+
+          if (vA.z < 1.0 && vB.z < 1.0) {
+            const ax = (vA.x * 0.5 + 0.5) * rect.width;
+            const ay = (-vA.y * 0.5 + 0.5) * rect.height;
+            const bx = (vB.x * 0.5 + 0.5) * rect.width;
+            const by = (-vB.y * 0.5 + 0.5) * rect.height;
+
+            const l2 = (bx - ax) * (bx - ax) + (by - ay) * (by - ay);
+            let t = ((mouseX - ax) * (bx - ax) + (mouseY - ay) * (by - ay)) / (l2 || 1);
+            t = Math.max(0, Math.min(1, t));
+            const projX = ax + t * (bx - ax);
+            const projY = ay + t * (by - ay);
+            const dist = Math.hypot(mouseX - projX, mouseY - projY);
+
+            if (dist < min2DDist) {
+              min2DDist = dist;
+              closestEdgeIdx = eIdx;
+            }
+          }
+        });
+      }
 
       if (closestEdgeIdx !== -1) {
         if (shiftKey && this.selectedEdges.has(closestEdgeIdx)) {

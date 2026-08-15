@@ -638,7 +638,10 @@ export class UIManager {
     const canvas = this.engine.canvas;
 
     canvas.addEventListener('click', (e) => {
-      if (this.transformManager.isTransforming || this.selectionTools.isSelecting || this.selectionTools.justFinishedDragSelection) {
+      if (this.transformManager.isTransforming) {
+        return;
+      }
+      if (this.selectionTools.justFinishedDragSelection) {
         this.selectionTools.justFinishedDragSelection = false;
         return;
       }
@@ -647,9 +650,13 @@ export class UIManager {
       this.mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       this.mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
       this.raycaster.setFromCamera(this.mouse, this.engine.activeCamera);
+      this.raycaster.params.Points.threshold = 0.5;
 
       if (this.currentSubmode !== 'object') {
-        this.meshEditor.handleSelection(e.clientX, e.clientY, e.shiftKey, this.raycaster);
+        const success = this.meshEditor.handleSelection(e.clientX, e.clientY, e.shiftKey, this.raycaster);
+        if (this.diagnostics) {
+          this.diagnostics.log('SELECTION', `Clique de seleção (${this.currentSubmode}) -> ${success ? 'SUCESSO (Item Selecionado)' : 'Nenhum item atingido'}`);
+        }
       } else {
         const meshes = this.sceneManager.getAllMeshes().filter((m) => m.visible);
         const intersects = this.raycaster.intersectObjects(meshes, false);
