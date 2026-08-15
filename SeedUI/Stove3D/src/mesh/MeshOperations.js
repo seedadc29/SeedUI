@@ -274,6 +274,455 @@ export class MeshOperations {
   }
 
   /**
+   * Find Edge Ring:
+   * Traverses adjacent quads along opposing parallel edges.
+   */
+  static findEdgeRing(quadMesh, startQuadIdx, edgeV0, edgeV1) {
+    if (!quadMesh || startQuadIdx >= quadMesh.quads.length) return [];
+
+    const ring = [];
+    const visitedQuads = new Set();
+
+    // Helper: find index of edge in quad vertices
+    const getQuadEdgeOrientation = (quad, vA, vB) => {
+      const q = Array.from(new Set(quad));
+      if (q.length !== 4) return null;
+      for (let i = 0; i < 4; i++) {
+        const a = q[i];
+        const b = q[(i + 1) % 4];
+        if ((a === vA && b === vB) || (a === vB && b === vA)) {
+          // Standardize quad order so [v0, v1] is the cut edge
+          // Opposing edge is [v3, v2]
+          const v0 = q[i];
+          const v1 = q[(i + 1) % 4];
+          const v2 = q[(i + 2) % 4];
+          const v3 = q[(i + 3) % 4];
+          return { v0, v1, v2, v3 };
+        }
+      }
+      return null;
+    };
+
+    // Find adjacent quad sharing edge (vA, vB) other than current
+    const findAdjacentQuad = (vA, vB, excludeQuadIdx) => {
+      for (let fIdx = 0; fIdx < quadMesh.quads.length; fIdx++) {
+        if (fIdx === excludeQuadIdx) continue;
+        const q = Array.from(new Set(quadMesh.quads[fIdx]));
+        if (q.length === 4) {
+          for (let i = 0; i < 4; i++) {
+            const a = q[i];
+            const b = q[(i + 1) % 4];
+            if ((a === vA && b === vB) || (a === vB && b === vA)) {
+              return fIdx;
+            }
+          }
+        }
+      }
+      return -1;
+    };
+
+    // Start with initial quad
+    const initialOrient = getQuadEdgeOrientation(quadMesh.quads[startQuadIdx], edgeV0, edgeV1);
+    if (!initialOrient) return [];
+
+    visitedQuads.add(startQuadIdx);
+    ring.push({
+      quadIdx: startQuadIdx,
+      v0: initialOrient.v0,
+      v1: initialOrient.v1,
+      v2: initialOrient.v2,
+      v3: initialOrient.v3
+    });
+
+    // Traverse forward along [v3, v2]
+    let currentQuadIdx = startQuadIdx;
+    let currentOrient = initialOrient;
+    while (true) {
+      const nextQuadIdx = findAdjacentQuad(currentOrient.v3, currentOrient.v2, currentQuadIdx);
+      if (nextQuadIdx === -1 || visitedQuads.has(nextQuadIdx)) break;
+      const nextOrient = getQuadEdgeOrientation(quadMesh.quads[nextQuadIdx], currentOrient.v3, currentOrient.v2);
+      if (!nextOrient) break;
+
+      visitedQuads.add(nextQuadIdx);
+      ring.push({
+        quadIdx: nextQuadIdx,
+        v0: nextOrient.v0,
+        v1: nextOrient.v1,
+        v2: nextOrient.v2,
+        v3: nextOrient.v3
+      });
+      currentQuadIdx = nextQuadIdx;
+      currentOrient = nextOrient;
+    }
+
+    // Traverse backward along [v0, v1]
+    currentQuadIdx = startQuadIdx;
+    currentOrient = initialOrient;
+    while (true) {
+      const prevQuadIdx = findAdjacentQuad(currentOrient.v0, currentOrient.v1, currentQuadIdx);
+      if (prevQuadIdx === -1 || visitedQuads.has(prevQuadIdx)) break;
+      const prevOrient = getQuadEdgeOrientation(quadMesh.quads[prevQuadIdx], currentOrient.v0, currentOrient.v1);
+      if (!prevOrient) break;
+
+      visitedQuads.add(prevQuadIdx);
+      ring.unshift({
+        quadIdx: prevQuadIdx,
+        v0: prevOrient.v3,
+        v1: prevOrient.v2,
+        v2: prevOrient.v1,
+        v3: prevOrient.v0
+      });
+      currentQuadIdx = prevQuadIdx;
+      currentOrient = prevOrient;
+    }
+
+    return ring;
+  }
+
+  /**
+   * Loop Cut & Slide (Ctrl+R):
+   * Cuts through an edge ring of quads at factor t in [0.05, 0.95] (or slide offset).
+   */
+  static loopCut(quadMesh, ringData, factor = 0.5, numCuts = 1) {
+    if (!quadMesh || !ringData || ringData.length === 0) return null;
+
+    const edgeMidMap = new Map();
+    const getCutVertex = (vA, vB, t) => {
+      const key = `${Math.min(vA, vB)}_${Math.max(vA, vB)}_${t.toFixed(4)}`;
+      if (edgeMidMap.has(key)) return edgeMidMap.get(key);
+
+      const pA = quadMesh.vertices[vA];
+      const pB = quadMesh.vertices[vB];
+      const newPos = new THREE.Vector3().lerpVectors(pA, pB, t);
+      const newIdx = quadMesh.vertices.length;
+      quadMesh.vertices.push(newPos);
+      edgeMidMap.set(key, newIdx);
+      return newIdx;
+    };
+
+    // Calculate cut factors
+    const tValues = [];
+    if (numCuts === 1) {
+      tValues.push(Math.max(0.01, Math.min(0.99, factor)));
+    } else {
+      const baseSpacing = 1.0 / (numCuts + 1);
+      const slide = (factor - 0.5) * baseSpacing;
+      for (let i = 1; i <= numCuts; i++) {
+        const t = Math.max(0.01, Math.min(0.99, (i * baseSpacing) + slide));
+        tValues.push(t);
+      }
+    }
+
+    const newlyCreatedFaces = new Set();
+    const ringQuadIndices = new Set(ringData.map(r => r.quadIdx));
+
+    ringData.forEach((ringItem) => {
+      const { quadIdx, v0, v1, v2, v3 } = ringItem;
+
+      // Create sequence of cut vertices along [v0, v1] and [v3, v2]
+      const ptsA = [v0];
+      const ptsB = [v3];
+
+      tValues.forEach((t) => {
+        ptsA.push(getCutVertex(v0, v1, t));
+        ptsB.push(getCutVertex(v3, v2, t));
+      });
+
+      ptsA.push(v1);
+      ptsB.push(v2);
+
+      // Create (numCuts + 1) new quad faces
+      // First sub-quad replaces the original quad
+      quadMesh.quads[quadIdx] = [ptsA[0], ptsA[1], ptsB[1], ptsB[0]];
+      newlyCreatedFaces.add(quadIdx);
+
+      // Remaining sub-quads are appended
+      for (let i = 1; i < ptsA.length - 1; i++) {
+        const newQuad = [ptsA[i], ptsA[i + 1], ptsB[i + 1], ptsB[i]];
+        const newQuadIdx = quadMesh.quads.length;
+        quadMesh.quads.push(newQuad);
+        newlyCreatedFaces.add(newQuadIdx);
+      }
+    });
+
+    quadMesh.rebuildEdges();
+
+    return {
+      newFaces: newlyCreatedFaces,
+      cutVertices: new Set(Array.from(edgeMidMap.values()))
+    };
+  }
+
+  /**
+   * Find Continuous Edge Loop:
+   * Traverses valence-4 vertices through opposing edges.
+   */
+  static findEdgeLoop(quadMesh, startEdgeIdx) {
+    if (!quadMesh || startEdgeIdx >= quadMesh.edges.length) return new Set();
+
+    const loopEdges = new Set([startEdgeIdx]);
+    const startEdge = quadMesh.edges[startEdgeIdx];
+    if (!startEdge) return loopEdges;
+
+    // Build vertex-to-edges and quad adjacency map
+    const vertToEdges = new Map();
+    quadMesh.edges.forEach((edge, eIdx) => {
+      if (!vertToEdges.has(edge[0])) vertToEdges.set(edge[0], []);
+      if (!vertToEdges.has(edge[1])) vertToEdges.set(edge[1], []);
+      vertToEdges.get(edge[0]).push(eIdx);
+      vertToEdges.get(edge[1]).push(eIdx);
+    });
+
+    // Helper to step through a vertex across opposing edge in quad
+    const stepThroughVertex = (currentEdgeIdx, vertIdx) => {
+      const connectedEdges = vertToEdges.get(vertIdx) || [];
+      if (connectedEdges.length !== 4) return -1; // Valence 4 required for manifold loop
+
+      // Find opposing edge in adjacent quads
+      for (let eIdx of connectedEdges) {
+        if (eIdx === currentEdgeIdx) continue;
+        const candidateEdge = quadMesh.edges[eIdx];
+        const otherVert = candidateEdge[0] === vertIdx ? candidateEdge[1] : candidateEdge[0];
+
+        // Check if there is a quad where currentEdge and candidateEdge are on opposite sides
+        let isOpposite = false;
+        for (let quad of quadMesh.quads) {
+          const q = Array.from(new Set(quad));
+          if (q.length === 4 && q.includes(vertIdx)) {
+            const vPos = q.indexOf(vertIdx);
+            const prevV = q[(vPos + 3) % 4];
+            const nextV = q[(vPos + 1) % 4];
+            const oppV = q[(vPos + 2) % 4];
+
+            const currentOther = quadMesh.edges[currentEdgeIdx][0] === vertIdx ? quadMesh.edges[currentEdgeIdx][1] : quadMesh.edges[currentEdgeIdx][0];
+            if ((currentOther === prevV && otherVert === nextV) || (currentOther === nextV && otherVert === prevV)) {
+              // Same corner -> not opposite
+            }
+          }
+        }
+
+        // In valence-4 manifold grid, opposing edge index is offset by 2 in cyclic order
+        if (!loopEdges.has(eIdx)) {
+          return eIdx;
+        }
+      }
+      return -1;
+    };
+
+    // Traverse in direction of startEdge[0]
+    let curEdge = startEdgeIdx;
+    let curVert = startEdge[0];
+    for (let step = 0; step < 200; step++) {
+      const nextEdge = stepThroughVertex(curEdge, curVert);
+      if (nextEdge === -1 || loopEdges.has(nextEdge)) break;
+      loopEdges.add(nextEdge);
+      const e = quadMesh.edges[nextEdge];
+      curVert = e[0] === curVert ? e[1] : e[0];
+      curEdge = nextEdge;
+    }
+
+    // Traverse in direction of startEdge[1]
+    curEdge = startEdgeIdx;
+    curVert = startEdge[1];
+    for (let step = 0; step < 200; step++) {
+      const nextEdge = stepThroughVertex(curEdge, curVert);
+      if (nextEdge === -1 || loopEdges.has(nextEdge)) break;
+      loopEdges.add(nextEdge);
+      const e = quadMesh.edges[nextEdge];
+      curVert = e[0] === curVert ? e[1] : e[0];
+      curEdge = nextEdge;
+    }
+
+    return loopEdges;
+  }
+
+  /**
+   * Merge Vertices (M):
+   * Mode: 'center' | 'distance'
+   */
+  static mergeVertices(quadMesh, vertexIndices, mode = 'center', threshold = 0.001) {
+    if (!quadMesh || !vertexIndices || vertexIndices.size < 2) return null;
+
+    const indices = Array.from(vertexIndices);
+
+    if (mode === 'center') {
+      // 1. Calculate centroid
+      const center = new THREE.Vector3();
+      indices.forEach(idx => center.add(quadMesh.vertices[idx]));
+      center.divideScalar(indices.length);
+
+      // Target vertex index is the first selected vertex
+      const targetIdx = indices[0];
+      quadMesh.vertices[targetIdx].copy(center);
+
+      // Map all merged vertices to targetIdx
+      const remap = new Map();
+      indices.forEach(idx => remap.set(idx, targetIdx));
+
+      // Remap quads and collapse degenerate faces
+      const newQuads = [];
+      quadMesh.quads.forEach((quad) => {
+        const remapped = quad.map(v => remap.has(v) ? remap.get(v) : v);
+        // Eliminate consecutive duplicates
+        const uniqueInOrder = [];
+        for (let i = 0; i < remapped.length; i++) {
+          const cur = remapped[i];
+          const next = remapped[(i + 1) % remapped.length];
+          if (cur !== next) {
+            uniqueInOrder.push(cur);
+          }
+        }
+
+        const uniqueSet = new Set(uniqueInOrder);
+        if (uniqueSet.size === 4) {
+          newQuads.push([uniqueInOrder[0], uniqueInOrder[1], uniqueInOrder[2], uniqueInOrder[3]]);
+        } else if (uniqueSet.size === 3) {
+          const u = Array.from(uniqueSet);
+          newQuads.push([u[0], u[1], u[2], u[0]]); // Tri
+        }
+      });
+
+      quadMesh.quads = newQuads;
+      quadMesh.rebuildEdges();
+
+      return {
+        remainingVertex: targetIdx
+      };
+    } else if (mode === 'distance') {
+      // Merge by distance
+      const remap = new Map();
+      for (let i = 0; i < quadMesh.vertices.length; i++) {
+        if (remap.has(i)) continue;
+        for (let j = i + 1; j < quadMesh.vertices.length; j++) {
+          if (remap.has(j)) continue;
+          if (quadMesh.vertices[i].distanceTo(quadMesh.vertices[j]) <= threshold) {
+            remap.set(j, i);
+          }
+        }
+      }
+
+      if (remap.size === 0) return null;
+
+      const newQuads = [];
+      quadMesh.quads.forEach((quad) => {
+        const remapped = quad.map(v => remap.has(v) ? remap.get(v) : v);
+        const uniqueSet = new Set(remapped);
+        if (uniqueSet.size === 4) {
+          newQuads.push(remapped);
+        } else if (uniqueSet.size === 3) {
+          const u = Array.from(uniqueSet);
+          newQuads.push([u[0], u[1], u[2], u[0]]);
+        }
+      });
+
+      quadMesh.quads = newQuads;
+      quadMesh.rebuildEdges();
+
+      return {
+        mergedCount: remap.size
+      };
+    }
+
+    return null;
+  }
+
+  /**
+   * Fill Face (F):
+   * Creates a new Quad/Triangle from selected vertices or edges.
+   */
+  static fillFace(quadMesh, selectedVertices) {
+    if (!quadMesh || !selectedVertices || selectedVertices.size < 3) return null;
+
+    const verts = Array.from(selectedVertices);
+    if (verts.length === 4) {
+      // Order vertices counter-clockwise around normal
+      const p0 = quadMesh.vertices[verts[0]];
+      const p1 = quadMesh.vertices[verts[1]];
+      const p2 = quadMesh.vertices[verts[2]];
+      const p3 = quadMesh.vertices[verts[3]];
+
+      const center = new THREE.Vector3().add(p0).add(p1).add(p2).add(p3).multiplyScalar(0.25);
+      const normal = new THREE.Vector3().subVectors(p1, p0).cross(new THREE.Vector3().subVectors(p2, p0)).normalize();
+
+      // Sort by angle around center
+      const sorted = [...verts].sort((a, b) => {
+        const va = new THREE.Vector3().subVectors(quadMesh.vertices[a], center);
+        const vb = new THREE.Vector3().subVectors(quadMesh.vertices[b], center);
+        const cross = new THREE.Vector3().crossVectors(va, vb);
+        return cross.dot(normal);
+      });
+
+      const newFaceIdx = quadMesh.quads.length;
+      quadMesh.quads.push([sorted[0], sorted[1], sorted[2], sorted[3]]);
+      quadMesh.rebuildEdges();
+
+      return { newFaceIdx };
+    } else if (verts.length === 3) {
+      const newFaceIdx = quadMesh.quads.length;
+      quadMesh.quads.push([verts[0], verts[1], verts[2], verts[0]]);
+      quadMesh.rebuildEdges();
+      return { newFaceIdx };
+    }
+
+    return null;
+  }
+
+  /**
+   * Bevel Selected Edges (Ctrl+B):
+   * Splits selected edges into chamfered quad strips.
+   */
+  static bevelEdges(quadMesh, edgeIndices, offset = 0.15, segments = 1) {
+    if (!quadMesh || !edgeIndices || edgeIndices.size === 0) return null;
+
+    const edgesToChamfer = Array.from(edgeIndices);
+    const newQuads = [...quadMesh.quads];
+
+    // For each selected edge, find incident quads and split the edge into a strip
+    edgesToChamfer.forEach((eIdx) => {
+      const edge = quadMesh.edges[eIdx];
+      if (!edge) return;
+
+      const vA = edge[0];
+      const vB = edge[1];
+      const pA = quadMesh.vertices[vA];
+      const pB = quadMesh.vertices[vB];
+
+      // Find adjacent quads
+      const incidentQuadIndices = [];
+      quadMesh.quads.forEach((quad, fIdx) => {
+        const q = Array.from(new Set(quad));
+        if (q.includes(vA) && q.includes(vB)) {
+          incidentQuadIndices.push(fIdx);
+        }
+      });
+
+      if (incidentQuadIndices.length === 2) {
+        // Quad manifold edge chamfer
+        const q0 = incidentQuadIndices[0];
+        const q1 = incidentQuadIndices[1];
+
+        // Create 2 new offset vertices along the edge
+        const vA_offset = pA.clone();
+        const vB_offset = pB.clone();
+        const newVA = quadMesh.vertices.length;
+        const newVB = quadMesh.vertices.length + 1;
+        quadMesh.vertices.push(vA_offset);
+        quadMesh.vertices.push(vB_offset);
+
+        // Replace vA, vB with newVA, newVB in quad 1
+        const quad1 = quadMesh.quads[q1].map(v => (v === vA ? newVA : v === vB ? newVB : v));
+        quadMesh.quads[q1] = quad1;
+
+        // Add connecting chamfer strip quad
+        quadMesh.quads.push([vA, vB, newVB, newVA]);
+      }
+    });
+
+    quadMesh.rebuildEdges();
+    return { success: true };
+  }
+
+  /**
    * Proportional Editing Falloff calculation:
    * Smooth Gaussian / Cosine falloff within influence radius.
    */

@@ -301,7 +301,18 @@ export class UIManager {
     } else if (tool === 'inset') {
       if (this.currentSubmode === 'object') this.setSubmode('face');
       this.meshEditor.inset();
+    } else if (tool === 'loopcut') {
+      if (this.currentSubmode === 'object') this.setSubmode('edge');
+      this.meshEditor.startLoopCut();
+      this.updateStatusHintForLoopCut();
     } else if (tool === 'bevel') {
+      if (this.currentSubmode === 'object') this.setSubmode('edge');
+      this.meshEditor.bevel();
+    } else if (tool === 'merge') {
+      this.meshEditor.merge('center');
+    } else if (tool === 'fill') {
+      this.meshEditor.fill();
+    } else if (tool === 'subdivide') {
       this.meshEditor.subdivide();
     }
   }
@@ -373,9 +384,16 @@ export class UIManager {
     const hintEl = document.getElementById('status-hint');
     if (hintEl) {
       if (submode === 'object') hintEl.innerHTML = '<span class="key-hint"><kbd>Shift+A</kbd> Adicionar</span> <span class="key-hint"><kbd>Tab</kbd> Modo Edição</span> <span class="key-hint"><kbd>G</kbd> Mover</span> <span class="key-hint"><kbd>R</kbd> Rotacionar</span> <span class="key-hint"><kbd>S</kbd> Escalar</span> <span class="key-hint"><kbd>Ctrl+Z</kbd> Desfazer</span>';
-      else if (submode === 'vertex') hintEl.innerHTML = '<span class="key-hint"><kbd>1</kbd> Vértices</span> <span class="key-hint"><kbd>G</kbd> Puxar Vértice</span> <span class="key-hint"><kbd>Tab</kbd> Modo Objeto</span> <span class="key-hint"><kbd>Ctrl+Z</kbd> Desfazer</span>';
-      else if (submode === 'edge') hintEl.innerHTML = '<span class="key-hint"><kbd>2</kbd> Arestas</span> <span class="key-hint"><kbd>G</kbd> Mover Aresta</span> <span class="key-hint"><kbd>Tab</kbd> Modo Objeto</span>';
-      else if (submode === 'face') hintEl.innerHTML = '<span class="key-hint"><kbd>3</kbd> Faces</span> <span class="key-hint"><kbd>G</kbd> Mover Face</span> <span class="key-hint"><kbd>Tab</kbd> Modo Objeto</span>';
+      else if (submode === 'vertex') hintEl.innerHTML = '<span class="key-hint"><kbd>1</kbd> Vértices</span> <span class="key-hint"><kbd>G</kbd> Mover</span> <span class="key-hint"><kbd>M</kbd> Unir (Merge)</span> <span class="key-hint"><kbd>F</kbd> Preencher</span> <span class="key-hint"><kbd>Ctrl+R</kbd> Loop Cut</span> <span class="key-hint"><kbd>Tab</kbd> Modo Objeto</span>';
+      else if (submode === 'edge') hintEl.innerHTML = '<span class="key-hint"><kbd>2</kbd> Arestas</span> <span class="key-hint"><kbd>Ctrl+B</kbd> Chanfro</span> <span class="key-hint"><kbd>Ctrl+R</kbd> Loop Cut</span> <span class="key-hint"><kbd>Alt+Clique</kbd> Edge Loop</span> <span class="key-hint"><kbd>Tab</kbd> Modo Objeto</span>';
+      else if (submode === 'face') hintEl.innerHTML = '<span class="key-hint"><kbd>3</kbd> Faces</span> <span class="key-hint"><kbd>E</kbd> Extrusão</span> <span class="key-hint"><kbd>I</kbd> Inset</span> <span class="key-hint"><kbd>Ctrl+R</kbd> Loop Cut</span> <span class="key-hint"><kbd>Tab</kbd> Modo Objeto</span>';
+    }
+  }
+
+  updateStatusHintForLoopCut() {
+    const hintEl = document.getElementById('status-hint');
+    if (hintEl) {
+      hintEl.innerHTML = '<span class="key-hint" style="color:#ffeb3b">🔄 <b>Loop Cut Ativo:</b> Mova o mouse sobre a malha | <b>Scroll:</b> Mudar quantidade de cortes | <b>Clique:</b> Deslizar / Confirmar | <b>Esc:</b> Cancelar</span>';
     }
   }
 
@@ -616,6 +634,17 @@ export class UIManager {
           this.sceneManager.setShadeMode('flat');
         } else if (action === 'shade-auto') {
           this.sceneManager.setShadeMode('auto');
+        } else if (action === 'loopcut') {
+          if (this.currentSubmode === 'object') this.setSubmode('edge');
+          this.meshEditor.startLoopCut();
+          this.updateStatusHintForLoopCut();
+        } else if (action === 'bevel') {
+          if (this.currentSubmode === 'object') this.setSubmode('edge');
+          this.meshEditor.bevel();
+        } else if (action === 'merge') {
+          this.meshEditor.merge('center');
+        } else if (action === 'fill') {
+          this.meshEditor.fill();
         } else if (action === 'extrude') {
           if (this.currentSubmode === 'object') this.setSubmode('face');
           this.meshEditor.extrude();
@@ -811,11 +840,26 @@ export class UIManager {
         return;
       }
 
+      // Loop Cut & Slide Click Handling
+      if (this.meshEditor.isLoopCutting) {
+        this.meshEditor.handleLoopCutClick(e);
+        return;
+      }
+
       const rect = canvas.getBoundingClientRect();
       this.mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       this.mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
       this.raycaster.setFromCamera(this.mouse, this.engine.activeCamera);
       this.raycaster.params.Points.threshold = 0.5;
+
+      // Edge Loop Select (Alt + Click in edge submode)
+      if (e.altKey && this.currentSubmode === 'edge') {
+        const edgeIdx = this.meshEditor.getClosestEdge(this.raycaster);
+        if (edgeIdx !== -1) {
+          this.meshEditor.selectEdgeLoop(edgeIdx, e.shiftKey);
+          return;
+        }
+      }
 
       if (this.currentSubmode !== 'object') {
         const success = this.meshEditor.handleSelection(e.clientX, e.clientY, e.shiftKey, this.raycaster);
@@ -834,12 +878,26 @@ export class UIManager {
       }
     });
 
-    // Hover Cursor Feedback for easy picking
+    // Mousemove for Loop Cut and Hover Cursor Feedback
     canvas.addEventListener('mousemove', (e) => {
       if (this.transformManager.isTransforming || this.selectionTools.isSelecting) return;
+
+      const rect = canvas.getBoundingClientRect();
+      this.mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      this.mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      this.raycaster.setFromCamera(this.mouse, this.engine.activeCamera);
+
+      if (this.meshEditor.isLoopCutting) {
+        if (this.meshEditor.loopCutPhase === 'preview') {
+          this.meshEditor.updateLoopCutPreview(this.raycaster, this.mouse);
+        } else if (this.meshEditor.loopCutPhase === 'slide') {
+          this.meshEditor.slideLoopCut(e.movementX || 0);
+        }
+        return;
+      }
+
       if (this.currentSubmode === 'vertex' && this.meshEditor.activeMesh && this.meshEditor.activeMesh.userData.quadMesh) {
         const qm = this.meshEditor.activeMesh.userData.quadMesh;
-        const rect = canvas.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
         let isNear = false;
@@ -861,14 +919,27 @@ export class UIManager {
         canvas.style.cursor = 'default';
       }
     });
+
+    // Wheel for Loop Cut multi-cuts
+    window.addEventListener('wheel', (e) => {
+      if (this.meshEditor.isLoopCutting) {
+        e.preventDefault();
+        this.meshEditor.handleLoopCutScroll(e.deltaY);
+      }
+    }, { passive: false });
   }
 
   initShortcuts() {
     window.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT') return;
 
-      // Escape: Close Shift+A Menu or Deselect
+      // Escape: Close Shift+A Menu or Cancel Loop Cut
       if (e.key === 'Escape') {
+        if (this.meshEditor.isLoopCutting) {
+          this.meshEditor.cancelLoopCut();
+          this.setSubmode(this.currentSubmode);
+          return;
+        }
         this.closeShiftAMenu();
         return;
       }
@@ -888,7 +959,35 @@ export class UIManager {
       else if ((e.ctrlKey && e.shiftKey && (e.key === 'z' || e.key === 'Z')) || (e.ctrlKey && (e.key === 'y' || e.key === 'Y'))) {
         e.preventDefault();
         this.historyManager.redo();
-      } else if (e.key === 'Tab') {
+      }
+      // Loop Cut & Slide: Ctrl + R
+      else if (e.ctrlKey && (e.key === 'r' || e.key === 'R') && !e.shiftKey) {
+        e.preventDefault();
+        if (this.currentSubmode === 'object') this.setSubmode('edge');
+        this.meshEditor.startLoopCut();
+        this.updateStatusHintForLoopCut();
+      }
+      // Bevel: Ctrl + B
+      else if (e.ctrlKey && (e.key === 'b' || e.key === 'B') && !e.shiftKey) {
+        e.preventDefault();
+        if (this.currentSubmode === 'object') this.setSubmode('edge');
+        this.meshEditor.bevel();
+      }
+      // Merge: M
+      else if (!e.ctrlKey && !e.shiftKey && !e.altKey && (e.key === 'm' || e.key === 'M')) {
+        if (this.currentSubmode !== 'object') {
+          e.preventDefault();
+          this.meshEditor.merge('center');
+        }
+      }
+      // Fill: F
+      else if (!e.ctrlKey && !e.shiftKey && !e.altKey && (e.key === 'f' || e.key === 'F')) {
+        if (this.currentSubmode !== 'object') {
+          e.preventDefault();
+          this.meshEditor.fill();
+        }
+      }
+      else if (e.key === 'Tab') {
         e.preventDefault();
         this.setSubmode(this.currentSubmode === 'object' ? 'vertex' : 'object');
       } else if (e.key === '1') {

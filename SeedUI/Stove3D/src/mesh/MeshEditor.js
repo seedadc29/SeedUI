@@ -742,6 +742,389 @@ export class MeshEditor {
     }
   }
 
+  // --- EDGE DETECTION HELPER ---
+
+  getClosestEdge(raycaster) {
+    if (!this.activeMesh || !this.activeMesh.userData.quadMesh) return -1;
+    const qm = this.activeMesh.userData.quadMesh;
+    const ray = raycaster.ray;
+    let minRayDist = 0.45;
+    let closestEdgeIdx = -1;
+
+    qm.edges.forEach((edge, eIdx) => {
+      const vA = qm.vertices[edge[0]].clone().applyMatrix4(this.activeMesh.matrixWorld);
+      const vB = qm.vertices[edge[1]].clone().applyMatrix4(this.activeMesh.matrixWorld);
+      const d = ray.distanceSqToSegment(vA, vB);
+      const dist = Math.sqrt(d);
+      if (dist < minRayDist) {
+        minRayDist = dist;
+        closestEdgeIdx = eIdx;
+      }
+    });
+    return closestEdgeIdx;
+  }
+
+  // --- BLENDER LOOP CUT & SLIDE (Ctrl+R) ---
+
+  startLoopCut() {
+    if (!this.activeMesh || !this.activeMesh.userData.quadMesh) return;
+    this.isLoopCutting = true;
+    this.loopCutPhase = 'preview'; // 'preview' | 'slide'
+    this.loopCutRing = [];
+    this.loopCutFactor = 0.5;
+    this.loopCutNumCuts = 1;
+    this.loopCutStartMouse = { x: 0, y: 0 };
+
+    this.clearLoopCutPreview();
+  }
+
+  updateLoopCutPreview(raycaster, mouse2D) {
+    if (!this.isLoopCutting || !this.activeMesh || !this.activeMesh.userData.quadMesh) return;
+    const qm = this.activeMesh.userData.quadMesh;
+
+    if (this.loopCutPhase === 'preview') {
+      const intersects = raycaster.intersectObject(this.activeMesh, false);
+      if (intersects.length > 0 && intersects[0].faceIndex !== undefined) {
+        // Map triangle faceIndex to Quad index
+        // Each quad has 4 triangles in center-point fan
+        const quadIdx = Math.floor(intersects[0].faceIndex / 4);
+        const quad = qm.quads[quadIdx];
+
+        if (quad && quad.length >= 4) {
+          const hitPoint = intersects[0].point.clone().applyMatrix4(this.activeMesh.matrixWorld.clone().invert());
+          
+          // Find closest edge in this quad
+          let minEdgeDist = Infinity;
+          let closestEdge = [quad[0], quad[1]];
+
+          const q = Array.from(new Set(quad));
+          for (let i = 0; i < q.length; i++) {
+            const vA = qm.vertices[q[i]];
+            const vB = qm.vertices[q[(i + 1) % q.length]];
+            const line = new THREE.Line3(vA, vB);
+            const cp = new THREE.Vector3();
+            line.closestPointToPoint(hitPoint, true, cp);
+            const dist = cp.distanceTo(hitPoint);
+            if (dist < minEdgeDist) {
+              minEdgeDist = dist;
+              closestEdge = [q[i], q[(i + 1) % q.length]];
+            }
+          }
+
+          // Compute Edge Ring along perpendicular direction
+          this.loopCutRing = MeshOperations.findEdgeRing(qm, quadIdx, closestEdge[0], closestEdge[1]);
+          this.renderLoopCutLines();
+        }
+      }
+    } else if (this.loopCutPhase === 'slide') {
+      // Slid factor adjusted by mouse movement
+      this.renderLoopCutLines();
+    }
+  }
+
+  renderLoopCutLines() {
+    this.clearLoopCutPreview();
+    if (!this.loopCutRing || this.loopCutRing.length === 0 || !this.activeMesh) return;
+    const qm = this.activeMesh.userData.quadMesh;
+
+    const linePositions = [];
+    const tValues = [];
+
+    if (this.loopCutNumCuts === 1) {
+      tValues.push(this.loopCutFactor);
+    } else {
+      const baseSpacing = 1.0 / (this.loopCutNumCuts + 1);
+      const slide = (this.loopCutFactor - 0.5) * baseSpacing;
+      for (let i = 1; i <= this.loopCutNumCuts; i++) {
+        tValues.push(Math.max(0.01, Math.min(0.99, (i * baseSpacing) + slide)));
+      }
+    }
+
+    tValues.forEach((t) => {
+      this.loopCutRing.forEach((ringItem) => {
+        const { v0, v1, v2, v3 } = ringItem;
+        const p0 = qm.vertices[v0];
+        const p1 = qm.vertices[v1];
+        const p2 = qm.vertices[v2];
+        const p3 = qm.vertices[v3];
+
+        if (p0 && p1 && p2 && p3) {
+          const cutA = new THREE.Vector3().lerpVectors(p0, p1, t);
+          const cutB = new THREE.Vector3().lerpVectors(p3, p2, t);
+          linePositions.push(cutA.x, cutA.y, cutA.z, cutB.x, cutB.y, cutB.z);
+        }
+      });
+    });
+
+    if (linePositions.length > 0) {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(linePositions, 3));
+      const mat = new THREE.LineBasicMaterial({
+        color: 0xffff00, // Bright Blender Yellow
+        linewidth: 3,
+        depthTest: false
+      });
+
+      this.loopCutHelperMesh = new THREE.LineSegments(geo, mat);
+      this.loopCutHelperMesh.matrixAutoUpdate = false;
+      this.loopCutHelperMesh.matrix.copy(this.activeMesh.matrixWorld);
+      this.helperGroup.add(this.loopCutHelperMesh);
+    }
+  }
+
+  clearLoopCutPreview() {
+    if (this.loopCutHelperMesh) {
+      if (this.loopCutHelperMesh.geometry) this.loopCutHelperMesh.geometry.dispose();
+      this.helperGroup.remove(this.loopCutHelperMesh);
+      this.loopCutHelperMesh = null;
+    }
+  }
+
+  handleLoopCutClick(e) {
+    if (!this.isLoopCutting) return false;
+
+    if (this.loopCutPhase === 'preview') {
+      if (this.loopCutRing && this.loopCutRing.length > 0) {
+        this.loopCutPhase = 'slide';
+        this.loopCutStartMouse = { x: e.clientX, y: e.clientY };
+        return true;
+      }
+    } else if (this.loopCutPhase === 'slide') {
+      this.commitLoopCut();
+      return true;
+    }
+    return false;
+  }
+
+  handleLoopCutScroll(deltaY) {
+    if (!this.isLoopCutting) return false;
+    const change = deltaY < 0 ? 1 : -1;
+    this.loopCutNumCuts = Math.max(1, Math.min(10, this.loopCutNumCuts + change));
+    this.renderLoopCutLines();
+    return true;
+  }
+
+  slideLoopCut(deltaX) {
+    if (!this.isLoopCutting || this.loopCutPhase !== 'slide') return;
+    this.loopCutFactor = Math.max(0.02, Math.min(0.98, this.loopCutFactor + deltaX * 0.005));
+    this.renderLoopCutLines();
+  }
+
+  commitLoopCut() {
+    if (!this.isLoopCutting || !this.activeMesh || !this.activeMesh.userData.quadMesh) return;
+    const qm = this.activeMesh.userData.quadMesh;
+
+    if (this.loopCutRing && this.loopCutRing.length > 0) {
+      const beforeVerts = qm.vertices.map(v => v.clone());
+      const beforeQuads = qm.quads.map(q => [...q]);
+
+      const result = MeshOperations.loopCut(qm, this.loopCutRing, this.loopCutFactor, this.loopCutNumCuts);
+
+      this.clearLoopCutPreview();
+      this.isLoopCutting = false;
+      this.loopCutPhase = 'preview';
+
+      if (result) {
+        this.selectedVertices = result.cutVertices;
+        this.selectedFaces.clear();
+        this.selectedEdges.clear();
+
+        this.refreshMeshGeometryBuffers();
+
+        if (this.historyManager) {
+          const targetQM = qm;
+          const afterVerts = qm.vertices.map(v => v.clone());
+          const afterQuads = qm.quads.map(q => [...q]);
+
+          this.historyManager.push({
+            description: 'Loop Cut & Slide',
+            undo: () => {
+              targetQM.vertices = beforeVerts.map(v => v.clone());
+              targetQM.quads = beforeQuads.map(q => [...q]);
+              targetQM.rebuildEdges();
+              this.refreshMeshGeometryBuffers();
+            },
+            redo: () => {
+              targetQM.vertices = afterVerts.map(v => v.clone());
+              targetQM.quads = afterQuads.map(q => [...q]);
+              targetQM.rebuildEdges();
+              this.refreshMeshGeometryBuffers();
+            }
+          });
+        }
+      }
+    } else {
+      this.cancelLoopCut();
+    }
+  }
+
+  cancelLoopCut() {
+    this.isLoopCutting = false;
+    this.loopCutPhase = 'preview';
+    this.clearLoopCutPreview();
+  }
+
+  // --- BEVEL / CHANFRO (Ctrl+B) ---
+
+  bevel() {
+    if (!this.activeMesh || !this.activeMesh.userData.quadMesh) return;
+    const qm = this.activeMesh.userData.quadMesh;
+
+    let edgesToChamfer = new Set(this.selectedEdges);
+    if (edgesToChamfer.size === 0 && this.selectedVertices.size >= 2) {
+      qm.edges.forEach((edge, eIdx) => {
+        if (this.selectedVertices.has(edge[0]) && this.selectedVertices.has(edge[1])) {
+          edgesToChamfer.add(eIdx);
+        }
+      });
+    }
+
+    if (edgesToChamfer.size === 0) return;
+
+    const beforeVerts = qm.vertices.map(v => v.clone());
+    const beforeQuads = qm.quads.map(q => [...q]);
+
+    const result = MeshOperations.bevelEdges(qm, edgesToChamfer, 0.15, 1);
+    if (result) {
+      this.selectedVertices.clear();
+      this.selectedEdges.clear();
+      this.selectedFaces.clear();
+
+      this.refreshMeshGeometryBuffers();
+
+      if (this.historyManager) {
+        const targetQM = qm;
+        const afterVerts = qm.vertices.map(v => v.clone());
+        const afterQuads = qm.quads.map(q => [...q]);
+
+        this.historyManager.push({
+          description: 'Chanfro (Bevel)',
+          undo: () => {
+            targetQM.vertices = beforeVerts.map(v => v.clone());
+            targetQM.quads = beforeQuads.map(q => [...q]);
+            targetQM.rebuildEdges();
+            this.refreshMeshGeometryBuffers();
+          },
+          redo: () => {
+            targetQM.vertices = afterVerts.map(v => v.clone());
+            targetQM.quads = afterQuads.map(q => [...q]);
+            targetQM.rebuildEdges();
+            this.refreshMeshGeometryBuffers();
+          }
+        });
+      }
+    }
+  }
+
+  // --- MERGE VERTICES (M) ---
+
+  merge(mode = 'center') {
+    if (!this.activeMesh || !this.activeMesh.userData.quadMesh) return;
+    const qm = this.activeMesh.userData.quadMesh;
+    if (this.selectedVertices.size < 2 && mode === 'center') return;
+
+    const beforeVerts = qm.vertices.map(v => v.clone());
+    const beforeQuads = qm.quads.map(q => [...q]);
+
+    const result = MeshOperations.mergeVertices(qm, this.selectedVertices, mode);
+    if (result) {
+      if (result.remainingVertex !== undefined) {
+        this.selectedVertices = new Set([result.remainingVertex]);
+      }
+      this.selectedEdges.clear();
+      this.selectedFaces.clear();
+
+      this.refreshMeshGeometryBuffers();
+
+      if (this.historyManager) {
+        const targetQM = qm;
+        const afterVerts = qm.vertices.map(v => v.clone());
+        const afterQuads = qm.quads.map(q => [...q]);
+
+        this.historyManager.push({
+          description: `Unir Vértices (${mode === 'center' ? 'No Centro' : 'Por Distância'})`,
+          undo: () => {
+            targetQM.vertices = beforeVerts.map(v => v.clone());
+            targetQM.quads = beforeQuads.map(q => [...q]);
+            targetQM.rebuildEdges();
+            this.refreshMeshGeometryBuffers();
+          },
+          redo: () => {
+            targetQM.vertices = afterVerts.map(v => v.clone());
+            targetQM.quads = afterQuads.map(q => [...q]);
+            targetQM.rebuildEdges();
+            this.refreshMeshGeometryBuffers();
+          }
+        });
+      }
+    }
+  }
+
+  // --- FILL FACE (F) ---
+
+  fill() {
+    if (!this.activeMesh || !this.activeMesh.userData.quadMesh) return;
+    const qm = this.activeMesh.userData.quadMesh;
+    if (this.selectedVertices.size < 3) return;
+
+    const beforeVerts = qm.vertices.map(v => v.clone());
+    const beforeQuads = qm.quads.map(q => [...q]);
+
+    const result = MeshOperations.fillFace(qm, this.selectedVertices);
+    if (result) {
+      this.selectedFaces = new Set([result.newFaceIdx]);
+      this.selectedEdges.clear();
+      this.refreshMeshGeometryBuffers();
+
+      if (this.historyManager) {
+        const targetQM = qm;
+        const afterVerts = qm.vertices.map(v => v.clone());
+        const afterQuads = qm.quads.map(q => [...q]);
+
+        this.historyManager.push({
+          description: 'Preencher Face (Fill)',
+          undo: () => {
+            targetQM.vertices = beforeVerts.map(v => v.clone());
+            targetQM.quads = beforeQuads.map(q => [...q]);
+            targetQM.rebuildEdges();
+            this.refreshMeshGeometryBuffers();
+          },
+          redo: () => {
+            targetQM.vertices = afterVerts.map(v => v.clone());
+            targetQM.quads = afterQuads.map(q => [...q]);
+            targetQM.rebuildEdges();
+            this.refreshMeshGeometryBuffers();
+          }
+        });
+      }
+    }
+  }
+
+  // --- EDGE LOOP SELECT (Alt+Click) ---
+
+  selectEdgeLoop(edgeIdx, addToSelection = false) {
+    if (!this.activeMesh || !this.activeMesh.userData.quadMesh) return;
+    const qm = this.activeMesh.userData.quadMesh;
+
+    const loopEdges = MeshOperations.findEdgeLoop(qm, edgeIdx);
+    if (!addToSelection) {
+      this.selectedEdges.clear();
+      this.selectedVertices.clear();
+    }
+
+    loopEdges.forEach((eIdx) => {
+      this.selectedEdges.add(eIdx);
+      const edge = qm.edges[eIdx];
+      if (edge) {
+        this.selectedVertices.add(edge[0]);
+        this.selectedVertices.add(edge[1]);
+      }
+    });
+
+    this.rebuildEditHelpers();
+    this.updateTransformAnchor();
+  }
+
   toggleProportionalEditing() {
     this.proportionalEditing = !this.proportionalEditing;
     return this.proportionalEditing;
@@ -785,5 +1168,6 @@ export class MeshEditor {
     this.vertexPoints = null;
     this.activeEdgesHelper = null;
     this.faceHighlightMesh = null;
+    this.loopCutHelperMesh = null;
   }
 }
