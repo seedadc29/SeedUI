@@ -93,7 +93,7 @@ export class Engine {
 
     // State for MMB + RMB Pan & Context Menu Suppression
     this.isMMBRMBPanning = false;
-    this.suppressContextMenu = false;
+    this.lastMMBRMBPanTime = 0;
     let isMMBDown = false;
     let isRMBDown = false;
     let lastPanPos = { x: 0, y: 0 };
@@ -114,7 +114,7 @@ export class Engine {
       // Check MMB + RMB simultaneous press for Pan
       if ((isMMBDown && isRMBDown) || (e.buttons & 4 && e.buttons & 2)) {
         this.isMMBRMBPanning = true;
-        this.suppressContextMenu = true;
+        this.lastMMBRMBPanTime = Date.now();
         lastPanPos.x = e.clientX;
         lastPanPos.y = e.clientY;
         this.controls.enabled = false;
@@ -148,7 +148,11 @@ export class Engine {
 
     const onPointerMove = (e) => {
       // 1. MMB + RMB Pan
-      if (this.isMMBRMBPanning) {
+      if (this.isMMBRMBPanning || (isMMBDown && isRMBDown) || (e.buttons & 4 && e.buttons & 2)) {
+        this.isMMBRMBPanning = true;
+        this.lastMMBRMBPanTime = Date.now();
+        this.controls.enabled = false;
+
         const deltaX = e.clientX - lastPanPos.x;
         const deltaY = e.clientY - lastPanPos.y;
         lastPanPos.x = e.clientX;
@@ -209,10 +213,7 @@ export class Engine {
 
       if (this.isMMBRMBPanning) {
         this.isMMBRMBPanning = false;
-        this.suppressContextMenu = true;
-        setTimeout(() => {
-          this.suppressContextMenu = false;
-        }, 250);
+        this.lastMMBRMBPanTime = Date.now();
       }
 
       if (isCtrlAltZooming) {

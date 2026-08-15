@@ -549,13 +549,24 @@ export class UIManager {
     const rcMenu = document.getElementById('blender-right-click-menu');
     if (!rcMenu) return;
 
+    // Suppress native context menu globally across canvas and window
+    window.addEventListener('contextmenu', (e) => {
+      const isPan = this.engine.isMMBRMBPanning || (Date.now() - (this.engine.lastMMBRMBPanTime || 0) < 800);
+      if (isPan) {
+        e.preventDefault();
+        e.stopPropagation();
+        rcMenu.classList.add('hidden');
+      }
+    }, { capture: true });
+
     this.engine.canvas.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       e.stopPropagation();
 
-      // Suppress context menu if MMB+RMB Pan was used
-      if (this.engine.suppressContextMenu || this.engine.isMMBRMBPanning) {
-        this.engine.suppressContextMenu = false;
+      // Suppress context menu if MMB+RMB Pan was recently used
+      const isPan = this.engine.isMMBRMBPanning || (Date.now() - (this.engine.lastMMBRMBPanTime || 0) < 800);
+      if (isPan) {
+        rcMenu.classList.add('hidden');
         return;
       }
 
