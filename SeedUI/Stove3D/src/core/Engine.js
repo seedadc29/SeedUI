@@ -40,6 +40,7 @@ export class Engine {
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
       antialias: true,
+      preserveDrawingBuffer: true,
       powerPreference: 'high-performance',
       precision: 'mediump'
     });
@@ -381,6 +382,25 @@ export class Engine {
       case 'right': // Numpad 3 (Right view: looking along -X, Z points up on screen)
         this.activeCamera.up.set(0, 0, 1);
         this.activeCamera.position.set(target.x + dist, target.y, target.z);
+        break;
+      case 'camera': // Numpad 0 (Blender Scene Camera View)
+        if (this.sceneCamera) {
+          const camWorldPos = new THREE.Vector3();
+          const camWorldDir = new THREE.Vector3();
+          this.sceneCamera.getWorldPosition(camWorldPos);
+          this.sceneCamera.getWorldDirection(camWorldDir);
+          
+          this.activeCamera.up.set(0, 0, 1);
+          this.activeCamera.position.copy(camWorldPos);
+          const lookTarget = camWorldPos.clone().add(camWorldDir.multiplyScalar(8));
+          this.controls.target.copy(lookTarget);
+          this.activeCamera.lookAt(lookTarget);
+        } else {
+          this.activeCamera.up.set(0, 0, 1);
+          this.activeCamera.position.set(6.5, -7.5, 5.0);
+          this.controls.target.set(0, 0, 0);
+          this.activeCamera.lookAt(0, 0, 0);
+        }
         break;
     }
     this.activeCamera.lookAt(target);

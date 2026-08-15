@@ -46,6 +46,77 @@ export class SceneManager {
 
   initDefaultScene() {
     this.createPrimitive('cube', {}, 'Cubo', false);
+    this.createCameraObject('Camera', false);
+  }
+
+  createCameraObject(customName = null, pushHistory = true) {
+    const name = customName || `Camera_${this.objects.filter(o => o.userData && o.userData.isCamera).length + 1}`;
+    
+    // 1. Camera Container Group (Transformable in 3D Viewport)
+    const cameraGroup = new THREE.Group();
+    cameraGroup.name = name;
+    cameraGroup.position.set(6.5, -7.5, 5.0);
+    cameraGroup.lookAt(0, 0, 0);
+
+    // 2. Real Perspective Camera Instance
+    const camera = new THREE.PerspectiveCamera(50, 16 / 9, 0.1, 1000);
+    cameraGroup.add(camera);
+
+    // 3. Blender Iconic Camera Wireframe Gizmo
+    const gizmoGeom = new THREE.BufferGeometry();
+    const s = 0.8;
+    const vertices = new Float32Array([
+      // Back rectangular body
+      -s*0.6, -s*0.4, 0,   s*0.6, -s*0.4, 0,
+       s*0.6, -s*0.4, 0,   s*0.6,  s*0.4, 0,
+       s*0.6,  s*0.4, 0,  -s*0.6,  s*0.4, 0,
+      -s*0.6,  s*0.4, 0,  -s*0.6, -s*0.4, 0,
+      // Pyramid edges converging forward
+      -s*0.6, -s*0.4, 0,   0, 0, -s*1.2,
+       s*0.6, -s*0.4, 0,   0, 0, -s*1.2,
+       s*0.6,  s*0.4, 0,   0, 0, -s*1.2,
+      -s*0.6,  s*0.4, 0,   0, 0, -s*1.2,
+      // Top triangular UP indicator
+      -s*0.3,  s*0.4, 0,   0, s*0.7, 0,
+       0, s*0.7, 0,        s*0.3,  s*0.4, 0
+    ]);
+    gizmoGeom.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+    const gizmoMat = new THREE.LineBasicMaterial({ color: 0x38bdf8, linewidth: 2 });
+    const gizmoLine = new THREE.LineSegments(gizmoGeom, gizmoMat);
+    gizmoLine.name = `${name}_gizmo`;
+    cameraGroup.add(gizmoLine);
+
+    cameraGroup.userData.isCamera = true;
+    cameraGroup.userData.cameraInstance = camera;
+    cameraGroup.userData.primitiveType = 'camera';
+    cameraGroup.userData.focalLength = 50;
+
+    this.engine.scene.add(cameraGroup);
+    this.engine.sceneCamera = cameraGroup;
+    this.objects.push(cameraGroup);
+    this.updateStats();
+
+    if (pushHistory && this.historyManager) {
+      this.historyManager.push({
+        description: `Criar ${name}`,
+        undo: () => {
+          this.engine.scene.remove(cameraGroup);
+          const idx = this.objects.indexOf(cameraGroup);
+          if (idx !== -1) this.objects.splice(idx, 1);
+          this.selectedObjects.delete(cameraGroup);
+          this.selectObject(this.objects[this.objects.length - 1] || null);
+          this.updateStats();
+        },
+        redo: () => {
+          this.engine.scene.add(cameraGroup);
+          if (!this.objects.includes(cameraGroup)) this.objects.push(cameraGroup);
+          this.selectObject(cameraGroup);
+          this.updateStats();
+        }
+      });
+    }
+
+    return cameraGroup;
   }
 
   createPrimitive(type, params = {}, customName = null, pushHistory = true) {
@@ -596,9 +667,10 @@ export class SceneManager {
       const isSelected = this.selectedObjects.has(obj);
       const item = document.createElement('div');
       item.className = `outliner-item ${isSelected ? 'selected' : ''}`;
+      const icon = obj.userData && obj.userData.isCamera ? '📷' : (obj.visible ? '🧊' : '👁️‍🗨️');
       item.innerHTML = `
         <div class="outliner-item-left">
-          <span class="outliner-icon">${obj.visible ? '🧊' : '👁️‍🗨️'}</span>
+          <span class="outliner-icon">${icon}</span>
           <span class="outliner-name ${!obj.visible ? 'muted' : ''}">${obj.name}</span>
         </div>
         <div class="outliner-item-actions">

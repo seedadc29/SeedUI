@@ -553,13 +553,14 @@ export class UIManager {
   }
 
   initCameraGizmos() {
-    document.getElementById('btn-view-top')?.addEventListener('click', () => this.engine.setView('top'));
-    document.getElementById('btn-view-front')?.addEventListener('click', () => this.engine.setView('front'));
-    document.getElementById('btn-view-side')?.addEventListener('click', () => this.engine.setView('side'));
-    document.getElementById('btn-view-ortho')?.addEventListener('click', () => this.engine.toggleProjection());
+    document.getElementById('btn-view-top')?.addEventListener('click', () => this.engine.setCameraView('top'));
+    document.getElementById('btn-view-front')?.addEventListener('click', () => this.engine.setCameraView('front'));
+    document.getElementById('btn-view-side')?.addEventListener('click', () => this.engine.setCameraView('right'));
+    document.getElementById('btn-view-cam')?.addEventListener('click', () => this.engine.setCameraView('camera'));
+    document.getElementById('btn-view-ortho')?.addEventListener('click', () => this.engine.toggleOrthographic());
     document.getElementById('btn-view-focus')?.addEventListener('click', () => {
       const selected = this.sceneManager.getSelectedObject();
-      if (selected) this.engine.focusObject(selected);
+      if (selected) this.engine.focusOnObject(selected);
     });
   }
 
@@ -635,7 +636,9 @@ export class UIManager {
         const prim = btn.dataset.prim;
         const zoo = btn.dataset.zoo;
 
-        if (prim) {
+        if (prim === 'camera') {
+          this.sceneManager.createCameraObject();
+        } else if (prim) {
           this.sceneManager.createPrimitive(prim);
         } else if (zoo) {
           this.sceneManager.createZooPreset(zoo);
@@ -1188,6 +1191,10 @@ export class UIManager {
           const next = this.engine.currentShading === 'solid' ? 'material' : 'solid';
           this.setShading(next);
         }
+      } else if (e.code === 'Numpad0' || (e.key === '0' && !e.ctrlKey && !e.altKey && e.target.tagName !== 'INPUT')) {
+        // Blender Numpad 0 Shortcut: Active Scene Camera View
+        e.preventDefault();
+        this.engine.setCameraView('camera');
       }
     });
   }
@@ -1204,25 +1211,24 @@ export class UIManager {
 
     let filamentBridge = null;
 
-    const openFilamentModal = async () => {
+    const openFilamentModal = () => {
       modal.classList.remove('hidden');
       if (!filamentBridge && canvas) {
-        filamentBridge = new FilamentBridge(canvas);
-        if (statusText) statusText.textContent = 'Carregando Google Filament WASM...';
-        try {
-          await filamentBridge.init();
-          filamentBridge.setupScene();
-          filamentBridge.syncCamera(this.engine.activeCamera);
-          filamentBridge.render();
-          if (statusText) statusText.textContent = 'Google Filament PBR Ativo (WASM)';
-        } catch (err) {
-          if (statusText) statusText.textContent = 'Render PBR Studio Ativo';
-        }
+        filamentBridge = new FilamentBridge(canvas, this.engine, this.sceneManager);
+      }
+      if (filamentBridge) {
+        filamentBridge.onResize();
+        filamentBridge.syncScene(this.sceneManager);
+        filamentBridge.syncCamera(this.engine.activeCamera);
+        if (statusText) statusText.textContent = 'Google Filament PBR Studio Ativo (WASM)';
       }
     };
 
     const closeFilamentModal = () => {
       modal.classList.add('hidden');
+      if (filamentBridge) {
+        filamentBridge.stopLoop();
+      }
     };
 
     btnOpen.addEventListener('click', openFilamentModal);
@@ -1248,7 +1254,9 @@ export class UIManager {
         btn.classList.add('active');
         btn.style.borderColor = '#38bdf8';
         const mat = btn.dataset.mat;
-        console.log('💎 [Filament] Material selecionado:', mat);
+        if (filamentBridge) {
+          filamentBridge.setMaterial(mat);
+        }
       });
     });
 
@@ -1256,19 +1264,23 @@ export class UIManager {
     const sunSlider = document.getElementById('f-sun-slider');
     const sunVal = document.getElementById('f-sun-val');
     sunSlider?.addEventListener('input', (e) => {
-      if (sunVal) sunVal.textContent = `${Math.round(e.target.value / 1000)}k`;
+      const val = parseFloat(e.target.value);
+      if (sunVal) sunVal.textContent = `${Math.round(val / 1000)}k`;
+      if (filamentBridge) filamentBridge.setSunIntensity(val);
     });
 
     const iblSlider = document.getElementById('f-ibl-slider');
     const iblVal = document.getElementById('f-ibl-val');
     iblSlider?.addEventListener('input', (e) => {
-      if (iblVal) iblVal.textContent = `${Math.round(e.target.value / 1000)}k`;
+      const val = parseFloat(e.target.value);
+      if (iblVal) iblVal.textContent = `${Math.round(val / 1000)}k`;
+      if (filamentBridge) filamentBridge.setIblIntensity(val);
     });
 
     // Snapshot HD Button
     document.getElementById('btn-filament-snapshot')?.addEventListener('click', () => {
-      if (this.engine && this.engine.renderer) {
-        const dataUrl = this.engine.renderer.domElement.toDataURL('image/png');
+      if (filamentBridge) {
+        const dataUrl = filamentBridge.captureSnapshot();
         const link = document.createElement('a');
         link.download = `seed3d_filament_render_${Date.now()}.png`;
         link.href = dataUrl;
@@ -1279,12 +1291,12 @@ export class UIManager {
     // Sync mesh button
     document.getElementById('btn-filament-sync')?.addEventListener('click', () => {
       if (filamentBridge) {
+        filamentBridge.syncScene(this.sceneManager);
         filamentBridge.syncCamera(this.engine.activeCamera);
-        filamentBridge.render();
       }
       if (statusText) statusText.textContent = 'Malha Sincronizada com Sucesso!';
       setTimeout(() => {
-        if (statusText) statusText.textContent = 'Google Filament PBR Ativo (WASM)';
+        if (statusText) statusText.textContent = 'Google Filament PBR Studio Ativo (WASM)';
       }, 2000);
     });
   }
