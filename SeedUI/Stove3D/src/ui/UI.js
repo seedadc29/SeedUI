@@ -66,6 +66,13 @@ export class UIManager {
       this.transformManager.updateCamera(camera);
     };
 
+    // Link camera movement inside Camera View
+    this.engine.onCameraMoved = (cameraObj) => {
+      if (this.sceneManager.getSelectedObject() === cameraObj) {
+        this.sceneManager.updateTransformUI();
+      }
+    };
+
     this.initFileMenu();
     this.initEditMenuAndPreferences();
     this.initModeTabs();

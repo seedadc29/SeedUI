@@ -223,6 +223,17 @@
           <!-- Canvas 3D -->
           <canvas id="viewport-canvas"></canvas>
 
+          <!-- Blender Camera View Frame Overlay & Safe Area -->
+          <div class="camera-frame-overlay hidden" id="camera-frame-overlay">
+            <div class="camera-safe-frame">
+              <div class="camera-frame-hud">
+                <span class="hud-tag">📷 Vista da Câmera</span>
+                <span class="hud-status">🔒 Câmera na Vista Ativa (Mova para Enquadrar)</span>
+                <span class="hud-hint">Pressione 0 para Sair</span>
+              </div>
+            </div>
+          </div>
+
           <!-- Camera Orientation Gizmo Controls (Bottom Right) -->
           <div class="camera-gizmo-bar">
             <button class="cam-btn" id="btn-view-top" title="Vista Superior (Numpad 7)">Z</button>

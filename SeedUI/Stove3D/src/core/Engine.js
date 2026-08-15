@@ -19,6 +19,11 @@ export class Engine {
     this.lastFpsUpdate = performance.now();
     this.currentFps = 60;
 
+    // Blender Camera to View Navigation State
+    this.isCameraViewActive = false;
+    this.lockCameraToView = true;
+    this.onCameraMoved = null;
+
     this.initScene();
     this.initRenderer();
     this.initCamera();
@@ -106,6 +111,18 @@ export class Engine {
       MIDDLE: THREE.MOUSE.ROTATE,
       RIGHT: THREE.MOUSE.PAN
     };
+
+    // Live Camera to View Synchronization:
+    // Moving the viewport while inside Camera View directly moves the 3D Camera Object!
+    this.controls.addEventListener('change', () => {
+      if (this.isCameraViewActive && this.lockCameraToView && this.sceneCamera) {
+        this.sceneCamera.position.copy(this.activeCamera.position);
+        this.sceneCamera.rotation.copy(this.activeCamera.rotation);
+        if (this.onCameraMoved) {
+          this.onCameraMoved(this.sceneCamera);
+        }
+      }
+    });
 
     // Emulate 3 Button Mouse (default enabled like Blender Emulate 3-Button)
     this.emulate3Button = localStorage.getItem('stove3d_emulate_3_button') !== 'false';
@@ -369,6 +386,50 @@ export class Engine {
   setCameraView(viewName) {
     const dist = 8;
     const target = this.controls.target;
+    const overlay = document.getElementById('camera-frame-overlay');
+    const camBtn = document.getElementById('btn-view-cam');
+
+    if (viewName === 'camera') {
+      if (this.isCameraViewActive) {
+        // Toggle OUT of camera view
+        this.isCameraViewActive = false;
+        if (overlay) overlay.classList.add('hidden');
+        if (camBtn) camBtn.classList.remove('active');
+        return;
+      }
+
+      // Enter Camera View
+      this.isCameraViewActive = true;
+      if (overlay) overlay.classList.remove('hidden');
+      if (camBtn) camBtn.classList.add('active');
+
+      if (this.sceneCamera) {
+        const camWorldPos = new THREE.Vector3();
+        const camWorldDir = new THREE.Vector3();
+        this.sceneCamera.getWorldPosition(camWorldPos);
+        this.sceneCamera.getWorldDirection(camWorldDir);
+        
+        this.activeCamera.up.set(0, 0, 1);
+        this.activeCamera.position.copy(camWorldPos);
+        const lookTarget = camWorldPos.clone().add(camWorldDir.multiplyScalar(8));
+        this.controls.target.copy(lookTarget);
+        this.activeCamera.lookAt(lookTarget);
+      } else {
+        this.activeCamera.up.set(0, 0, 1);
+        this.activeCamera.position.set(6.5, -7.5, 5.0);
+        this.controls.target.set(0, 0, 0);
+        this.activeCamera.lookAt(0, 0, 0);
+      }
+      this.controls.update();
+      return;
+    }
+
+    // Exiting camera view if switching to other preset views
+    if (this.isCameraViewActive) {
+      this.isCameraViewActive = false;
+      if (overlay) overlay.classList.add('hidden');
+      if (camBtn) camBtn.classList.remove('active');
+    }
 
     switch (viewName) {
       case 'top': // Numpad 7 (Top view: looking down along -Z, Y points up on screen)
@@ -382,25 +443,6 @@ export class Engine {
       case 'right': // Numpad 3 (Right view: looking along -X, Z points up on screen)
         this.activeCamera.up.set(0, 0, 1);
         this.activeCamera.position.set(target.x + dist, target.y, target.z);
-        break;
-      case 'camera': // Numpad 0 (Blender Scene Camera View)
-        if (this.sceneCamera) {
-          const camWorldPos = new THREE.Vector3();
-          const camWorldDir = new THREE.Vector3();
-          this.sceneCamera.getWorldPosition(camWorldPos);
-          this.sceneCamera.getWorldDirection(camWorldDir);
-          
-          this.activeCamera.up.set(0, 0, 1);
-          this.activeCamera.position.copy(camWorldPos);
-          const lookTarget = camWorldPos.clone().add(camWorldDir.multiplyScalar(8));
-          this.controls.target.copy(lookTarget);
-          this.activeCamera.lookAt(lookTarget);
-        } else {
-          this.activeCamera.up.set(0, 0, 1);
-          this.activeCamera.position.set(6.5, -7.5, 5.0);
-          this.controls.target.set(0, 0, 0);
-          this.activeCamera.lookAt(0, 0, 0);
-        }
         break;
     }
     this.activeCamera.lookAt(target);

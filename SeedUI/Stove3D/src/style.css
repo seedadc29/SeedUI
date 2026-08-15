@@ -2461,5 +2461,65 @@ body.theme-opencode .item-icon {
   display: none !important;
 }
 
+/* ==========================================================================
+   Blender Camera View Frame Overlay & Safe Area Passepartout
+   ========================================================================== */
+.camera-frame-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 15;
+  background: rgba(0, 0, 0, 0.45);
+}
 
+.camera-safe-frame {
+  width: 82%;
+  height: 82%;
+  max-width: 1280px;
+  aspect-ratio: 16 / 9;
+  border: 2px dashed rgba(56, 189, 248, 0.85);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45), 0 0 25px rgba(0, 0, 0, 0.8);
+  position: relative;
+  border-radius: 4px;
+}
 
+.camera-frame-hud {
+  position: absolute;
+  top: -34px;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+}
+
+.camera-frame-hud .hud-tag {
+  background: #0284c7;
+  color: #ffffff;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.camera-frame-hud .hud-status {
+  background: rgba(15, 23, 42, 0.9);
+  color: #38bdf8;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.camera-frame-hud .hud-hint {
+  background: rgba(0, 0, 0, 0.75);
+  color: #94a3b8;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
