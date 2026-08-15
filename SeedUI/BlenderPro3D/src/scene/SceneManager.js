@@ -13,11 +13,11 @@ export class SceneManager {
     this.onSelectionChange = null;
     this.onPrimitiveCreated = null;
 
-    // Blender 4.1 Viewport Solid Material (Flat Shading for clear polygon face visibility)
+    // Blender 4.1 Viewport Solid Clay Material (Neutral Gray 0xcccccc)
     this.defaultMaterial = new THREE.MeshStandardMaterial({
-      color: 0x9096a2,
-      roughness: 0.65,
-      metalness: 0.05,
+      color: 0xcccccc,
+      roughness: 0.5,
+      metalness: 0.0,
       flatShading: true,
       side: THREE.DoubleSide
     });
@@ -180,11 +180,6 @@ export class SceneManager {
     const geometry = quadMesh.toBufferGeometry();
     const material = this.defaultMaterial.clone();
 
-    if (this.objects.length > 0) {
-      const hue = (this.objects.length * 0.17) % 1.0;
-      material.color.setHSL(hue, 0.35, 0.55);
-    }
-
     const mesh = new THREE.Mesh(geometry, material);
     mesh.name = name;
     mesh.position.set(0, 1, 0);
@@ -265,11 +260,6 @@ export class SceneManager {
 
     const geometry = quadMesh.toBufferGeometry();
     const material = this.defaultMaterial.clone();
-
-    if (this.objects.length > 0) {
-      const hue = (this.objects.length * 0.17) % 1.0;
-      material.color.setHSL(hue, 0.35, 0.55);
-    }
 
     const mesh = new THREE.Mesh(geometry, material);
     mesh.name = name;
