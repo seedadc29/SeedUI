@@ -581,6 +581,18 @@ export class BlenderUI {
       else if (e.key === '5') {
         this.engine.toggleOrthographic();
       }
+      // Numpad . / Del / Home: Focus View on Selected Object (Blender Frame Selected)
+      else if (
+        e.code === 'NumpadDecimal' || 
+        e.code === 'NumpadDelete' || 
+        e.key === 'Decimal' || 
+        e.code === 'Home' ||
+        (e.key === '.' && !e.ctrlKey && !e.altKey)
+      ) {
+        e.preventDefault();
+        const selObj = this.sceneManager.getSelectedObject();
+        this.engine.focusOnObject(selObj);
+      }
       // Undo: Ctrl+Z
       else if (e.ctrlKey && !e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
         e.preventDefault();
@@ -591,8 +603,8 @@ export class BlenderUI {
         e.preventDefault();
         this.historyManager.redo();
       }
-      // Delete: X or Delete
-      else if (e.key === 'Delete' || e.key === 'x' || e.key === 'X') {
+      // Delete: Main Delete key or X (Object deletion)
+      else if (e.code === 'Delete' || e.key === 'x' || e.key === 'X') {
         const obj = this.sceneManager.getSelectedObject();
         if (obj && this.currentMode === 'object') {
           this.sceneManager.removeObject(obj);

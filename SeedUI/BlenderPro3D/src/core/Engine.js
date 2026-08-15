@@ -572,6 +572,78 @@ export class Engine {
     this.onResize();
   }
 
+  /**
+   * Focus on selected object (Blender Numpad . / Del / Home)
+   * Centers the OrbitControls target on the object's 3D bounding box center
+   * and positions the main viewport camera to frame it perfectly.
+   */
+  focusOnObject(targetObject) {
+    const cam = this.activeCamera;
+    if (!cam) return;
+
+    // 1. Calculate Target 3D Center and Bounding Sphere Radius
+    const center = new THREE.Vector3(0, 0, 0);
+    let radius = 2.0;
+
+    if (targetObject) {
+      const box = new THREE.Box3().setFromObject(targetObject);
+      if (!box.isEmpty()) {
+        box.getCenter(center);
+        const size = new THREE.Vector3();
+        box.getSize(size);
+        radius = Math.max(size.x, size.y, size.z, 0.5) * 0.7;
+      } else {
+        targetObject.getWorldPosition(center);
+        radius = 1.5;
+      }
+    }
+
+    // 2. Compute Viewing Distance from FOV
+    let distance = 6.0;
+    if (cam.isPerspectiveCamera) {
+      const fovRad = (cam.fov * Math.PI) / 180;
+      distance = Math.max(radius / Math.sin(fovRad / 2), 2.5);
+    } else if (cam.isOrthographicCamera) {
+      cam.zoom = Math.min(window.innerWidth, window.innerHeight) / (radius * 250);
+      cam.updateProjectionMatrix();
+      distance = 8.0;
+    }
+
+    // 3. Compute Viewing Direction from current camera orientation
+    let dir = new THREE.Vector3().subVectors(cam.position, this.controls.target).normalize();
+    if (dir.lengthSq() < 0.001) {
+      dir.set(1.0, -1.0, 0.8).normalize();
+    }
+
+    const newCamPos = center.clone().addScaledVector(dir, distance);
+
+    // 4. Smoothly animate or snap to framed position
+    const startTarget = this.controls.target.clone();
+    const startCamPos = cam.position.clone();
+    const startTime = performance.now();
+    const duration = 220; // 220ms smooth Blender transition
+
+    const animateFocus = (now) => {
+      const elapsed = now - startTime;
+      const t = Math.min(1.0, elapsed / duration);
+      const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; // Ease in-out
+
+      this.controls.target.lerpVectors(startTarget, center, ease);
+      cam.position.lerpVectors(startCamPos, newCamPos, ease);
+      this.controls.update();
+
+      if (t < 1.0) {
+        requestAnimationFrame(animateFocus);
+      } else {
+        this.controls.target.copy(center);
+        cam.position.copy(newCamPos);
+        this.controls.update();
+      }
+    };
+
+    requestAnimationFrame(animateFocus);
+  }
+
   startLoop() {
     const animate = (timestamp) => {
       requestAnimationFrame(animate);
