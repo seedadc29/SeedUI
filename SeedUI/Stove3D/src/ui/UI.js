@@ -91,6 +91,7 @@ export class UIManager {
     this.initThemeSwitcher();
     this.initOpenCodeCLI();
     this.initFilamentUI();
+    this.initModernPropertiesUI();
   }
 
   initOpenCodeCLI() {
@@ -1315,5 +1316,228 @@ export class UIManager {
         if (statusText) statusText.textContent = 'Google Filament PBR Studio Ativo (WASM)';
       }, 2000);
     });
+  }
+
+  initModernPropertiesUI() {
+    // 1. Icon Strip Tab Switching
+    const tabBtns = document.querySelectorAll('.prop-icon-btn');
+    const tabPanes = {
+      transform: document.getElementById('pane-transform'),
+      material: document.getElementById('pane-material'),
+      lighting: document.getElementById('pane-lighting'),
+      camera: document.getElementById('pane-camera'),
+      viewport: document.getElementById('pane-viewport')
+    };
+    const titleEl = document.getElementById('prop-section-title');
+    const titles = {
+      transform: 'Transformação',
+      material: 'Materiais & PBR',
+      lighting: 'Iluminação & Estúdio',
+      camera: 'Câmera 3D',
+      viewport: 'Exibição & Sombras'
+    };
+
+    tabBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const tab = btn.dataset.tab;
+        tabBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        Object.keys(tabPanes).forEach((k) => {
+          if (tabPanes[k]) {
+            if (k === tab) tabPanes[k].classList.remove('hidden');
+            else tabPanes[k].classList.add('hidden');
+          }
+        });
+        if (titleEl && titles[tab]) titleEl.textContent = titles[tab];
+      });
+    });
+
+    // 2. Material Sliders
+    const linkSlider = (sliderId, valId, callback, suffix = '') => {
+      const slider = document.getElementById(sliderId);
+      const val = document.getElementById(valId);
+      if (slider) {
+        slider.addEventListener('input', (e) => {
+          const num = parseFloat(e.target.value);
+          if (val) val.textContent = `${num.toFixed(2)}${suffix}`;
+          if (callback) callback(num);
+        });
+      }
+    };
+
+    linkSlider('slider-mat-roughness', 'val-mat-roughness', (v) => {
+      const obj = this.sceneManager.getSelectedObject();
+      if (obj && obj.material) {
+        obj.material.roughness = v;
+        obj.material.needsUpdate = true;
+      }
+    });
+
+    linkSlider('slider-mat-metalness', 'val-mat-metalness', (v) => {
+      const obj = this.sceneManager.getSelectedObject();
+      if (obj && obj.material) {
+        obj.material.metalness = v;
+        obj.material.needsUpdate = true;
+      }
+    });
+
+    linkSlider('slider-mat-transmission', 'val-mat-transmission', (v) => {
+      const obj = this.sceneManager.getSelectedObject();
+      if (obj && obj.material) {
+        obj.material.transmission = v;
+        obj.material.transparent = v > 0;
+        obj.material.needsUpdate = true;
+      }
+    });
+
+    linkSlider('slider-mat-opacity', 'val-mat-opacity', (v) => {
+      const obj = this.sceneManager.getSelectedObject();
+      if (obj && obj.material) {
+        obj.material.opacity = v;
+        obj.material.transparent = v < 1.0;
+        obj.material.needsUpdate = true;
+      }
+    });
+
+    linkSlider('slider-mat-emission', 'val-mat-emission', (v) => {
+      const obj = this.sceneManager.getSelectedObject();
+      if (obj && obj.material && obj.material.emissive) {
+        if (!obj.material.emissive.getHex()) obj.material.emissive.setHex(0xffffff);
+        obj.material.emissiveIntensity = v;
+        obj.material.needsUpdate = true;
+      }
+    });
+
+    // Material Color Picker
+    document.getElementById('prop-mat-color')?.addEventListener('input', (e) => {
+      const obj = this.sceneManager.getSelectedObject();
+      if (obj && obj.material && obj.material.color) {
+        obj.material.color.set(e.target.value);
+      }
+    });
+
+    // 3. Lighting Presets & Sliders
+    const lightPills = document.querySelectorAll('.light-pill');
+    lightPills.forEach((pill) => {
+      pill.addEventListener('click', () => {
+        lightPills.forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        const lightMode = pill.dataset.light;
+        this.applyLightingPreset(lightMode);
+      });
+    });
+
+    linkSlider('slider-light-intensity', 'val-light-intensity', (v) => {
+      if (this.engine.sunLight) this.engine.sunLight.intensity = v;
+    });
+
+    linkSlider('slider-light-ambient', 'val-light-ambient', (v) => {
+      if (this.engine.ambientLight) this.engine.ambientLight.intensity = v;
+    });
+
+    // 4. Camera Sliders & Toggles
+    linkSlider('slider-cam-focal', 'val-cam-focal', (v) => {
+      const fov = 2 * Math.atan(18 / v) * (180 / Math.PI);
+      this.engine.activeCamera.fov = fov;
+      this.engine.activeCamera.updateProjectionMatrix();
+      const fovSlider = document.getElementById('slider-cam-fov');
+      const fovVal = document.getElementById('val-cam-fov');
+      if (fovSlider) fovSlider.value = fov;
+      if (fovVal) fovVal.textContent = `${fov.toFixed(1)}°`;
+    }, ' mm');
+
+    linkSlider('slider-cam-fov', 'val-cam-fov', (v) => {
+      this.engine.activeCamera.fov = v;
+      this.engine.activeCamera.updateProjectionMatrix();
+    }, '°');
+
+    document.getElementById('chk-cam-lock-view')?.addEventListener('change', (e) => {
+      this.engine.lockCameraToView = e.target.checked;
+    });
+
+    document.getElementById('chk-cam-safe-frame')?.addEventListener('change', (e) => {
+      const overlay = document.getElementById('camera-frame-overlay');
+      if (overlay) {
+        if (e.target.checked && this.engine.isCameraViewActive) overlay.classList.remove('hidden');
+        else overlay.classList.add('hidden');
+      }
+    });
+
+    document.getElementById('btn-cam-look-through')?.addEventListener('click', () => {
+      this.engine.setCameraView('camera');
+    });
+
+    // 5. Viewport Toggles (Shadows, Grid, Edges, Low-Spec)
+    document.getElementById('chk-shadows')?.addEventListener('change', (e) => {
+      this.engine.renderer.shadowMap.enabled = e.target.checked;
+    });
+
+    document.getElementById('chk-grid')?.addEventListener('change', (e) => {
+      if (this.engine.gridHelper) this.engine.gridHelper.visible = e.target.checked;
+      if (this.engine.axesHelper) this.engine.axesHelper.visible = e.target.checked;
+    });
+
+    document.getElementById('chk-edges')?.addEventListener('change', (e) => {
+      this.sceneManager.objects.forEach((obj) => {
+        obj.children.forEach((c) => {
+          if (c.name.endsWith('_edges')) c.visible = e.target.checked;
+        });
+      });
+    });
+
+    document.getElementById('chk-low-spec')?.addEventListener('change', (e) => {
+      this.engine.setLowSpecMode(e.target.checked);
+    });
+
+    document.getElementById('prop-bg-color')?.addEventListener('input', (e) => {
+      this.engine.scene.background = new THREE.Color(e.target.value);
+    });
+  }
+
+  applyLightingPreset(preset) {
+    if (!this.engine.sunLight || !this.engine.ambientLight) return;
+    switch (preset) {
+      case 'studio':
+        this.engine.sunLight.color.setHex(0xffffff);
+        this.engine.sunLight.intensity = 1.2;
+        this.engine.ambientLight.color.setHex(0xe2e8f0);
+        this.engine.ambientLight.intensity = 0.5;
+        break;
+      case 'golden':
+        this.engine.sunLight.color.setHex(0xffaa55);
+        this.engine.sunLight.intensity = 1.8;
+        this.engine.ambientLight.color.setHex(0x553322);
+        this.engine.ambientLight.intensity = 0.35;
+        break;
+      case 'noon':
+        this.engine.sunLight.color.setHex(0xffffff);
+        this.engine.sunLight.intensity = 2.0;
+        this.engine.ambientLight.color.setHex(0x99ccff);
+        this.engine.ambientLight.intensity = 0.6;
+        break;
+      case 'dramatic':
+        this.engine.sunLight.color.setHex(0xffddaa);
+        this.engine.sunLight.intensity = 2.4;
+        this.engine.ambientLight.color.setHex(0x111827);
+        this.engine.ambientLight.intensity = 0.15;
+        break;
+      case 'rim':
+        this.engine.sunLight.color.setHex(0x38bdf8);
+        this.engine.sunLight.intensity = 2.0;
+        this.engine.ambientLight.color.setHex(0x0f172a);
+        this.engine.ambientLight.intensity = 0.2;
+        break;
+      case 'moonlight':
+        this.engine.sunLight.color.setHex(0x60a5fa);
+        this.engine.sunLight.intensity = 0.8;
+        this.engine.ambientLight.color.setHex(0x1e1b4b);
+        this.engine.ambientLight.intensity = 0.25;
+        break;
+    }
+    const intSlider = document.getElementById('slider-light-intensity');
+    const intVal = document.getElementById('val-light-intensity');
+    if (intSlider) intSlider.value = this.engine.sunLight.intensity;
+    if (intVal) intVal.textContent = this.engine.sunLight.intensity.toFixed(2);
   }
 }

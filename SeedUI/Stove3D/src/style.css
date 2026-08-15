@@ -2527,3 +2527,334 @@ body.theme-opencode .item-icon {
   padding: 3px 8px;
   border-radius: 4px;
 }
+
+/* ==========================================================================
+   Modern Creative Suite & 3D Editor Properties Inspector
+   ========================================================================== */
+.modern-properties-wrapper {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  background: var(--bg-panel);
+  overflow: hidden;
+}
+
+/* Vertical Icon Navigation Strip (Left of Properties) */
+.modern-icon-strip {
+  width: 44px;
+  background: rgba(10, 14, 23, 0.75);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 4px;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.prop-icon-btn {
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.prop-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.prop-icon-btn.active {
+  background: #10b981;
+  color: #ffffff;
+  border-color: #34d399;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.45);
+}
+
+/* Properties Body */
+.properties-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.properties-header {
+  height: 42px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(15, 23, 42, 0.4);
+}
+
+.prop-header-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.prop-handle {
+  color: #64748b;
+  font-family: monospace;
+  font-size: 13px;
+  letter-spacing: -1px;
+}
+
+.properties-header .panel-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #f1f5f9;
+  letter-spacing: 0.3px;
+}
+
+.prop-object-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.prop-object-chip .chip-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: #e2e8f0;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prop-object-chip .chip-badge {
+  font-size: 9px;
+  font-family: 'JetBrains Mono', monospace;
+  background: #334155;
+  color: #94a3b8;
+  padding: 1px 4px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.properties-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.prop-tab-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.accordion-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.accordion-header {
+  font-size: 10px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  color: #94a3b8;
+  letter-spacing: 0.8px;
+  display: flex;
+  align-items: center;
+  padding: 2px 0;
+}
+
+/* Modern Precision Sliders (Sleek dark track, emerald glowing thumb) */
+.modern-slider-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+.modern-slider-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: #94a3b8;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.modern-slider-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #e2e8f0;
+  font-weight: 600;
+}
+
+.modern-slider-input {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  background: #1e293b;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.modern-slider-input:hover {
+  background: #334155;
+}
+
+.modern-slider-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #10b981;
+  cursor: pointer;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.6), inset 0 1px 1px rgba(255, 255, 255, 0.4);
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.modern-slider-input::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.9);
+}
+
+.modern-slider-input::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #10b981;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+}
+
+/* Modern iOS/Figma Pill Toggle Switch (Liga / Desliga) */
+.modern-toggle-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.modern-toggle-label {
+  font-size: 10px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  color: #cbd5e1;
+  letter-spacing: 0.6px;
+}
+
+.modern-toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.modern-toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.modern-toggle-switch .slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #334155;
+  transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 20px;
+}
+
+.modern-toggle-switch .slider:before {
+  position: absolute;
+  content: "";
+  height: 14px;
+  width: 14px;
+  left: 3px;
+  bottom: 3px;
+  background-color: #ffffff;
+  transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+.modern-toggle-switch input:checked + .slider {
+  background-color: #10b981;
+}
+
+.modern-toggle-switch input:checked + .slider:before {
+  transform: translateX(16px);
+}
+
+/* Modern Light Presets Pill Grid */
+.light-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.light-pill {
+  height: 28px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.light-pill:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.light-pill.active {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: #10b981;
+  color: #ffffff;
+}
+
+.pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.dot-white { background: #ffffff; box-shadow: 0 0 6px rgba(255,255,255,0.8); }
+.dot-amber { background: #f59e0b; box-shadow: 0 0 6px rgba(245,158,11,0.8); }
+.dot-yellow { background: #eab308; box-shadow: 0 0 6px rgba(234,179,8,0.8); }
+.dot-purple { background: #a855f7; box-shadow: 0 0 6px rgba(168,85,247,0.8); }
+.dot-cyan { background: #06b6d4; box-shadow: 0 0 6px rgba(6,182,212,0.8); }
+.dot-blue { background: #3b82f6; box-shadow: 0 0 6px rgba(59,130,246,0.8); }
