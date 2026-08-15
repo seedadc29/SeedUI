@@ -119,6 +119,14 @@ export class UIManager {
       this.transformManager.setMode('rotate');
     } else if (tool === 'scale') {
       this.transformManager.setMode('scale');
+    } else if (tool === 'extrude') {
+      if (this.currentSubmode === 'object') this.setSubmode('face');
+      this.meshEditor.extrude();
+    } else if (tool === 'inset') {
+      if (this.currentSubmode === 'object') this.setSubmode('face');
+      this.meshEditor.inset();
+    } else if (tool === 'bevel') {
+      this.meshEditor.subdivide();
     }
   }
 
@@ -640,6 +648,23 @@ export class UIManager {
         this.sceneManager.duplicateObject();
       } else if (e.key === 'n' || e.key === 'N') {
         this.toggleSidebar();
+      } else if (e.key === 'e' || e.key === 'E') {
+        if (this.currentSubmode !== 'object') {
+          e.preventDefault();
+          this.meshEditor.extrude();
+        }
+      } else if (e.key === 'i' || e.key === 'I') {
+        if (this.currentSubmode !== 'object') {
+          e.preventDefault();
+          this.meshEditor.inset();
+        }
+      } else if (e.key === 'o' || e.key === 'O') {
+        const isProp = this.meshEditor.toggleProportionalEditing();
+        const hintEl = document.getElementById('status-hint');
+        if (hintEl) {
+          const badge = isProp ? '<span class="key-hint" style="color:#60a5fa">● Edição Proporcional ON</span>' : '';
+          hintEl.innerHTML = `<span class="key-hint"><kbd>E</kbd> Extrusão</span> <span class="key-hint"><kbd>I</kbd> Inset</span> <span class="key-hint"><kbd>G</kbd> Mover</span> <span class="key-hint"><kbd>O</kbd> Proporcional</span> ${badge}`;
+        }
       }
     });
   }
