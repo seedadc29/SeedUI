@@ -368,11 +368,24 @@ export class QuadMesh {
     return connected;
   }
 
-  computeQuadNormal(v0, v1, v2, v3) {
-    const d1 = new THREE.Vector3().subVectors(v2, v0);
-    const d2 = new THREE.Vector3().subVectors(v3, v1);
-    const normal = new THREE.Vector3().crossVectors(d1, d2).normalize();
-    return normal;
+  computeQuadCornerNormals(v0, v1, v2, v3) {
+    const cb = new THREE.Vector3().subVectors(v2, v1);
+    const ab = new THREE.Vector3().subVectors(v0, v1);
+    const t1Normal = cb.cross(ab).normalize();
+
+    const cd = new THREE.Vector3().subVectors(v0, v3);
+    const ad = new THREE.Vector3().subVectors(v2, v3);
+    const t2Normal = cd.cross(ad).normalize();
+
+    // Shared diagonal vertices (v0 and v2) have unified averaged normals
+    const diagNormal = new THREE.Vector3().addVectors(t1Normal, t2Normal).normalize();
+
+    const n0 = diagNormal.clone();
+    const n1 = t1Normal.clone();
+    const n2 = diagNormal.clone();
+    const n3 = t2Normal.clone();
+
+    return { n0, n1, n2, n3 };
   }
 
   // --- THREE.JS BUFFER GENERATION ---
@@ -391,16 +404,16 @@ export class QuadMesh {
         const v2 = this.vertices[face[2]];
         const v3 = this.vertices[face[3]];
 
-        const qNormal = this.computeQuadNormal(v0, v1, v2, v3);
+        const { n0, n1, n2, n3 } = this.computeQuadCornerNormals(v0, v1, v2, v3);
 
-        // Tri 1: (v0, v1, v2)
+        // Tri 1: (v0, v1, v2) -> normals (n0, n1, n2)
         positions.push(v0.x, v0.y, v0.z, v1.x, v1.y, v1.z, v2.x, v2.y, v2.z);
-        normals.push(qNormal.x, qNormal.y, qNormal.z, qNormal.x, qNormal.y, qNormal.z, qNormal.x, qNormal.y, qNormal.z);
+        normals.push(n0.x, n0.y, n0.z, n1.x, n1.y, n1.z, n2.x, n2.y, n2.z);
         uvs.push(0, 0, 1, 0, 1, 1);
 
-        // Tri 2: (v0, v2, v3)
+        // Tri 2: (v0, v2, v3) -> normals (n0, n2, n3)
         positions.push(v0.x, v0.y, v0.z, v2.x, v2.y, v2.z, v3.x, v3.y, v3.z);
-        normals.push(qNormal.x, qNormal.y, qNormal.z, qNormal.x, qNormal.y, qNormal.z, qNormal.x, qNormal.y, qNormal.z);
+        normals.push(n0.x, n0.y, n0.z, n2.x, n2.y, n2.z, n3.x, n3.y, n3.z);
         uvs.push(0, 0, 1, 1, 0, 1);
       } else if (unique.length === 3) {
         const v0 = this.vertices[unique[0]];
@@ -456,17 +469,17 @@ export class QuadMesh {
         const v2 = this.vertices[face[2]];
         const v3 = this.vertices[face[3]];
 
-        const qNormal = this.computeQuadNormal(v0, v1, v2, v3);
+        const { n0, n1, n2, n3 } = this.computeQuadCornerNormals(v0, v1, v2, v3);
 
-        // Tri 1
-        posAttr.setXYZ(ptr, v0.x, v0.y, v0.z); normAttr.setXYZ(ptr, qNormal.x, qNormal.y, qNormal.z); ptr++;
-        posAttr.setXYZ(ptr, v1.x, v1.y, v1.z); normAttr.setXYZ(ptr, qNormal.x, qNormal.y, qNormal.z); ptr++;
-        posAttr.setXYZ(ptr, v2.x, v2.y, v2.z); normAttr.setXYZ(ptr, qNormal.x, qNormal.y, qNormal.z); ptr++;
+        // Tri 1: (v0, v1, v2)
+        posAttr.setXYZ(ptr, v0.x, v0.y, v0.z); normAttr.setXYZ(ptr, n0.x, n0.y, n0.z); ptr++;
+        posAttr.setXYZ(ptr, v1.x, v1.y, v1.z); normAttr.setXYZ(ptr, n1.x, n1.y, n1.z); ptr++;
+        posAttr.setXYZ(ptr, v2.x, v2.y, v2.z); normAttr.setXYZ(ptr, n2.x, n2.y, n2.z); ptr++;
 
-        // Tri 2
-        posAttr.setXYZ(ptr, v0.x, v0.y, v0.z); normAttr.setXYZ(ptr, qNormal.x, qNormal.y, qNormal.z); ptr++;
-        posAttr.setXYZ(ptr, v2.x, v2.y, v2.z); normAttr.setXYZ(ptr, qNormal.x, qNormal.y, qNormal.z); ptr++;
-        posAttr.setXYZ(ptr, v3.x, v3.y, v3.z); normAttr.setXYZ(ptr, qNormal.x, qNormal.y, qNormal.z); ptr++;
+        // Tri 2: (v0, v2, v3)
+        posAttr.setXYZ(ptr, v0.x, v0.y, v0.z); normAttr.setXYZ(ptr, n0.x, n0.y, n0.z); ptr++;
+        posAttr.setXYZ(ptr, v2.x, v2.y, v2.z); normAttr.setXYZ(ptr, n2.x, n2.y, n2.z); ptr++;
+        posAttr.setXYZ(ptr, v3.x, v3.y, v3.z); normAttr.setXYZ(ptr, n3.x, n3.y, n3.z); ptr++;
       } else if (unique.length === 3) {
         const v0 = this.vertices[unique[0]];
         const v1 = this.vertices[unique[1]];
