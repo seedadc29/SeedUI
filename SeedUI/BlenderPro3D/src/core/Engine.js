@@ -430,6 +430,7 @@ export class Engine {
         this.isCameraViewActive = false;
         if (overlay) overlay.classList.add('hidden');
         if (camBtn) camBtn.classList.remove('active');
+        if (this.sceneCamera) this.sceneCamera.visible = true;
         return;
       }
 
@@ -440,19 +441,17 @@ export class Engine {
 
       if (this.sceneCamera) {
         this.isSyncingCamera = true;
+        this.sceneCamera.visible = false; // Hide camera wireframe while looking through it
+
         this.activeCamera.up.set(0, 0, 1);
         this.activeCamera.position.copy(this.sceneCamera.position);
-
-        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.sceneCamera.quaternion).normalize();
-        const lookTarget = this.sceneCamera.position.clone().add(forward.clone().multiplyScalar(8));
-
-        this.controls.target.copy(lookTarget);
-        this.activeCamera.lookAt(lookTarget);
+        this.controls.target.set(0, 0, 0);
+        this.activeCamera.lookAt(0, 0, 0);
         this.controls.update();
 
         setTimeout(() => {
           this.isSyncingCamera = false;
-        }, 60);
+        }, 80);
       } else {
         this.activeCamera.up.set(0, 0, 1);
         this.activeCamera.position.set(7.3589, -6.9258, 4.9583);
@@ -468,6 +467,7 @@ export class Engine {
       this.isCameraViewActive = false;
       if (overlay) overlay.classList.add('hidden');
       if (camBtn) camBtn.classList.remove('active');
+      if (this.sceneCamera) this.sceneCamera.visible = true;
     }
 
     switch (viewName) {
