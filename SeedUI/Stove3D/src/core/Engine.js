@@ -91,6 +91,10 @@ export class Engine {
     // Emulate 3 Button Mouse (default enabled like Blender Emulate 3-Button)
     this.emulate3Button = localStorage.getItem('stove3d_emulate_3_button') !== 'false';
 
+    // Dedicated smooth Ctrl+Alt+LMB Zoom drag state
+    let isCtrlAltZooming = false;
+    let lastZoomY = 0;
+
     // Gate OrbitControls activation:
     // - With Alt: Left click triggers Rotate, Shift+Alt triggers Pan, Ctrl+Alt triggers Zoom
     // - Without Alt: Left click is reserved for Selection
@@ -98,20 +102,59 @@ export class Engine {
     const onPointerDownGate = (e) => {
       if (e.button === 0) { // Left Mouse Button
         if (this.emulate3Button && e.altKey) {
-          this.controls.enabled = true;
+          if (e.ctrlKey) {
+            // Dedicated Ctrl+Alt Zoom / Dolly
+            isCtrlAltZooming = true;
+            lastZoomY = e.clientY;
+            this.controls.enabled = false;
+          } else {
+            // Alt = Rotate, Shift+Alt = Pan
+            isCtrlAltZooming = false;
+            this.controls.enabled = true;
+          }
         } else {
+          // Without Alt -> Left click is reserved for Selection
+          isCtrlAltZooming = false;
           this.controls.enabled = false;
         }
       } else if (e.button === 1) { // Middle Mouse Button
+        isCtrlAltZooming = false;
         this.controls.enabled = true;
       }
     };
 
+    const onPointerMoveZoom = (e) => {
+      if (!isCtrlAltZooming) return;
+      const deltaY = e.clientY - lastZoomY;
+      lastZoomY = e.clientY;
+
+      if (deltaY !== 0) {
+        const factor = Math.pow(0.992, -deltaY);
+        const cam = this.activeCamera;
+        const offset = new THREE.Vector3().subVectors(cam.position, this.controls.target);
+        
+        if (cam.isPerspectiveCamera) {
+          offset.multiplyScalar(factor);
+          if (offset.length() > 0.2 && offset.length() < 1000) {
+            cam.position.copy(this.controls.target).add(offset);
+          }
+        } else if (cam.isOrthographicCamera) {
+          cam.zoom = Math.max(0.1, Math.min(50, cam.zoom / factor));
+          cam.updateProjectionMatrix();
+        }
+        this.controls.update();
+      }
+    };
+
     const onPointerUpGate = () => {
+      if (isCtrlAltZooming) {
+        isCtrlAltZooming = false;
+      }
       this.controls.enabled = true;
     };
 
     this.canvas.addEventListener('pointerdown', onPointerDownGate, { capture: true });
+    window.addEventListener('pointermove', onPointerMoveZoom, { capture: true });
     window.addEventListener('pointerup', onPointerUpGate, { capture: true });
   }
 
