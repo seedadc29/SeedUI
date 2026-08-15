@@ -82,13 +82,13 @@ export class Engine {
     this.cameraOrtho.lookAt(0, 0, 0);
     this.scene.add(this.cameraOrtho);
 
-    // Headlight (Luz omnidirecional atrelada à câmera para iluminar todas as faces sem nenhum lado escuro)
-    this.headlightPersp = new THREE.DirectionalLight(0xffffff, 0.85);
-    this.headlightPersp.position.set(0, 0, 1);
+    // Blender Studio Directional Keylight (At fixed angle for clear 3D facet definition)
+    this.headlightPersp = new THREE.DirectionalLight(0xffffff, 0.7);
+    this.headlightPersp.position.set(2, 3, 4);
     this.cameraPersp.add(this.headlightPersp);
 
-    this.headlightOrtho = new THREE.DirectionalLight(0xffffff, 0.85);
-    this.headlightOrtho.position.set(0, 0, 1);
+    this.headlightOrtho = new THREE.DirectionalLight(0xffffff, 0.7);
+    this.headlightOrtho.position.set(2, 3, 4);
     this.cameraOrtho.add(this.headlightOrtho);
 
     this.activeCamera = this.cameraPersp;
@@ -293,12 +293,12 @@ export class Engine {
   }
 
   initLights() {
-    // 1. Hemisphere Light (Céu e chão uniformes para iluminar todos os ângulos igualmente)
-    this.hemiLight = new THREE.HemisphereLight(0xffffff, 0xd4dce8, 1.2);
+    // 1. Hemisphere Light (Blender Studio Sky/Ground balance)
+    this.hemiLight = new THREE.HemisphereLight(0xffffff, 0x383838, 0.55);
     this.scene.add(this.hemiLight);
 
-    // 2. Pure White Ambient Light (Garante que nenhuma face fique escura)
-    this.ambientLight = new THREE.AmbientLight(0xffffff, 0.95);
+    // 2. Soft Ambient Light
+    this.ambientLight = new THREE.AmbientLight(0xffffff, 0.35);
     this.scene.add(this.ambientLight);
 
     // 3. Directional Sun Light (Usado apenas no modo Rendered)
@@ -548,31 +548,43 @@ export class Engine {
 
     // Control Scene Lights & Shadows according to mode
     if (mode === 'solid') {
-      // ZERO SOMBRAS: Todas as faces (frente, trás, baixo, cima) ficam 100% visíveis e brilhantes
+      // Blender Studio Clay Lighting
       this.renderer.shadowMap.enabled = false;
       if (this.sunLight) this.sunLight.visible = false;
       if (this.fillLight) this.fillLight.visible = false;
       if (this.rimLight) this.rimLight.visible = false;
       if (this.hemiLight) {
         this.hemiLight.visible = true;
-        this.hemiLight.intensity = 1.3;
+        this.hemiLight.intensity = 0.55;
       }
-      if (this.ambientLight) this.ambientLight.intensity = 0.95;
-      if (this.headlightPersp) this.headlightPersp.visible = true;
-      if (this.headlightOrtho) this.headlightOrtho.visible = true;
+      if (this.ambientLight) this.ambientLight.intensity = 0.35;
+      if (this.headlightPersp) {
+        this.headlightPersp.visible = true;
+        this.headlightPersp.intensity = 0.7;
+      }
+      if (this.headlightOrtho) {
+        this.headlightOrtho.visible = true;
+        this.headlightOrtho.intensity = 0.7;
+      }
     } else if (mode === 'material' || mode === 'pixel') {
-      // Visão pura do material sem sombras escuras
+      // Visão equilibrada de material
       this.renderer.shadowMap.enabled = false;
       if (this.sunLight) this.sunLight.visible = false;
       if (this.fillLight) this.fillLight.visible = false;
       if (this.rimLight) this.rimLight.visible = false;
       if (this.hemiLight) {
         this.hemiLight.visible = true;
-        this.hemiLight.intensity = 1.4;
+        this.hemiLight.intensity = 0.7;
       }
-      if (this.ambientLight) this.ambientLight.intensity = 1.0;
-      if (this.headlightPersp) this.headlightPersp.visible = true;
-      if (this.headlightOrtho) this.headlightOrtho.visible = true;
+      if (this.ambientLight) this.ambientLight.intensity = 0.5;
+      if (this.headlightPersp) {
+        this.headlightPersp.visible = true;
+        this.headlightPersp.intensity = 0.8;
+      }
+      if (this.headlightOrtho) {
+        this.headlightOrtho.visible = true;
+        this.headlightOrtho.intensity = 0.8;
+      }
     } else if (mode === 'rendered') {
       // Sombras e iluminação realista de cena
       this.renderer.shadowMap.enabled = true;

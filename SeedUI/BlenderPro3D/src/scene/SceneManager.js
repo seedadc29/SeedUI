@@ -13,10 +13,10 @@ export class SceneManager {
     this.onSelectionChange = null;
     this.onPrimitiveCreated = null;
 
-    // Blender 4.1 Viewport Solid Clay Material (Neutral Gray 0xcccccc)
+    // Blender 4.1 Viewport Solid Clay Material (Neutral Gray 0x909090)
     this.defaultMaterial = new THREE.MeshStandardMaterial({
-      color: 0xcccccc,
-      roughness: 0.5,
+      color: 0x909090,
+      roughness: 0.55,
       metalness: 0.0,
       flatShading: true,
       side: THREE.DoubleSide
