@@ -427,7 +427,7 @@ export class MeshEditor {
     } else if (this.submode === 'face') {
       const intersects = raycaster.intersectObject(this.activeMesh, false);
       if (intersects.length > 0 && intersects[0].faceIndex !== undefined) {
-        let quadIdx = Math.floor(intersects[0].faceIndex / 2);
+        let quadIdx = qm.getFaceIndexFromTriangleIndex(intersects[0].faceIndex);
         if (quadIdx >= qm.quads.length) quadIdx = qm.quads.length - 1;
 
         if (quadIdx >= 0 && quadIdx < qm.quads.length) {
@@ -785,9 +785,7 @@ export class MeshEditor {
     if (this.loopCutPhase === 'preview') {
       const intersects = raycaster.intersectObject(this.activeMesh, false);
       if (intersects.length > 0 && intersects[0].faceIndex !== undefined) {
-        // Map triangle faceIndex to Quad index
-        // Each quad has 4 triangles in center-point fan
-        const quadIdx = Math.floor(intersects[0].faceIndex / 4);
+        const quadIdx = qm.getFaceIndexFromTriangleIndex(intersects[0].faceIndex);
         const quad = qm.quads[quadIdx];
 
         if (quad && quad.length >= 4) {

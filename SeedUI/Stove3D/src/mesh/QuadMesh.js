@@ -465,6 +465,21 @@ export class QuadMesh {
     return geo;
   }
 
+  getFaceIndexFromTriangleIndex(triIndex) {
+    if (triIndex === undefined || triIndex < 0) return -1;
+    let accumulatedTris = 0;
+    for (let fIdx = 0; fIdx < this.quads.length; fIdx++) {
+      const face = this.quads[fIdx];
+      const unique = Array.from(new Set(face));
+      const trisInThisFace = unique.length === 4 ? 4 : (unique.length === 3 ? 1 : 0);
+      if (triIndex >= accumulatedTris && triIndex < accumulatedTris + trisInThisFace) {
+        return fIdx;
+      }
+      accumulatedTris += trisInThisFace;
+    }
+    return Math.min(this.quads.length - 1, Math.max(0, Math.floor(triIndex / 4)));
+  }
+
   createEdgeLines(material) {
     const linePositions = [];
     this.edges.forEach((edge) => {
