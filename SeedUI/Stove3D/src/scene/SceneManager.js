@@ -22,10 +22,12 @@ export class SceneManager {
       side: THREE.DoubleSide
     });
 
-    // Dark structural edge lines (for Edit Mode wireframe)
+    // Blender 4.1 Subtle Edge Overlay lines (for Edit Mode wireframe)
     this.edgeMaterial = new THREE.LineBasicMaterial({
-      color: 0x1f232b,
-      linewidth: 1.5
+      color: 0x383d47,
+      transparent: true,
+      opacity: 0.85,
+      linewidth: 1
     });
 
     // Blender Active Object Orange Selection Outline (Object Mode)
