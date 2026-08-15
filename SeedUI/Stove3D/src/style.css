@@ -2478,6 +2478,10 @@ body.theme-opencode .item-icon {
   background: rgba(0, 0, 0, 0.45);
 }
 
+.camera-frame-overlay.hidden {
+  display: none !important;
+}
+
 .camera-safe-frame {
   width: 82%;
   height: 82%;
