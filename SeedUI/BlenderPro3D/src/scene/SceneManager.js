@@ -59,17 +59,17 @@ export class SceneManager {
     cameraGroup.position.set(7.3589, -6.9258, 4.9583);
     cameraGroup.lookAt(0, 0, 0);
 
-    // 2. Real Perspective Camera Instance
+    // 2. Real Perspective Camera Instance (Rotated to look forward along +Z with gizmo)
     const camera = new THREE.PerspectiveCamera(50, 16 / 9, 0.1, 1000);
-    camera.up.set(0, 0, 1);
+    camera.rotation.y = Math.PI;
     cameraGroup.add(camera);
 
-    // 3. Blender Iconic Camera Wireframe Gizmo (Apex at sensor, frustum lens opening pointed directly at the Cube)
+    // 3. Blender Iconic Camera Wireframe Gizmo (Apex at sensor, frustum opening along +Z towards the Cube)
     const gizmoGeom = new THREE.BufferGeometry();
     const s = 1.1;
     const fw = s * 0.65;
     const fh = s * 0.42;
-    const fd = -s * 1.25; // Expands forward along -Z (optical lens axis towards the cube)
+    const fd = s * 1.25; // Expands forward along +Z towards the cube at (0, 0, 0)
 
     const vertices = new Float32Array([
       // 4 Frustum lines from camera apex (0,0,0) to 4 frame corners
@@ -101,6 +101,8 @@ export class SceneManager {
     const hitBox = new THREE.Mesh(hitBoxGeom, hitBoxMat);
     hitBox.name = `${name}_hitbox`;
     cameraGroup.add(hitBox);
+
+    cameraGroup.updateMatrixWorld(true);
 
     cameraGroup.userData.isCamera = true;
     cameraGroup.userData.cameraInstance = camera;
