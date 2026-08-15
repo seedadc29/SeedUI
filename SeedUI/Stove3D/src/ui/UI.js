@@ -553,6 +553,12 @@ export class UIManager {
       e.preventDefault();
       e.stopPropagation();
 
+      // Suppress context menu if MMB+RMB Pan was used
+      if (this.engine.suppressContextMenu || this.engine.isMMBRMBPanning) {
+        this.engine.suppressContextMenu = false;
+        return;
+      }
+
       const rect = this.engine.canvas.getBoundingClientRect();
       this.mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       this.mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;

@@ -91,15 +91,36 @@ export class Engine {
     // Emulate 3 Button Mouse (default enabled like Blender Emulate 3-Button)
     this.emulate3Button = localStorage.getItem('stove3d_emulate_3_button') !== 'false';
 
+    // State for MMB + RMB Pan & Context Menu Suppression
+    this.isMMBRMBPanning = false;
+    this.suppressContextMenu = false;
+    let isMMBDown = false;
+    let isRMBDown = false;
+    let lastPanPos = { x: 0, y: 0 };
+
     // Dedicated smooth Ctrl+Alt+LMB Zoom drag state
     let isCtrlAltZooming = false;
     let lastZoomY = 0;
 
     // Gate OrbitControls activation:
     // - With Alt: Left click triggers Rotate, Shift+Alt triggers Pan, Ctrl+Alt triggers Zoom
+    // - MMB + RMB: Triggers Pan and suppresses context menu
     // - Without Alt: Left click is reserved for Selection
-    // - Middle button: Always navigates
+    // - Middle button alone: Always rotates
     const onPointerDownGate = (e) => {
+      if (e.button === 1) isMMBDown = true;
+      if (e.button === 2) isRMBDown = true;
+
+      // Check MMB + RMB simultaneous press for Pan
+      if ((isMMBDown && isRMBDown) || (e.buttons & 4 && e.buttons & 2)) {
+        this.isMMBRMBPanning = true;
+        this.suppressContextMenu = true;
+        lastPanPos.x = e.clientX;
+        lastPanPos.y = e.clientY;
+        this.controls.enabled = false;
+        return;
+      }
+
       if (e.button === 0) { // Left Mouse Button
         if (this.emulate3Button && e.altKey) {
           if (e.ctrlKey) {
@@ -119,42 +140,90 @@ export class Engine {
         }
       } else if (e.button === 1) { // Middle Mouse Button
         isCtrlAltZooming = false;
-        this.controls.enabled = true;
-      }
-    };
-
-    const onPointerMoveZoom = (e) => {
-      if (!isCtrlAltZooming) return;
-      const deltaY = e.clientY - lastZoomY;
-      lastZoomY = e.clientY;
-
-      if (deltaY !== 0) {
-        const factor = Math.pow(0.992, -deltaY);
-        const cam = this.activeCamera;
-        const offset = new THREE.Vector3().subVectors(cam.position, this.controls.target);
-        
-        if (cam.isPerspectiveCamera) {
-          offset.multiplyScalar(factor);
-          if (offset.length() > 0.2 && offset.length() < 1000) {
-            cam.position.copy(this.controls.target).add(offset);
-          }
-        } else if (cam.isOrthographicCamera) {
-          cam.zoom = Math.max(0.1, Math.min(50, cam.zoom / factor));
-          cam.updateProjectionMatrix();
+        if (!isRMBDown) {
+          this.controls.enabled = true;
         }
-        this.controls.update();
       }
     };
 
-    const onPointerUpGate = () => {
+    const onPointerMove = (e) => {
+      // 1. MMB + RMB Pan
+      if (this.isMMBRMBPanning) {
+        const deltaX = e.clientX - lastPanPos.x;
+        const deltaY = e.clientY - lastPanPos.y;
+        lastPanPos.x = e.clientX;
+        lastPanPos.y = e.clientY;
+
+        if (deltaX !== 0 || deltaY !== 0) {
+          const cam = this.activeCamera;
+          const target = this.controls.target;
+          const dist = cam.position.distanceTo(target);
+          
+          let panSpeed = 0.0018 * dist;
+          if (cam.isOrthographicCamera) {
+            panSpeed = 0.005 / cam.zoom;
+          }
+
+          const right = new THREE.Vector3();
+          const up = new THREE.Vector3();
+          cam.matrix.extractBasis(right, up, new THREE.Vector3());
+
+          const panOffset = new THREE.Vector3()
+            .addScaledVector(right, -deltaX * panSpeed)
+            .addScaledVector(up, deltaY * panSpeed);
+
+          cam.position.add(panOffset);
+          target.add(panOffset);
+          this.controls.update();
+        }
+        return;
+      }
+
+      // 2. Ctrl + Alt + LMB Zoom
+      if (isCtrlAltZooming) {
+        const deltaY = e.clientY - lastZoomY;
+        lastZoomY = e.clientY;
+
+        if (deltaY !== 0) {
+          const factor = Math.pow(0.992, -deltaY);
+          const cam = this.activeCamera;
+          const offset = new THREE.Vector3().subVectors(cam.position, this.controls.target);
+          
+          if (cam.isPerspectiveCamera) {
+            offset.multiplyScalar(factor);
+            if (offset.length() > 0.2 && offset.length() < 1000) {
+              cam.position.copy(this.controls.target).add(offset);
+            }
+          } else if (cam.isOrthographicCamera) {
+            cam.zoom = Math.max(0.1, Math.min(50, cam.zoom / factor));
+            cam.updateProjectionMatrix();
+          }
+          this.controls.update();
+        }
+      }
+    };
+
+    const onPointerUpGate = (e) => {
+      if (e.button === 1) isMMBDown = false;
+      if (e.button === 2) isRMBDown = false;
+
+      if (this.isMMBRMBPanning) {
+        this.isMMBRMBPanning = false;
+        this.suppressContextMenu = true;
+        setTimeout(() => {
+          this.suppressContextMenu = false;
+        }, 250);
+      }
+
       if (isCtrlAltZooming) {
         isCtrlAltZooming = false;
       }
+
       this.controls.enabled = true;
     };
 
     this.canvas.addEventListener('pointerdown', onPointerDownGate, { capture: true });
-    window.addEventListener('pointermove', onPointerMoveZoom, { capture: true });
+    window.addEventListener('pointermove', onPointerMove, { capture: true });
     window.addEventListener('pointerup', onPointerUpGate, { capture: true });
   }
 
