@@ -82,50 +82,46 @@ export class Engine {
     this.emulate3Button = localStorage.getItem('stove3d_emulate_3_button') !== 'false';
     this.updateNavControls();
 
-    // Mousedown event for Orbit / Pan / Dolly
-    this.canvas.addEventListener('mousedown', (e) => {
-      // 1. Emulate 3 Button Mouse (Alt + Left Click)
-      if (this.emulate3Button && e.button === 0 && e.altKey) {
-        if (e.ctrlKey) {
+    // CRITICAL: Intercept on POINTERDOWN with CAPTURE phase BEFORE OrbitControls runs
+    const updateModifiers = (e) => {
+      const isAlt = e.altKey || (e.key && e.key === 'Alt');
+      const isShift = e.shiftKey || (e.key && e.key === 'Shift');
+      const isCtrl = e.ctrlKey || (e.key && e.key === 'Control');
+
+      if (this.emulate3Button && isAlt) {
+        if (isCtrl) {
           this.controls.mouseButtons.LEFT = THREE.MOUSE.DOLLY;
-        } else if (e.shiftKey) {
+        } else if (isShift) {
           this.controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
         } else {
           this.controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
         }
-      } 
-      // 2. Middle Mouse Button (MMB - always available)
-      else if (e.button === 1) {
-        if (e.ctrlKey) {
+      } else if (e.button === 1) {
+        if (isCtrl) {
           this.controls.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY;
-        } else if (e.shiftKey) {
+        } else if (isShift) {
           this.controls.mouseButtons.MIDDLE = THREE.MOUSE.PAN;
         } else {
           this.controls.mouseButtons.MIDDLE = THREE.MOUSE.ROTATE;
         }
-      } 
-      // 3. Normal Left Click (Selection)
-      else if (e.button === 0 && !e.altKey) {
+      } else if (e.button === 0 && !isAlt) {
         this.controls.mouseButtons.LEFT = THREE.MOUSE.NONE;
       }
-    });
+    };
+
+    this.canvas.addEventListener('pointerdown', updateModifiers, { capture: true });
+    this.canvas.addEventListener('mousedown', updateModifiers, { capture: true });
 
     // Dynamic modifier updates while Alt is held
     window.addEventListener('keydown', (e) => {
-      if (this.emulate3Button && e.altKey) {
-        if (e.ctrlKey) {
-          this.controls.mouseButtons.LEFT = THREE.MOUSE.DOLLY;
-        } else if (e.shiftKey) {
-          this.controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
-        } else {
-          this.controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
-        }
-      }
+      updateModifiers(e);
     });
 
     window.addEventListener('keyup', (e) => {
       if (e.key === 'Alt' || !e.altKey) {
         this.controls.mouseButtons.LEFT = THREE.MOUSE.NONE;
+      } else if (e.altKey) {
+        updateModifiers(e);
       }
     });
   }
