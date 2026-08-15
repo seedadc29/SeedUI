@@ -10,7 +10,7 @@ import { DiagnosticsManager } from './core/DiagnosticsManager.js';
 import { UIManager } from './ui/UI.js';
 
 window.addEventListener('DOMContentLoaded', () => {
-  console.log('🚀 Inicializando Stove 3D Studio...');
+  console.log('🚀 Inicializando Seed3D Studio...');
 
   const engine = new Engine('viewport-canvas');
   const sceneManager = new SceneManager(engine);
@@ -26,7 +26,7 @@ window.addEventListener('DOMContentLoaded', () => {
   ui.diagnostics = diagnostics;
 
   // Expose to window for easy debugging/inspection
-  window.stove3d = {
+  window.seed3d = {
     engine,
     sceneManager,
     transformManager,
@@ -38,6 +38,7 @@ window.addEventListener('DOMContentLoaded', () => {
     diagnostics,
     ui
   };
+  window.stove3d = window.seed3d; // Alias para compatibilidade
 
-  console.log('✅ Stove 3D Studio - Zoo Mode, Shading Studio, UV Atlas, Diagnóstico e Topologia Ativos!');
+  console.log('✅ Seed3D Studio - Topologia Quad BMesh, Shading Studio, UV Atlas e Diagnóstico Ativos!');
 });

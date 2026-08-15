@@ -28,7 +28,7 @@ export class DiagnosticsManager {
   }
 
   initGlobalLogging() {
-    this.log('INIT', 'Stove3D Diagnostics inicializado com sucesso.');
+    this.log('INIT', 'Seed3D Diagnostics inicializado com sucesso.');
 
     window.addEventListener('keydown', (e) => {
       if (e.target.tagName !== 'INPUT') {
@@ -96,7 +96,7 @@ export class DiagnosticsManager {
 
   getFormattedReportString() {
     const data = this.getDiagnosticReport();
-    return `=== STOVE 3D DIAGNOSTIC REPORT ===\nData/Hora: ${data.timestamp}\n\n[ESTADO DO SISTEMA]\nModo Geral: ${data.engine.currentMode}\nSubmodo: ${data.engine.currentSubmode}\nFerramenta: ${data.engine.currentTool}\nObjetos na Cena: ${data.engine.totalObjects}\n\n[OBJETO ATIVO]\n${JSON.stringify(data.activeObject, null, 2)}\n\n[MODO EDIÇÃO (SUB-ELEMENTOS)]\nObjeto em Edição: ${data.meshEditor.activeMeshName}\nSubmodo: ${data.meshEditor.submode}\nVértices Selecionados (${data.meshEditor.selectedVertices.length}): [${data.meshEditor.selectedVertices.join(', ')}]\nFaces Selecionadas (${data.meshEditor.selectedFaces.length}): [${data.meshEditor.selectedFaces.join(', ')}]\nArestas Selecionadas (${data.meshEditor.selectedEdges.length}): [${data.meshEditor.selectedEdges.join(', ')}]\nPosição do Ponto Âncora: ${JSON.stringify(data.meshEditor.transformAnchorPos)}\n\n[GIZMO DE TRANSFORMAÇÃO]\nObjeto Anexado ao Gizmo: ${data.transformControls.attachedObject}\nEixo em Foco: ${data.transformControls.axis}\nModo do Gizmo: ${data.transformControls.mode}\nEm Transformação: ${data.transformControls.isTransforming}\n\n[ÚLTIMOS EVENTOS]\n${data.recentLogs.map(l => `[${l.time}] [${l.category}] ${l.message}`).join('\n')}\n==================================`;
+    return `=== SEED 3D DIAGNOSTIC REPORT ===\nData/Hora: ${data.timestamp}\n\n[ESTADO DO SISTEMA]\nModo Geral: ${data.engine.currentMode}\nSubmodo: ${data.engine.currentSubmode}\nFerramenta: ${data.engine.currentTool}\nObjetos na Cena: ${data.engine.totalObjects}\n\n[OBJETO ATIVO]\n${JSON.stringify(data.activeObject, null, 2)}\n\n[MODO EDIÇÃO (SUB-ELEMENTOS)]\nObjeto em Edição: ${data.meshEditor.activeMeshName}\nSubmodo: ${data.meshEditor.submode}\nVértices Selecionados (${data.meshEditor.selectedVertices.length}): [${data.meshEditor.selectedVertices.join(', ')}]\nFaces Selecionadas (${data.meshEditor.selectedFaces.length}): [${data.meshEditor.selectedFaces.join(', ')}]\nArestas Selecionadas (${data.meshEditor.selectedEdges.length}): [${data.meshEditor.selectedEdges.join(', ')}]\nPosição do Ponto Âncora: ${JSON.stringify(data.meshEditor.transformAnchorPos)}\n\n[GIZMO DE TRANSFORMAÇÃO]\nObjeto Anexado ao Gizmo: ${data.transformControls.attachedObject}\nEixo em Foco: ${data.transformControls.axis}\nModo do Gizmo: ${data.transformControls.mode}\nEm Transformação: ${data.transformControls.isTransforming}\n\n[ÚLTIMOS EVENTOS]\n${data.recentLogs.map(l => `[${l.time}] [${l.category}] ${l.message}`).join('\n')}\n==================================`;
   }
 
   initUI() {

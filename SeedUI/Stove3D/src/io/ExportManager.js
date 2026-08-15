@@ -30,7 +30,7 @@ export class ExportManager {
     const exporter = new OBJExporter();
     const result = exporter.parse(obj);
     const blob = new Blob([result], { type: 'text/plain' });
-    const name = (targetMesh && targetMesh.name) ? targetMesh.name : 'modelo_stove3d';
+    const name = (targetMesh && targetMesh.name) ? targetMesh.name : 'modelo_seed3d';
     this.downloadFile(blob, `${name}.obj`);
   }
 
@@ -43,12 +43,12 @@ export class ExportManager {
       (gltf) => {
         if (gltf instanceof ArrayBuffer) {
           const blob = new Blob([gltf], { type: 'application/octet-stream' });
-          const name = (targetMesh && targetMesh.name) ? targetMesh.name : 'cena_stove3d';
+          const name = (targetMesh && targetMesh.name) ? targetMesh.name : 'cena_seed3d';
           this.downloadFile(blob, `${name}.glb`);
         } else {
           const output = JSON.stringify(gltf, null, 2);
           const blob = new Blob([output], { type: 'application/json' });
-          const name = (targetMesh && targetMesh.name) ? targetMesh.name : 'cena_stove3d';
+          const name = (targetMesh && targetMesh.name) ? targetMesh.name : 'cena_seed3d';
           this.downloadFile(blob, `${name}.gltf`);
         }
       },
@@ -64,7 +64,7 @@ export class ExportManager {
     const exporter = new STLExporter();
     const result = exporter.parse(obj, { binary: true });
     const blob = new Blob([result], { type: 'application/octet-stream' });
-    const name = (targetMesh && targetMesh.name) ? targetMesh.name : 'modelo_stove3d';
+    const name = (targetMesh && targetMesh.name) ? targetMesh.name : 'modelo_seed3d';
     this.downloadFile(blob, `${name}.stl`);
   }
 
@@ -92,6 +92,6 @@ export class ExportManager {
 
     const json = JSON.stringify(data, null, 2);
     const blob = new Blob([json], { type: 'application/json' });
-    this.downloadFile(blob, 'projeto_stove3d.stove');
+    this.downloadFile(blob, 'projeto_seed3d.seed');
   }
 }
