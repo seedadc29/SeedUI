@@ -392,32 +392,73 @@ export class QuadMesh {
     return { n0, n1, n2, n3 };
   }
 
-  // --- THREE.JS BUFFER GENERATION (SHARED INDEXED BUFFER GEOMETRY) ---
+  // --- THREE.JS BUFFER GENERATION (OPTION 1: CENTER-POINT QUAD FAN) ---
 
   toBufferGeometry() {
     const geo = new THREE.BufferGeometry();
     const positions = [];
-    const indices = [];
+    const normals = [];
+    const uvs = [];
 
-    // 1. Vertex Positions (Exact unique vertices)
-    this.vertices.forEach((v) => {
-      positions.push(v.x, v.y, v.z);
-    });
-
-    // 2. Index Buffer (Shared indices for clean Quad/Triangle faces)
     this.quads.forEach((face) => {
       const unique = Array.from(new Set(face));
       if (unique.length === 4) {
-        indices.push(unique[0], unique[1], unique[2]);
-        indices.push(unique[0], unique[2], unique[3]);
+        const v0 = this.vertices[face[0]];
+        const v1 = this.vertices[face[1]];
+        const v2 = this.vertices[face[2]];
+        const v3 = this.vertices[face[3]];
+
+        const { n0, n1, n2, n3 } = this.computeQuadCornerNormals(v0, v1, v2, v3);
+
+        // Center Vertex and Normal (Radial symmetric 4-triangle fan)
+        const vCenter = new THREE.Vector3(
+          (v0.x + v1.x + v2.x + v3.x) * 0.25,
+          (v0.y + v1.y + v2.y + v3.y) * 0.25,
+          (v0.z + v1.z + v2.z + v3.z) * 0.25
+        );
+        const nCenter = new THREE.Vector3(
+          (n0.x + n1.x + n2.x + n3.x) * 0.25,
+          (n0.y + n1.y + n2.y + n3.y) * 0.25,
+          (n0.z + n1.z + n2.z + n3.z) * 0.25
+        ).normalize();
+
+        // Tri 0: (v0, v1, vCenter)
+        positions.push(v0.x, v0.y, v0.z, v1.x, v1.y, v1.z, vCenter.x, vCenter.y, vCenter.z);
+        normals.push(n0.x, n0.y, n0.z, n1.x, n1.y, n1.z, nCenter.x, nCenter.y, nCenter.z);
+        uvs.push(0, 0, 1, 0, 0.5, 0.5);
+
+        // Tri 1: (v1, v2, vCenter)
+        positions.push(v1.x, v1.y, v1.z, v2.x, v2.y, v2.z, vCenter.x, vCenter.y, vCenter.z);
+        normals.push(n1.x, n1.y, n1.z, n2.x, n2.y, n2.z, nCenter.x, nCenter.y, nCenter.z);
+        uvs.push(1, 0, 1, 1, 0.5, 0.5);
+
+        // Tri 2: (v2, v3, vCenter)
+        positions.push(v2.x, v2.y, v2.z, v3.x, v3.y, v3.z, vCenter.x, vCenter.y, vCenter.z);
+        normals.push(n2.x, n2.y, n2.z, n3.x, n3.y, n3.z, nCenter.x, nCenter.y, nCenter.z);
+        uvs.push(1, 1, 0, 1, 0.5, 0.5);
+
+        // Tri 3: (v3, v0, vCenter)
+        positions.push(v3.x, v3.y, v3.z, v0.x, v0.y, v0.z, vCenter.x, vCenter.y, vCenter.z);
+        normals.push(n3.x, n3.y, n3.z, n0.x, n0.y, n0.z, nCenter.x, nCenter.y, nCenter.z);
+        uvs.push(0, 1, 0, 0, 0.5, 0.5);
       } else if (unique.length === 3) {
-        indices.push(unique[0], unique[1], unique[2]);
+        const v0 = this.vertices[unique[0]];
+        const v1 = this.vertices[unique[1]];
+        const v2 = this.vertices[unique[2]];
+
+        const cb = new THREE.Vector3().subVectors(v2, v1);
+        const ab = new THREE.Vector3().subVectors(v0, v1);
+        const triNormal = cb.cross(ab).normalize();
+
+        positions.push(v0.x, v0.y, v0.z, v1.x, v1.y, v1.z, v2.x, v2.y, v2.z);
+        normals.push(triNormal.x, triNormal.y, triNormal.z, triNormal.x, triNormal.y, triNormal.z, triNormal.x, triNormal.y, triNormal.z);
+        uvs.push(0, 0, 1, 0, 0.5, 1);
       }
     });
 
     geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geo.setIndex(indices);
-    geo.computeVertexNormals();
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
     geo.computeBoundingBox();
     geo.computeBoundingSphere();
 
@@ -443,16 +484,67 @@ export class QuadMesh {
 
   updateGeometryPositions(geo, lineMesh) {
     const posAttr = geo.attributes.position;
-    if (posAttr && posAttr.count === this.vertices.length) {
-      for (let i = 0; i < this.vertices.length; i++) {
-        const v = this.vertices[i];
-        posAttr.setXYZ(i, v.x, v.y, v.z);
+    const normAttr = geo.attributes.normal;
+    let ptr = 0;
+
+    this.quads.forEach((face) => {
+      const unique = Array.from(new Set(face));
+      if (unique.length === 4) {
+        const v0 = this.vertices[face[0]];
+        const v1 = this.vertices[face[1]];
+        const v2 = this.vertices[face[2]];
+        const v3 = this.vertices[face[3]];
+
+        const { n0, n1, n2, n3 } = this.computeQuadCornerNormals(v0, v1, v2, v3);
+
+        const vcx = (v0.x + v1.x + v2.x + v3.x) * 0.25;
+        const vcy = (v0.y + v1.y + v2.y + v3.y) * 0.25;
+        const vcz = (v0.z + v1.z + v2.z + v3.z) * 0.25;
+
+        const ncx = (n0.x + n1.x + n2.x + n3.x) * 0.25;
+        const ncy = (n0.y + n1.y + n2.y + n3.y) * 0.25;
+        const ncz = (n0.z + n1.z + n2.z + n3.z) * 0.25;
+        const nlen = Math.sqrt(ncx * ncx + ncy * ncy + ncz * ncz) || 1;
+        const nCenter = { x: ncx / nlen, y: ncy / nlen, z: ncz / nlen };
+
+        // Tri 0: (v0, v1, vCenter)
+        posAttr.setXYZ(ptr, v0.x, v0.y, v0.z); normAttr.setXYZ(ptr, n0.x, n0.y, n0.z); ptr++;
+        posAttr.setXYZ(ptr, v1.x, v1.y, v1.z); normAttr.setXYZ(ptr, n1.x, n1.y, n1.z); ptr++;
+        posAttr.setXYZ(ptr, vcx, vcy, vcz); normAttr.setXYZ(ptr, nCenter.x, nCenter.y, nCenter.z); ptr++;
+
+        // Tri 1: (v1, v2, vCenter)
+        posAttr.setXYZ(ptr, v1.x, v1.y, v1.z); normAttr.setXYZ(ptr, n1.x, n1.y, n1.z); ptr++;
+        posAttr.setXYZ(ptr, v2.x, v2.y, v2.z); normAttr.setXYZ(ptr, n2.x, n2.y, n2.z); ptr++;
+        posAttr.setXYZ(ptr, vcx, vcy, vcz); normAttr.setXYZ(ptr, nCenter.x, nCenter.y, nCenter.z); ptr++;
+
+        // Tri 2: (v2, v3, vCenter)
+        posAttr.setXYZ(ptr, v2.x, v2.y, v2.z); normAttr.setXYZ(ptr, n2.x, n2.y, n2.z); ptr++;
+        posAttr.setXYZ(ptr, v3.x, v3.y, v3.z); normAttr.setXYZ(ptr, n3.x, n3.y, n3.z); ptr++;
+        posAttr.setXYZ(ptr, vcx, vcy, vcz); normAttr.setXYZ(ptr, nCenter.x, nCenter.y, nCenter.z); ptr++;
+
+        // Tri 3: (v3, v0, vCenter)
+        posAttr.setXYZ(ptr, v3.x, v3.y, v3.z); normAttr.setXYZ(ptr, n3.x, n3.y, n3.z); ptr++;
+        posAttr.setXYZ(ptr, v0.x, v0.y, v0.z); normAttr.setXYZ(ptr, n0.x, n0.y, n0.z); ptr++;
+        posAttr.setXYZ(ptr, vcx, vcy, vcz); normAttr.setXYZ(ptr, nCenter.x, nCenter.y, nCenter.z); ptr++;
+      } else if (unique.length === 3) {
+        const v0 = this.vertices[unique[0]];
+        const v1 = this.vertices[unique[1]];
+        const v2 = this.vertices[unique[2]];
+
+        const cb = new THREE.Vector3().subVectors(v2, v1);
+        const ab = new THREE.Vector3().subVectors(v0, v1);
+        const triNormal = cb.cross(ab).normalize();
+
+        posAttr.setXYZ(ptr, v0.x, v0.y, v0.z); normAttr.setXYZ(ptr, triNormal.x, triNormal.y, triNormal.z); ptr++;
+        posAttr.setXYZ(ptr, v1.x, v1.y, v1.z); normAttr.setXYZ(ptr, triNormal.x, triNormal.y, triNormal.z); ptr++;
+        posAttr.setXYZ(ptr, v2.x, v2.y, v2.z); normAttr.setXYZ(ptr, triNormal.x, triNormal.y, triNormal.z); ptr++;
       }
-      posAttr.needsUpdate = true;
-      geo.computeVertexNormals();
-      geo.computeBoundingBox();
-      geo.computeBoundingSphere();
-    }
+    });
+
+    posAttr.needsUpdate = true;
+    if (normAttr) normAttr.needsUpdate = true;
+    geo.computeBoundingBox();
+    geo.computeBoundingSphere();
 
     // Update edge wireframe lines
     if (lineMesh && lineMesh.geometry) {

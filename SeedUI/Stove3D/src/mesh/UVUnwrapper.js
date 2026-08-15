@@ -36,29 +36,18 @@ export class UVUnwrapper {
 
       const unique = Array.from(new Set(face));
       if (unique.length === 4) {
-        // Quad face: 2x2 Subdivided Quad Grid (8 Triangles)
+        // Quad face: 4 Radial Triangles meeting at center
         const uMid = (uMin + uMax) * 0.5;
         const vMid = (vMin + vMax) * 0.5;
 
-        const addTriUV = (uA, vA, uB, vB, uC, vC) => {
-          uvs.push(uA, vA, uB, vB, uC, vC);
-        };
-
-        // Sub-Quad 0
-        addTriUV(uMin, vMin, uMid, vMin, uMid, vMid);
-        addTriUV(uMin, vMin, uMid, vMid, uMin, vMid);
-
-        // Sub-Quad 1
-        addTriUV(uMid, vMin, uMax, vMin, uMax, vMid);
-        addTriUV(uMid, vMin, uMax, vMid, uMid, vMid);
-
-        // Sub-Quad 2
-        addTriUV(uMid, vMid, uMax, vMid, uMax, vMax);
-        addTriUV(uMid, vMid, uMax, vMax, uMid, vMax);
-
-        // Sub-Quad 3
-        addTriUV(uMin, vMid, uMid, vMid, uMid, vMax);
-        addTriUV(uMin, vMid, uMid, vMax, uMin, vMax);
+        // Tri 0: (v0, v1, vCenter)
+        uvs.push(uMin, vMin, uMax, vMin, uMid, vMid);
+        // Tri 1: (v1, v2, vCenter)
+        uvs.push(uMax, vMin, uMax, vMax, uMid, vMid);
+        // Tri 2: (v2, v3, vCenter)
+        uvs.push(uMax, vMax, uMin, vMax, uMid, vMid);
+        // Tri 3: (v3, v0, vCenter)
+        uvs.push(uMin, vMax, uMin, vMin, uMid, vMid);
       } else if (unique.length === 3) {
         // Triangle face: 1 Triangle -> 3 UV vertices
         uvs.push(uMin, vMin);
