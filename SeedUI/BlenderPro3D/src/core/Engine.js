@@ -115,10 +115,12 @@ export class Engine {
     // Live Camera to View Synchronization:
     // Moving the viewport while inside Camera View directly moves the 3D Camera Object!
     this.isSyncingCamera = false;
+    const rot180Y = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
     this.controls.addEventListener('change', () => {
       if (this.isCameraViewActive && this.lockCameraToView && this.sceneCamera && !this.isSyncingCamera) {
         this.sceneCamera.position.copy(this.activeCamera.position);
-        this.sceneCamera.quaternion.copy(this.activeCamera.quaternion);
+        this.sceneCamera.quaternion.copy(this.activeCamera.quaternion).multiply(rot180Y);
+        this.sceneCamera.updateMatrixWorld(true);
         if (this.onCameraMoved) {
           this.onCameraMoved(this.sceneCamera);
         }
@@ -445,8 +447,14 @@ export class Engine {
 
         this.activeCamera.up.set(0, 0, 1);
         this.activeCamera.position.copy(this.sceneCamera.position);
-        this.controls.target.set(0, 0, 0);
-        this.activeCamera.lookAt(0, 0, 0);
+
+        // Active camera looks along sceneCamera's +Z (the lens axis)
+        const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.sceneCamera.quaternion).normalize();
+        const dist = this.sceneCamera.position.distanceTo(new THREE.Vector3(0, 0, 0)) || 8;
+        const lookTarget = this.sceneCamera.position.clone().add(forward.clone().multiplyScalar(dist));
+
+        this.controls.target.copy(lookTarget);
+        this.activeCamera.lookAt(lookTarget);
         this.controls.update();
 
         setTimeout(() => {
