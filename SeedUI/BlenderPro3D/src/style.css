@@ -927,6 +927,65 @@ body.blender-body {
   outline: none;
 }
 
+/* Color Picker and World Presets */
+.blender-color-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.blender-color-input {
+  width: 28px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--b-border);
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+}
+
+.color-hex-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--b-text-main);
+  background: var(--b-bg-input);
+  border: 1px solid var(--b-border);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.world-preset-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.world-preset-btn {
+  height: 22px;
+  background: var(--b-bg-input);
+  border: 1px solid var(--b-border);
+  border-radius: 3px;
+  color: var(--b-text-muted);
+  font-size: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.world-preset-btn:hover {
+  background: var(--b-bg-panel);
+  color: #ffffff;
+  border-color: var(--b-border-focus);
+}
+
+.world-preset-btn.active {
+  background: var(--b-accent-blue);
+  color: #ffffff;
+  border-color: var(--b-accent-blue);
+}
+
 /* ==========================================================================
    3. Status Bar (22px bottom)
    ========================================================================== */

@@ -249,6 +249,33 @@ export class BlenderUI {
     document.getElementById('chk-n-shadows')?.addEventListener('change', (e) => {
       this.engine.renderer.shadowMap.enabled = e.target.checked;
     });
+
+    // World Background Color Picker & Presets
+    const worldPicker = document.getElementById('picker-world-bg');
+    const worldHexLabel = document.getElementById('label-world-hex');
+    const worldPresetBtns = document.querySelectorAll('.world-preset-btn');
+
+    const updateWorldBg = (colorHex) => {
+      this.engine.scene.background = new THREE.Color(colorHex);
+      if (worldPicker) worldPicker.value = colorHex;
+      if (worldHexLabel) worldHexLabel.textContent = colorHex.toUpperCase();
+      worldPresetBtns.forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.color.toLowerCase() === colorHex.toLowerCase());
+      });
+    };
+
+    if (worldPicker) {
+      worldPicker.addEventListener('input', (e) => {
+        updateWorldBg(e.target.value);
+      });
+    }
+
+    worldPresetBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const color = btn.dataset.color;
+        updateWorldBg(color);
+      });
+    });
   }
 
   toggleNPanel() {

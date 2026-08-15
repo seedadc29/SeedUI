@@ -323,6 +323,33 @@
 
               <!-- TAB 3: VIEW -->
               <div class="n-tab-pane hidden" id="n-pane-view">
+                <!-- World / Viewport Background Accordion -->
+                <div class="blender-accordion">
+                  <div class="accordion-head">
+                    <span class="accordion-arrow">▼</span>
+                    <span>World Background</span>
+                  </div>
+                  <div class="accordion-body">
+                    <div class="blender-form-row">
+                      <label>Color:</label>
+                      <div class="blender-color-picker-row">
+                        <input type="color" id="picker-world-bg" class="blender-color-input" value="#282830">
+                        <span class="color-hex-label" id="label-world-hex">#282830</span>
+                      </div>
+                    </div>
+
+                    <div class="world-preset-buttons">
+                      <button class="world-preset-btn active" data-color="#282830" title="Padrão Blender 4.x (#282830)">Blender Dark</button>
+                      <button class="world-preset-btn" data-color="#141414" title="Preto Profundo (#141414)">Deep Black</button>
+                      <button class="world-preset-btn" data-color="#3d3d42" title="Grafite Estúdio (#3d3d42)">Studio Gray</button>
+                      <button class="world-preset-btn" data-color="#e8e8ed" title="Branco Claro (#e8e8ed)">High Key</button>
+                      <button class="world-preset-btn" data-color="#1b2838" title="Azul Noite (#1b2838)">Midnight</button>
+                      <button class="world-preset-btn" data-color="#2d3748" title="Slate Blue (#2d3748)">Slate</button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- View Lock Accordion -->
                 <div class="blender-accordion">
                   <div class="accordion-head">
                     <span class="accordion-arrow">▼</span>
