@@ -61,10 +61,10 @@ export class QuadMesh {
     const hh = height / 2;
 
     mesh.vertices = [
-      new THREE.Vector3(-hw, 0, -hh),
-      new THREE.Vector3( hw, 0, -hh),
-      new THREE.Vector3( hw, 0,  hh),
-      new THREE.Vector3(-hw, 0,  hh)
+      new THREE.Vector3(-hw, -hh, 0),
+      new THREE.Vector3( hw, -hh, 0),
+      new THREE.Vector3( hw,  hh, 0),
+      new THREE.Vector3(-hw,  hh, 0)
     ];
 
     mesh.quads = [
@@ -85,16 +85,16 @@ export class QuadMesh {
     const mesh = new QuadMesh();
     const hh = height / 2;
 
-    // Bottom Ring (0 to segments - 1)
+    // Bottom Ring (z = -hh)
     for (let i = 0; i < segments; i++) {
       const angle = (i / segments) * Math.PI * 2;
-      mesh.vertices.push(new THREE.Vector3(Math.cos(angle) * radius, -hh, Math.sin(angle) * radius));
+      mesh.vertices.push(new THREE.Vector3(Math.cos(angle) * radius, Math.sin(angle) * radius, -hh));
     }
 
-    // Top Ring (segments to 2 * segments - 1)
+    // Top Ring (z = hh)
     for (let i = 0; i < segments; i++) {
       const angle = (i / segments) * Math.PI * 2;
-      mesh.vertices.push(new THREE.Vector3(Math.cos(angle) * radius, hh, Math.sin(angle) * radius));
+      mesh.vertices.push(new THREE.Vector3(Math.cos(angle) * radius, Math.sin(angle) * radius, hh));
     }
 
     // Side Quad Faces
@@ -110,7 +110,7 @@ export class QuadMesh {
     // Top Cap Center Vertex
     if (capTop) {
       const topCenterIdx = mesh.vertices.length;
-      mesh.vertices.push(new THREE.Vector3(0, hh, 0));
+      mesh.vertices.push(new THREE.Vector3(0, 0, hh));
       for (let i = 0; i < segments; i++) {
         const next = (i + 1) % segments;
         mesh.quads.push([i + segments, topCenterIdx, next + segments, i + segments]);
@@ -120,7 +120,7 @@ export class QuadMesh {
     // Bottom Cap Center Vertex
     if (capBottom) {
       const bottomCenterIdx = mesh.vertices.length;
-      mesh.vertices.push(new THREE.Vector3(0, -hh, 0));
+      mesh.vertices.push(new THREE.Vector3(0, 0, -hh));
       for (let i = 0; i < segments; i++) {
         const next = (i + 1) % segments;
         mesh.quads.push([next, bottomCenterIdx, i, next]);
@@ -139,21 +139,21 @@ export class QuadMesh {
     const mesh = new QuadMesh();
     const hh = height / 2;
 
-    // Base Ring (0 to segments - 1)
+    // Base Ring (z = -hh)
     for (let i = 0; i < segments; i++) {
       const angle = (i / segments) * Math.PI * 2;
-      mesh.vertices.push(new THREE.Vector3(Math.cos(angle) * radius, -hh, Math.sin(angle) * radius));
+      mesh.vertices.push(new THREE.Vector3(Math.cos(angle) * radius, Math.sin(angle) * radius, -hh));
     }
 
-    // Tip Vertex
+    // Tip Vertex (z = hh)
     const tipIdx = mesh.vertices.length;
-    mesh.vertices.push(new THREE.Vector3(0, hh, 0));
+    mesh.vertices.push(new THREE.Vector3(0, 0, hh));
 
-    // Base Center Vertex
+    // Base Center Vertex (z = -hh)
     const baseCenterIdx = mesh.vertices.length;
-    mesh.vertices.push(new THREE.Vector3(0, -hh, 0));
+    mesh.vertices.push(new THREE.Vector3(0, 0, -hh));
 
-    // Side Faces (Triangles as 4-point degenerate or fan)
+    // Side Faces
     for (let i = 0; i < segments; i++) {
       const next = (i + 1) % segments;
       mesh.quads.push([i, next, tipIdx, i]);
@@ -171,26 +171,26 @@ export class QuadMesh {
 
     const mesh = new QuadMesh();
 
-    // Top Pole Vertex
-    mesh.vertices.push(new THREE.Vector3(0, radius, 0)); // index 0
+    // Top Pole Vertex (Z is Up: +radius)
+    mesh.vertices.push(new THREE.Vector3(0, 0, radius)); // index 0
 
     // Intermediate Rings
     for (let r = 1; r < rings; r++) {
       const phi = (r / rings) * Math.PI;
-      const y = Math.cos(phi) * radius;
+      const z = Math.cos(phi) * radius;
       const ringRadius = Math.sin(phi) * radius;
 
       for (let s = 0; s < segments; s++) {
         const theta = (s / segments) * Math.PI * 2;
         const x = Math.cos(theta) * ringRadius;
-        const z = Math.sin(theta) * ringRadius;
+        const y = Math.sin(theta) * ringRadius;
         mesh.vertices.push(new THREE.Vector3(x, y, z));
       }
     }
 
-    // Bottom Pole Vertex
+    // Bottom Pole Vertex (Z is Down: -radius)
     const bottomPoleIdx = mesh.vertices.length;
-    mesh.vertices.push(new THREE.Vector3(0, -radius, 0));
+    mesh.vertices.push(new THREE.Vector3(0, 0, -radius));
 
     // Top Cap Faces
     for (let s = 0; s < segments; s++) {
@@ -247,8 +247,8 @@ export class QuadMesh {
         const sinV = Math.sin(v);
 
         const x = (radius + tube * cosV) * cosU;
-        const y = tube * sinV;
-        const z = (radius + tube * cosV) * sinU;
+        const y = (radius + tube * cosV) * sinU;
+        const z = tube * sinV;
 
         mesh.vertices.push(new THREE.Vector3(x, y, z));
       }

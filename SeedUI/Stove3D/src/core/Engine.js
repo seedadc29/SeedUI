@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
+// Blender Coordinate System standard: Z is Up, Y is Depth, X is Width
+THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
+
 export class Engine {
   constructor(canvasId) {
     this.canvas = document.getElementById(canvasId);
@@ -51,12 +54,14 @@ export class Engine {
   initCamera() {
     const aspect = this.container.clientWidth / this.container.clientHeight;
     
-    // Perspective Camera
+    // Perspective Camera (Blender Z-Up: X=Right, Y=Depth, Z=Height)
     this.cameraPersp = new THREE.PerspectiveCamera(45, aspect, 0.1, 500);
-    this.cameraPersp.position.set(4.5, 3.5, 5.5);
+    this.cameraPersp.up.set(0, 0, 1);
+    this.cameraPersp.position.set(5.5, -6.5, 4.5);
+    this.cameraPersp.lookAt(0, 0, 0);
     this.scene.add(this.cameraPersp);
     
-    // Orthographic Camera
+    // Orthographic Camera (Blender Z-Up)
     const frustumSize = 8;
     this.cameraOrtho = new THREE.OrthographicCamera(
       (frustumSize * aspect) / -2,
@@ -66,7 +71,9 @@ export class Engine {
       0.1,
       500
     );
-    this.cameraOrtho.position.set(4.5, 3.5, 5.5);
+    this.cameraOrtho.up.set(0, 0, 1);
+    this.cameraOrtho.position.set(5.5, -6.5, 4.5);
+    this.cameraOrtho.lookAt(0, 0, 0);
     this.scene.add(this.cameraOrtho);
 
     // Headlight (Luz omnidirecional atrelada à câmera para iluminar todas as faces sem nenhum lado escuro)
@@ -299,14 +306,15 @@ export class Engine {
   }
 
   initHelpers() {
-    // Ground Grid (Blender 4.x subtle gray grid)
+    // Ground Grid on XY Plane (Blender: Z is Up, grid lies on XY plane)
     this.grid = new THREE.GridHelper(24, 24, 0x484856, 0x363640);
-    this.grid.position.y = -0.001;
+    this.grid.rotation.x = Math.PI / 2;
+    this.grid.position.z = -0.001;
     this.scene.add(this.grid);
 
-    // Origin Axes (Subtle red & green axes lines like Blender)
+    // Origin Axes (Blender: X=Red=Right, Y=Green=Depth, Z=Blue=Up)
     this.axes = new THREE.AxesHelper(1.5);
-    this.axes.position.y = 0.001;
+    this.axes.position.z = 0.001;
     this.scene.add(this.axes);
   }
 
@@ -340,10 +348,12 @@ export class Engine {
     const position = this.activeCamera.position.clone();
 
     if (this.isOrthographic) {
+      this.cameraOrtho.up.set(0, 0, 1);
       this.cameraOrtho.position.copy(position);
       this.cameraOrtho.lookAt(target);
       this.activeCamera = this.cameraOrtho;
     } else {
+      this.cameraPersp.up.set(0, 0, 1);
       this.cameraPersp.position.copy(position);
       this.cameraPersp.lookAt(target);
       this.activeCamera = this.cameraPersp;
@@ -360,13 +370,16 @@ export class Engine {
     const target = this.controls.target;
 
     switch (viewName) {
-      case 'top': // Numpad 7
-        this.activeCamera.position.set(target.x, target.y + dist, target.z + 0.001);
+      case 'top': // Numpad 7 (Top view: looking down along -Z, Y points up on screen)
+        this.activeCamera.up.set(0, 1, 0);
+        this.activeCamera.position.set(target.x, target.y + 0.001, target.z + dist);
         break;
-      case 'front': // Numpad 1
-        this.activeCamera.position.set(target.x, target.y, target.z + dist);
+      case 'front': // Numpad 1 (Front view: looking along +Y, Z points up on screen)
+        this.activeCamera.up.set(0, 0, 1);
+        this.activeCamera.position.set(target.x, target.y - dist, target.z);
         break;
-      case 'right': // Numpad 3
+      case 'right': // Numpad 3 (Right view: looking along -X, Z points up on screen)
+        this.activeCamera.up.set(0, 0, 1);
         this.activeCamera.position.set(target.x + dist, target.y, target.z);
         break;
     }
