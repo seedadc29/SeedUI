@@ -458,44 +458,67 @@ body.blender-body {
   outline: none;
 }
 
-/* Viewport Camera Orientation Gizmo Bar */
-.viewport-gizmo-bar {
+/* ==========================================================================
+   Blender 4.x Top-Right Navigation Cluster (Compass + Circle Action Buttons)
+   ========================================================================== */
+.blender-nav-cluster {
   position: absolute;
-  bottom: 12px;
-  right: 12px;
+  top: 36px;
+  right: 14px;
   display: flex;
-  background: rgba(22, 22, 22, 0.75);
-  border: 1px solid var(--b-border-subtle);
-  border-radius: 4px;
-  padding: 2px;
-  gap: 2px;
-  z-index: 10;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  z-index: 15;
+  pointer-events: auto;
 }
 
-.vp-gizmo-btn {
-  width: 26px;
-  height: 22px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 3px;
-  color: var(--b-text-muted);
-  font-size: 10px;
-  font-weight: 700;
-  cursor: pointer;
+.blender-nav-compass-canvas {
+  width: 84px;
+  height: 84px;
+  cursor: grab;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.5));
+  transition: transform 0.1s ease;
+}
+
+.blender-nav-compass-canvas:active {
+  cursor: grabbing;
+}
+
+.blender-nav-buttons-column {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: center;
+}
+
+.nav-circle-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(36, 36, 36, 0.85);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  color: #c5c5c5;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.1s;
+  cursor: pointer;
+  transition: all 0.12s ease;
 }
 
-.vp-gizmo-btn:hover {
-  background: var(--b-bg-panel);
+.nav-circle-btn:hover {
+  background: rgba(60, 60, 60, 0.95);
   color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: scale(1.05);
 }
 
-.vp-gizmo-btn.active {
+.nav-circle-btn:active {
   background: var(--b-accent-blue);
   color: #ffffff;
+  transform: scale(0.96);
 }
 
 /* N-Panel Handle */
