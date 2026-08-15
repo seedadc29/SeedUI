@@ -117,7 +117,7 @@ export class Engine {
     this.controls.addEventListener('change', () => {
       if (this.isCameraViewActive && this.lockCameraToView && this.sceneCamera) {
         this.sceneCamera.position.copy(this.activeCamera.position);
-        this.sceneCamera.rotation.copy(this.activeCamera.rotation);
+        this.sceneCamera.quaternion.copy(this.activeCamera.quaternion);
         if (this.onCameraMoved) {
           this.onCameraMoved(this.sceneCamera);
         }
@@ -404,16 +404,13 @@ export class Engine {
       if (camBtn) camBtn.classList.add('active');
 
       if (this.sceneCamera) {
-        const camWorldPos = new THREE.Vector3();
-        const camWorldDir = new THREE.Vector3();
-        this.sceneCamera.getWorldPosition(camWorldPos);
-        this.sceneCamera.getWorldDirection(camWorldDir);
-        
         this.activeCamera.up.set(0, 0, 1);
-        this.activeCamera.position.copy(camWorldPos);
-        const lookTarget = camWorldPos.clone().add(camWorldDir.multiplyScalar(8));
+        this.activeCamera.position.copy(this.sceneCamera.position);
+        this.activeCamera.quaternion.copy(this.sceneCamera.quaternion);
+
+        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.sceneCamera.quaternion);
+        const lookTarget = this.sceneCamera.position.clone().add(forward.multiplyScalar(8));
         this.controls.target.copy(lookTarget);
-        this.activeCamera.lookAt(lookTarget);
       } else {
         this.activeCamera.up.set(0, 0, 1);
         this.activeCamera.position.set(6.5, -7.5, 5.0);

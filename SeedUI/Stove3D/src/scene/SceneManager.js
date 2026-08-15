@@ -62,23 +62,29 @@ export class SceneManager {
     const camera = new THREE.PerspectiveCamera(50, 16 / 9, 0.1, 1000);
     cameraGroup.add(camera);
 
-    // 3. Blender Iconic Camera Wireframe Gizmo
+    // 3. Blender Iconic Camera Wireframe Gizmo (Apex at origin, frustum frame expanding forward along -Z)
     const gizmoGeom = new THREE.BufferGeometry();
-    const s = 0.8;
+    const s = 1.0;
+    const fw = s * 0.65;
+    const fh = s * 0.42;
+    const fd = -s * 1.1; // Extends forward along -Z (camera lens direction)
+
     const vertices = new Float32Array([
-      // Back rectangular body
-      -s*0.6, -s*0.4, 0,   s*0.6, -s*0.4, 0,
-       s*0.6, -s*0.4, 0,   s*0.6,  s*0.4, 0,
-       s*0.6,  s*0.4, 0,  -s*0.6,  s*0.4, 0,
-      -s*0.6,  s*0.4, 0,  -s*0.6, -s*0.4, 0,
-      // Pyramid edges converging forward
-      -s*0.6, -s*0.4, 0,   0, 0, -s*1.2,
-       s*0.6, -s*0.4, 0,   0, 0, -s*1.2,
-       s*0.6,  s*0.4, 0,   0, 0, -s*1.2,
-      -s*0.6,  s*0.4, 0,   0, 0, -s*1.2,
-      // Top triangular UP indicator
-      -s*0.3,  s*0.4, 0,   0, s*0.7, 0,
-       0, s*0.7, 0,        s*0.3,  s*0.4, 0
+      // 4 Frustum lines from camera apex (0,0,0) to 4 frame corners
+      0, 0, 0,   -fw, -fh, fd,
+      0, 0, 0,    fw, -fh, fd,
+      0, 0, 0,    fw,  fh, fd,
+      0, 0, 0,   -fw,  fh, fd,
+
+      // Front rectangular lens frame
+      -fw, -fh, fd,   fw, -fh, fd,
+       fw, -fh, fd,   fw,  fh, fd,
+       fw,  fh, fd,  -fw,  fh, fd,
+      -fw,  fh, fd,  -fw, -fh, fd,
+
+      // Top triangular UP indicator on the front frame
+      -fw * 0.4, fh, fd,   0, fh * 1.6, fd,
+       0, fh * 1.6, fd,    fw * 0.4, fh, fd
     ]);
     gizmoGeom.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
     const gizmoMat = new THREE.LineBasicMaterial({ color: 0x38bdf8, linewidth: 2 });
