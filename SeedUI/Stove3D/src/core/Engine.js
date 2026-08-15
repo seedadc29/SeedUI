@@ -304,9 +304,23 @@ export class Engine {
     this.grid.position.y = -0.001;
     this.scene.add(this.grid);
 
-    // Origin Axes (Subtle red & green axes lines like Blender)
-    this.axes = new THREE.AxesHelper(1.5);
+    // Origin Axes: X (Gold/Orange #f59e0b), Y (Green #22c55e), Z (Cyan #00f0ff)
+    this.axes = new THREE.AxesHelper(1.8);
     this.axes.position.y = 0.001;
+    
+    const colors = this.axes.geometry.attributes.color;
+    if (colors) {
+      // X Axis (Gold/Orange)
+      colors.setXYZ(0, 0.96, 0.62, 0.04);
+      colors.setXYZ(1, 0.96, 0.62, 0.04);
+      // Y Axis (Green)
+      colors.setXYZ(2, 0.13, 0.77, 0.37);
+      colors.setXYZ(3, 0.13, 0.77, 0.37);
+      // Z Axis (Cyan / Electric Blue)
+      colors.setXYZ(4, 0.0, 0.94, 1.0);
+      colors.setXYZ(5, 0.0, 0.94, 1.0);
+      colors.needsUpdate = true;
+    }
     this.scene.add(this.axes);
   }
 
