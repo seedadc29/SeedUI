@@ -63,7 +63,7 @@ export class Engine {
     // Perspective Camera (Blender Z-Up: X=Right, Y=Depth, Z=Height)
     this.cameraPersp = new THREE.PerspectiveCamera(45, aspect, 0.1, 500);
     this.cameraPersp.up.set(0, 0, 1);
-    this.cameraPersp.position.set(5.5, -6.5, 4.5);
+    this.cameraPersp.position.set(10.5, -12.5, 8.0);
     this.cameraPersp.lookAt(0, 0, 0);
     this.scene.add(this.cameraPersp);
     
@@ -78,7 +78,7 @@ export class Engine {
       500
     );
     this.cameraOrtho.up.set(0, 0, 1);
-    this.cameraOrtho.position.set(5.5, -6.5, 4.5);
+    this.cameraOrtho.position.set(10.5, -12.5, 8.0);
     this.cameraOrtho.lookAt(0, 0, 0);
     this.scene.add(this.cameraOrtho);
 
