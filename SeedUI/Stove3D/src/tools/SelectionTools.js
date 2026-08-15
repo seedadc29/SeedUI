@@ -275,30 +275,6 @@ export class SelectionTools {
 
   // --- VISIBILITY / OCCLUSION CULLING HELPERS ---
 
-  isVertexVisible(vIdx, qm, meshMatrixWorld, isWireframe) {
-    if (isWireframe) return true;
-    const vWorld = qm.vertices[vIdx].clone().applyMatrix4(meshMatrixWorld);
-    const camPos = this.engine.activeCamera.position;
-    const viewDir = new THREE.Vector3().subVectors(camPos, vWorld).normalize();
-
-    // Check all incident faces on this vertex
-    for (let fIdx = 0; fIdx < qm.quads.length; fIdx++) {
-      const face = qm.quads[fIdx];
-      if (face && face.includes(vIdx) && face.length >= 3) {
-        const v0 = qm.vertices[face[0]].clone().applyMatrix4(meshMatrixWorld);
-        const v1 = qm.vertices[face[1]].clone().applyMatrix4(meshMatrixWorld);
-        const v2 = qm.vertices[face[2]].clone().applyMatrix4(meshMatrixWorld);
-        const e1 = new THREE.Vector3().subVectors(v1, v0);
-        const e2 = new THREE.Vector3().subVectors(v2, v0);
-        const normal = new THREE.Vector3().crossVectors(e1, e2).normalize();
-        if (normal.dot(viewDir) > 0.0) {
-          return true; // Face points toward camera
-        }
-      }
-    }
-    return false;
-  }
-
   isFaceVisible(fIdx, qm, meshMatrixWorld, isWireframe) {
     if (isWireframe) return true;
     const face = qm.quads[fIdx];
@@ -315,15 +291,81 @@ export class SelectionTools {
     face.forEach(idx => center.add(qm.vertices[idx].clone().applyMatrix4(meshMatrixWorld)));
     center.divideScalar(face.length);
 
-    const viewDir = new THREE.Vector3().subVectors(this.engine.activeCamera.position, center).normalize();
-    return normal.dot(viewDir) > 0.0;
+    let viewDir;
+    if (this.engine.isOrthographic) {
+      viewDir = new THREE.Vector3();
+      this.engine.activeCamera.getWorldDirection(viewDir).negate();
+    } else {
+      viewDir = new THREE.Vector3().subVectors(this.engine.activeCamera.position, center).normalize();
+    }
+
+    return normal.dot(viewDir) > 0.05;
+  }
+
+  isVertexVisible(vIdx, qm, meshMatrixWorld, isWireframe) {
+    if (isWireframe) return true;
+    const vWorld = qm.vertices[vIdx].clone().applyMatrix4(meshMatrixWorld);
+    const camPos = this.engine.activeCamera.position;
+
+    // 1. Must belong to at least one front-facing face
+    let hasFrontFace = false;
+    for (let fIdx = 0; fIdx < qm.quads.length; fIdx++) {
+      const face = qm.quads[fIdx];
+      if (face && face.includes(vIdx) && face.length >= 3) {
+        if (this.isFaceVisible(fIdx, qm, meshMatrixWorld, false)) {
+          hasFrontFace = true;
+          break;
+        }
+      }
+    }
+    if (!hasFrontFace) return false;
+
+    // 2. Ray-traced Occlusion Check against front faces that do NOT contain this vertex
+    const dir = new THREE.Vector3().subVectors(vWorld, camPos);
+    const targetDist = dir.length();
+    dir.normalize();
+
+    const ray = new THREE.Ray(camPos, dir);
+    const vA = new THREE.Vector3();
+    const vB = new THREE.Vector3();
+    const vC = new THREE.Vector3();
+    const hitPt = new THREE.Vector3();
+
+    for (let fIdx = 0; fIdx < qm.quads.length; fIdx++) {
+      const face = qm.quads[fIdx];
+      if (!face || face.includes(vIdx)) continue;
+      if (!this.isFaceVisible(fIdx, qm, meshMatrixWorld, false)) continue;
+
+      if (face.length === 4) {
+        vA.copy(qm.vertices[face[0]]).applyMatrix4(meshMatrixWorld);
+        vB.copy(qm.vertices[face[1]]).applyMatrix4(meshMatrixWorld);
+        vC.copy(qm.vertices[face[2]]).applyMatrix4(meshMatrixWorld);
+        if (ray.intersectTriangle(vA, vB, vC, true, hitPt)) {
+          if (hitPt.distanceTo(camPos) < targetDist - 0.02) return false; // Occluded!
+        }
+        vB.copy(qm.vertices[face[2]]).applyMatrix4(meshMatrixWorld);
+        vC.copy(qm.vertices[face[3]]).applyMatrix4(meshMatrixWorld);
+        if (ray.intersectTriangle(vA, vB, vC, true, hitPt)) {
+          if (hitPt.distanceTo(camPos) < targetDist - 0.02) return false; // Occluded!
+        }
+      } else if (face.length === 3) {
+        vA.copy(qm.vertices[face[0]]).applyMatrix4(meshMatrixWorld);
+        vB.copy(qm.vertices[face[1]]).applyMatrix4(meshMatrixWorld);
+        vC.copy(qm.vertices[face[2]]).applyMatrix4(meshMatrixWorld);
+        if (ray.intersectTriangle(vA, vB, vC, true, hitPt)) {
+          if (hitPt.distanceTo(camPos) < targetDist - 0.02) return false; // Occluded!
+        }
+      }
+    }
+
+    return true;
   }
 
   isEdgeVisible(eIdx, qm, meshMatrixWorld, isWireframe) {
     if (isWireframe) return true;
     const edge = qm.edges[eIdx];
     if (!edge) return false;
-    return this.isVertexVisible(edge[0], qm, meshMatrixWorld, isWireframe) || this.isVertexVisible(edge[1], qm, meshMatrixWorld, isWireframe);
+    return this.isVertexVisible(edge[0], qm, meshMatrixWorld, isWireframe) && this.isVertexVisible(edge[1], qm, meshMatrixWorld, isWireframe);
   }
 
   // --- SELECTION EXECUTION ALGORITHMS ---

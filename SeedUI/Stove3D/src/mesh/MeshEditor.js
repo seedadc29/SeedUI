@@ -147,6 +147,8 @@ export class MeshEditor {
     const qm = this.activeMesh.userData.quadMesh;
 
     // 1. Vertex Points Helper
+    const isWireframe = (this.engine.currentShading === 'wireframe');
+
     if (this.submode === 'vertex' || this.submode === 'edge' || this.submode === 'face') {
       const pointGeo = new THREE.BufferGeometry();
       const positions = new Float32Array(qm.vertices.length * 3);
@@ -168,10 +170,11 @@ export class MeshEditor {
       pointGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
       const pointMat = new THREE.PointsMaterial({
-        size: 9,
+        size: 8,
         vertexColors: true,
         sizeAttenuation: false,
-        depthTest: false,
+        depthTest: !isWireframe,
+        depthWrite: !isWireframe,
         transparent: true
       });
 
@@ -210,7 +213,8 @@ export class MeshEditor {
       const activeEdgeMat = new THREE.LineBasicMaterial({
         color: 0xff8c00,
         linewidth: 2,
-        depthTest: false
+        depthTest: !isWireframe,
+        depthWrite: !isWireframe
       });
 
       this.activeEdgesHelper = new THREE.LineSegments(activeEdgeGeo, activeEdgeMat);
@@ -249,7 +253,11 @@ export class MeshEditor {
         side: THREE.DoubleSide,
         transparent: true,
         opacity: 0.45,
-        depthTest: false
+        depthTest: !isWireframe,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1
       });
 
       this.faceHighlightMesh = new THREE.Mesh(faceGeo, faceMat);
@@ -259,30 +267,94 @@ export class MeshEditor {
     }
   }
 
+  isFaceFrontFacing(fIdx, qm, meshMatrixWorld) {
+    const face = qm.quads[fIdx];
+    if (!face || face.length < 3) return false;
+
+    const v0 = qm.vertices[face[0]].clone().applyMatrix4(meshMatrixWorld);
+    const v1 = qm.vertices[face[1]].clone().applyMatrix4(meshMatrixWorld);
+    const v2 = qm.vertices[face[2]].clone().applyMatrix4(meshMatrixWorld);
+    const e1 = new THREE.Vector3().subVectors(v1, v0);
+    const e2 = new THREE.Vector3().subVectors(v2, v0);
+    const normal = new THREE.Vector3().crossVectors(e1, e2).normalize();
+
+    const center = new THREE.Vector3();
+    face.forEach(idx => center.add(qm.vertices[idx].clone().applyMatrix4(meshMatrixWorld)));
+    center.divideScalar(face.length);
+
+    let viewDir;
+    if (this.engine.isOrthographic) {
+      viewDir = new THREE.Vector3();
+      this.engine.activeCamera.getWorldDirection(viewDir).negate();
+    } else {
+      viewDir = new THREE.Vector3().subVectors(this.engine.activeCamera.position, center).normalize();
+    }
+
+    return normal.dot(viewDir) > 0.05;
+  }
+
   isVertexFrontFacing(vIdx, qm, meshMatrixWorld) {
     const vWorld = qm.vertices[vIdx].clone().applyMatrix4(meshMatrixWorld);
     const camPos = this.engine.activeCamera.position;
-    const viewDir = new THREE.Vector3().subVectors(camPos, vWorld).normalize();
 
+    // 1. Must belong to at least one front-facing face
+    let hasFrontFace = false;
     for (let fIdx = 0; fIdx < qm.quads.length; fIdx++) {
       const face = qm.quads[fIdx];
       if (face && face.includes(vIdx) && face.length >= 3) {
-        const v0 = qm.vertices[face[0]].clone().applyMatrix4(meshMatrixWorld);
-        const v1 = qm.vertices[face[1]].clone().applyMatrix4(meshMatrixWorld);
-        const v2 = qm.vertices[face[2]].clone().applyMatrix4(meshMatrixWorld);
-        const e1 = new THREE.Vector3().subVectors(v1, v0);
-        const e2 = new THREE.Vector3().subVectors(v2, v0);
-        const normal = new THREE.Vector3().crossVectors(e1, e2).normalize();
-        if (normal.dot(viewDir) > 0.0) return true;
+        if (this.isFaceFrontFacing(fIdx, qm, meshMatrixWorld)) {
+          hasFrontFace = true;
+          break;
+        }
       }
     }
-    return false;
+    if (!hasFrontFace) return false;
+
+    // 2. Ray-traced Occlusion Check against front faces that do NOT contain this vertex
+    const dir = new THREE.Vector3().subVectors(vWorld, camPos);
+    const targetDist = dir.length();
+    dir.normalize();
+
+    const ray = new THREE.Ray(camPos, dir);
+    const vA = new THREE.Vector3();
+    const vB = new THREE.Vector3();
+    const vC = new THREE.Vector3();
+    const hitPt = new THREE.Vector3();
+
+    for (let fIdx = 0; fIdx < qm.quads.length; fIdx++) {
+      const face = qm.quads[fIdx];
+      if (!face || face.includes(vIdx)) continue;
+      if (!this.isFaceFrontFacing(fIdx, qm, meshMatrixWorld)) continue;
+
+      if (face.length === 4) {
+        vA.copy(qm.vertices[face[0]]).applyMatrix4(meshMatrixWorld);
+        vB.copy(qm.vertices[face[1]]).applyMatrix4(meshMatrixWorld);
+        vC.copy(qm.vertices[face[2]]).applyMatrix4(meshMatrixWorld);
+        if (ray.intersectTriangle(vA, vB, vC, true, hitPt)) {
+          if (hitPt.distanceTo(camPos) < targetDist - 0.02) return false;
+        }
+        vB.copy(qm.vertices[face[2]]).applyMatrix4(meshMatrixWorld);
+        vC.copy(qm.vertices[face[3]]).applyMatrix4(meshMatrixWorld);
+        if (ray.intersectTriangle(vA, vB, vC, true, hitPt)) {
+          if (hitPt.distanceTo(camPos) < targetDist - 0.02) return false;
+        }
+      } else if (face.length === 3) {
+        vA.copy(qm.vertices[face[0]]).applyMatrix4(meshMatrixWorld);
+        vB.copy(qm.vertices[face[1]]).applyMatrix4(meshMatrixWorld);
+        vC.copy(qm.vertices[face[2]]).applyMatrix4(meshMatrixWorld);
+        if (ray.intersectTriangle(vA, vB, vC, true, hitPt)) {
+          if (hitPt.distanceTo(camPos) < targetDist - 0.02) return false;
+        }
+      }
+    }
+
+    return true;
   }
 
   isEdgeFrontFacing(eIdx, qm, meshMatrixWorld) {
     const edge = qm.edges[eIdx];
     if (!edge) return false;
-    return this.isVertexFrontFacing(edge[0], qm, meshMatrixWorld) || this.isVertexFrontFacing(edge[1], qm, meshMatrixWorld);
+    return this.isVertexFrontFacing(edge[0], qm, meshMatrixWorld) && this.isVertexFrontFacing(edge[1], qm, meshMatrixWorld);
   }
 
   handleSelection(clientX, clientY, shiftKey, raycaster) {
