@@ -166,7 +166,12 @@ namespace seedui
 
             const std::string path = ResolveIconPath(def.file);
             std::string svg = path.empty() ? std::string() : ReadFile(path);
-            if (svg.empty()) LoadEmbeddedText(def.file, svg);
+            if (svg.empty())
+            {
+                // Recurso embutido: o nome inclui a extensao ("cursor-click.svg").
+                const std::string resName = std::string(def.file) + ".svg";
+                LoadEmbeddedText(resName.c_str(), svg);
+            }
 
             if (!svg.empty())
             {

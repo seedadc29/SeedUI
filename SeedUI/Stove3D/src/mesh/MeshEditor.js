@@ -259,6 +259,32 @@ export class MeshEditor {
     }
   }
 
+  isVertexFrontFacing(vIdx, qm, meshMatrixWorld) {
+    const vWorld = qm.vertices[vIdx].clone().applyMatrix4(meshMatrixWorld);
+    const camPos = this.engine.activeCamera.position;
+    const viewDir = new THREE.Vector3().subVectors(camPos, vWorld).normalize();
+
+    for (let fIdx = 0; fIdx < qm.quads.length; fIdx++) {
+      const face = qm.quads[fIdx];
+      if (face && face.includes(vIdx) && face.length >= 3) {
+        const v0 = qm.vertices[face[0]].clone().applyMatrix4(meshMatrixWorld);
+        const v1 = qm.vertices[face[1]].clone().applyMatrix4(meshMatrixWorld);
+        const v2 = qm.vertices[face[2]].clone().applyMatrix4(meshMatrixWorld);
+        const e1 = new THREE.Vector3().subVectors(v1, v0);
+        const e2 = new THREE.Vector3().subVectors(v2, v0);
+        const normal = new THREE.Vector3().crossVectors(e1, e2).normalize();
+        if (normal.dot(viewDir) > 0.0) return true;
+      }
+    }
+    return false;
+  }
+
+  isEdgeFrontFacing(eIdx, qm, meshMatrixWorld) {
+    const edge = qm.edges[eIdx];
+    if (!edge) return false;
+    return this.isVertexFrontFacing(edge[0], qm, meshMatrixWorld) || this.isVertexFrontFacing(edge[1], qm, meshMatrixWorld);
+  }
+
   handleSelection(clientX, clientY, shiftKey, raycaster) {
     if (!this.activeMesh || this.submode === 'object' || !this.activeMesh.userData.quadMesh) return false;
 
@@ -268,25 +294,50 @@ export class MeshEditor {
     const rect = canvas.getBoundingClientRect();
     const mouseX = clientX - rect.left;
     const mouseY = clientY - rect.top;
+    const isWireframe = (this.engine.currentShading === 'wireframe');
+    const meshMatrix = this.activeMesh.matrixWorld;
 
     if (this.submode === 'vertex') {
       let closestIdx = -1;
 
-      // 1. Direct Points Raycasting (Hardware Accelerated)
-      if (this.vertexPoints) {
-        raycaster.params.Points.threshold = 0.45;
-        const ptIntersects = raycaster.intersectObject(this.vertexPoints, false);
-        if (ptIntersects.length > 0 && ptIntersects[0].index !== undefined) {
-          closestIdx = ptIntersects[0].index;
+      // 1. Surface Collision Raycast (Closest Vertex of Clicked Front Face)
+      const surfaceHits = raycaster.intersectObject(this.activeMesh, false);
+      if (surfaceHits.length > 0 && surfaceHits[0].point && surfaceHits[0].faceIndex !== undefined) {
+        const hitPoint = surfaceHits[0].point;
+        const faceIdx = qm.getFaceIndexFromTriangleIndex(surfaceHits[0].faceIndex);
+        const face = qm.quads[faceIdx];
+        if (face) {
+          let minHitDist = Infinity;
+          face.forEach((vIdx) => {
+            const vWorld = qm.vertices[vIdx].clone().applyMatrix4(meshMatrix);
+            const d = hitPoint.distanceTo(vWorld);
+            if (d < minHitDist) {
+              minHitDist = d;
+              closestIdx = vIdx;
+            }
+          });
         }
       }
 
-      // 2. 3D Ray-to-Point Proximity (World Space)
+      // 2. Direct Points Raycasting (Hardware Accelerated)
+      if (closestIdx === -1 && this.vertexPoints) {
+        raycaster.params.Points.threshold = 0.45;
+        const ptIntersects = raycaster.intersectObject(this.vertexPoints, false);
+        if (ptIntersects.length > 0 && ptIntersects[0].index !== undefined) {
+          const candIdx = ptIntersects[0].index;
+          if (isWireframe || this.isVertexFrontFacing(candIdx, qm, meshMatrix)) {
+            closestIdx = candIdx;
+          }
+        }
+      }
+
+      // 3. 3D Ray-to-Point Proximity (World Space)
       if (closestIdx === -1) {
         const ray = raycaster.ray;
-        let minRayDist = 0.5;
+        let minRayDist = 0.45;
         for (let i = 0; i < qm.vertices.length; i++) {
-          const vWorld = qm.vertices[i].clone().applyMatrix4(this.activeMesh.matrixWorld);
+          if (!isWireframe && !this.isVertexFrontFacing(i, qm, meshMatrix)) continue;
+          const vWorld = qm.vertices[i].clone().applyMatrix4(meshMatrix);
           const d = ray.distanceToPoint(vWorld);
           if (d < minRayDist) {
             minRayDist = d;
@@ -295,28 +346,12 @@ export class MeshEditor {
         }
       }
 
-      // 3. Surface Collision Raycast (Closest Vertex of Clicked Face)
+      // 4. 2D Screen-space Projection Fallback (35px radius)
       if (closestIdx === -1) {
-        const intersects = raycaster.intersectObject(this.activeMesh, false);
-        if (intersects.length > 0 && intersects[0].point) {
-          const hitPoint = intersects[0].point;
-          let minHitDist = Infinity;
-          for (let i = 0; i < qm.vertices.length; i++) {
-            const vWorld = qm.vertices[i].clone().applyMatrix4(this.activeMesh.matrixWorld);
-            const d = hitPoint.distanceTo(vWorld);
-            if (d < minHitDist) {
-              minHitDist = d;
-              closestIdx = i;
-            }
-          }
-        }
-      }
-
-      // 4. 2D Screen-space Projection Fallback (50px generous radius)
-      if (closestIdx === -1) {
-        let min2DDist = 50;
+        let min2DDist = 35;
         for (let i = 0; i < qm.vertices.length; i++) {
-          const vWorld = qm.vertices[i].clone().applyMatrix4(this.activeMesh.matrixWorld);
+          if (!isWireframe && !this.isVertexFrontFacing(i, qm, meshMatrix)) continue;
+          const vWorld = qm.vertices[i].clone().applyMatrix4(meshMatrix);
           const vNDC = vWorld.project(this.engine.activeCamera);
 
           if (vNDC.z < 1.0) {
@@ -351,30 +386,66 @@ export class MeshEditor {
       }
     } else if (this.submode === 'edge') {
       let closestEdgeIdx = -1;
-      const ray = raycaster.ray;
-      let minRayDist = 0.4;
 
-      // 1. 3D Ray-to-Segment Proximity
-      qm.edges.forEach((edge, eIdx) => {
-        const vA = qm.vertices[edge[0]].clone().applyMatrix4(this.activeMesh.matrixWorld);
-        const vB = qm.vertices[edge[1]].clone().applyMatrix4(this.activeMesh.matrixWorld);
-        const line = new THREE.Line3(vA, vB);
-        const ptOnRay = new THREE.Vector3();
-        const ptOnLine = new THREE.Vector3();
-        ray.distanceSqToSegment(line.start, line.end, ptOnRay, ptOnLine);
-        const d = ptOnRay.distanceTo(ptOnLine);
-        if (d < minRayDist) {
-          minRayDist = d;
-          closestEdgeIdx = eIdx;
+      // 1. Surface Collision Raycast (Closest Edge of Clicked Front Face)
+      const surfaceHits = raycaster.intersectObject(this.activeMesh, false);
+      if (surfaceHits.length > 0 && surfaceHits[0].point && surfaceHits[0].faceIndex !== undefined) {
+        const hitPoint = surfaceHits[0].point;
+        const faceIdx = qm.getFaceIndexFromTriangleIndex(surfaceHits[0].faceIndex);
+        const face = qm.quads[faceIdx];
+        if (face) {
+          let minHitDist = Infinity;
+          for (let i = 0; i < face.length; i++) {
+            const vA = face[i];
+            const vB = face[(i + 1) % face.length];
+            const pA = qm.vertices[vA].clone().applyMatrix4(meshMatrix);
+            const pB = qm.vertices[vB].clone().applyMatrix4(meshMatrix);
+            const line = new THREE.Line3(pA, pB);
+            const cp = new THREE.Vector3();
+            line.closestPointToPoint(hitPoint, true, cp);
+            const dist = cp.distanceTo(hitPoint);
+            if (dist < minHitDist) {
+              minHitDist = dist;
+              // Find edge index in qm.edges
+              for (let e = 0; e < qm.edges.length; e++) {
+                const ed = qm.edges[e];
+                if ((ed[0] === vA && ed[1] === vB) || (ed[0] === vB && ed[1] === vA)) {
+                  closestEdgeIdx = e;
+                  break;
+                }
+              }
+            }
+          }
         }
-      });
+      }
 
-      // 2. 2D Screen-space Projection Fallback
+      // 2. 3D Ray-to-Segment Proximity
       if (closestEdgeIdx === -1) {
-        let min2DDist = 35;
+        const ray = raycaster.ray;
+        let minRayDist = 0.4;
         qm.edges.forEach((edge, eIdx) => {
-          const vA = qm.vertices[edge[0]].clone().applyMatrix4(this.activeMesh.matrixWorld).project(this.engine.activeCamera);
-          const vB = qm.vertices[edge[1]].clone().applyMatrix4(this.activeMesh.matrixWorld).project(this.engine.activeCamera);
+          if (!isWireframe && !this.isEdgeFrontFacing(eIdx, qm, meshMatrix)) return;
+          const vA = qm.vertices[edge[0]].clone().applyMatrix4(meshMatrix);
+          const vB = qm.vertices[edge[1]].clone().applyMatrix4(meshMatrix);
+          const line = new THREE.Line3(vA, vB);
+          const ptOnRay = new THREE.Vector3();
+          const ptOnLine = new THREE.Vector3();
+          ray.distanceSqToSegment(line.start, line.end, ptOnRay, ptOnLine);
+          const d = ptOnRay.distanceTo(ptOnLine);
+          if (d < minRayDist) {
+            minRayDist = d;
+            closestEdgeIdx = eIdx;
+          }
+        });
+      }
+
+      // 3. 2D Screen-space Projection Fallback
+      if (closestEdgeIdx === -1) {
+        let min2DDist = 30;
+        qm.edges.forEach((edge, eIdx) => {
+          if (!isWireframe && !this.isEdgeFrontFacing(eIdx, qm, meshMatrix)) return;
+          const vA = qm.vertices[edge[0]].clone().applyMatrix4(meshMatrix).project(this.engine.activeCamera);
+          const vB = qm.vertices[edge[1]].clone().applyMatrix4(meshMatrix).project(this.engine.activeCamera);
 
           if (vA.z < 1.0 && vB.z < 1.0) {
             const ax = (vA.x * 0.5 + 0.5) * rect.width;

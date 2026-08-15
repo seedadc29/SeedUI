@@ -273,6 +273,59 @@ export class SelectionTools {
     return { minX, maxX, minY, maxY, points };
   }
 
+  // --- VISIBILITY / OCCLUSION CULLING HELPERS ---
+
+  isVertexVisible(vIdx, qm, meshMatrixWorld, isWireframe) {
+    if (isWireframe) return true;
+    const vWorld = qm.vertices[vIdx].clone().applyMatrix4(meshMatrixWorld);
+    const camPos = this.engine.activeCamera.position;
+    const viewDir = new THREE.Vector3().subVectors(camPos, vWorld).normalize();
+
+    // Check all incident faces on this vertex
+    for (let fIdx = 0; fIdx < qm.quads.length; fIdx++) {
+      const face = qm.quads[fIdx];
+      if (face && face.includes(vIdx) && face.length >= 3) {
+        const v0 = qm.vertices[face[0]].clone().applyMatrix4(meshMatrixWorld);
+        const v1 = qm.vertices[face[1]].clone().applyMatrix4(meshMatrixWorld);
+        const v2 = qm.vertices[face[2]].clone().applyMatrix4(meshMatrixWorld);
+        const e1 = new THREE.Vector3().subVectors(v1, v0);
+        const e2 = new THREE.Vector3().subVectors(v2, v0);
+        const normal = new THREE.Vector3().crossVectors(e1, e2).normalize();
+        if (normal.dot(viewDir) > 0.0) {
+          return true; // Face points toward camera
+        }
+      }
+    }
+    return false;
+  }
+
+  isFaceVisible(fIdx, qm, meshMatrixWorld, isWireframe) {
+    if (isWireframe) return true;
+    const face = qm.quads[fIdx];
+    if (!face || face.length < 3) return false;
+
+    const v0 = qm.vertices[face[0]].clone().applyMatrix4(meshMatrixWorld);
+    const v1 = qm.vertices[face[1]].clone().applyMatrix4(meshMatrixWorld);
+    const v2 = qm.vertices[face[2]].clone().applyMatrix4(meshMatrixWorld);
+    const e1 = new THREE.Vector3().subVectors(v1, v0);
+    const e2 = new THREE.Vector3().subVectors(v2, v0);
+    const normal = new THREE.Vector3().crossVectors(e1, e2).normalize();
+
+    const center = new THREE.Vector3();
+    face.forEach(idx => center.add(qm.vertices[idx].clone().applyMatrix4(meshMatrixWorld)));
+    center.divideScalar(face.length);
+
+    const viewDir = new THREE.Vector3().subVectors(this.engine.activeCamera.position, center).normalize();
+    return normal.dot(viewDir) > 0.0;
+  }
+
+  isEdgeVisible(eIdx, qm, meshMatrixWorld, isWireframe) {
+    if (isWireframe) return true;
+    const edge = qm.edges[eIdx];
+    if (!edge) return false;
+    return this.isVertexVisible(edge[0], qm, meshMatrixWorld, isWireframe) || this.isVertexVisible(edge[1], qm, meshMatrixWorld, isWireframe);
+  }
+
   // --- SELECTION EXECUTION ALGORITHMS ---
 
   applySweepSelectionAt(clientX, clientY, shiftKey) {
@@ -280,20 +333,65 @@ export class SelectionTools {
     const rect = this.engine.canvas.getBoundingClientRect();
     const mx = clientX - rect.left;
     const my = clientY - rect.top;
+    const isWireframe = (this.engine.currentShading === 'wireframe');
 
     if (this.uiManager.currentSubmode !== 'object' && this.meshEditor.activeMesh && this.meshEditor.activeMesh.userData.quadMesh) {
       const qm = this.meshEditor.activeMesh.userData.quadMesh;
-      for (let i = 0; i < qm.vertices.length; i++) {
-        const vWorld = qm.vertices[i].clone().applyMatrix4(this.meshEditor.activeMesh.matrixWorld);
-        const vNDC = vWorld.project(this.engine.activeCamera);
-        if (vNDC.z < 1.0) {
-          const sx = (vNDC.x * 0.5 + 0.5) * rect.width;
-          const sy = (-vNDC.y * 0.5 + 0.5) * rect.height;
-          if (Math.hypot(mx - sx, my - sy) <= radius) {
-            this.meshEditor.selectedVertices.add(i);
+      const meshMatrix = this.meshEditor.activeMesh.matrixWorld;
+
+      if (this.uiManager.currentSubmode === 'vertex') {
+        for (let i = 0; i < qm.vertices.length; i++) {
+          const vWorld = qm.vertices[i].clone().applyMatrix4(meshMatrix);
+          const vNDC = vWorld.project(this.engine.activeCamera);
+          if (vNDC.z < 1.0) {
+            const sx = (vNDC.x * 0.5 + 0.5) * rect.width;
+            const sy = (-vNDC.y * 0.5 + 0.5) * rect.height;
+            if (Math.hypot(mx - sx, my - sy) <= radius) {
+              if (this.isVertexVisible(i, qm, meshMatrix, isWireframe)) {
+                this.meshEditor.selectedVertices.add(i);
+              }
+            }
           }
         }
+      } else if (this.uiManager.currentSubmode === 'edge') {
+        qm.edges.forEach((edge, eIdx) => {
+          const vA = qm.vertices[edge[0]].clone().applyMatrix4(meshMatrix).project(this.engine.activeCamera);
+          const vB = qm.vertices[edge[1]].clone().applyMatrix4(meshMatrix).project(this.engine.activeCamera);
+          if (vA.z < 1.0 && vB.z < 1.0) {
+            const ax = (vA.x * 0.5 + 0.5) * rect.width;
+            const ay = (-vA.y * 0.5 + 0.5) * rect.height;
+            const bx = (vB.x * 0.5 + 0.5) * rect.width;
+            const by = (-vB.y * 0.5 + 0.5) * rect.height;
+            const midX = (ax + bx) * 0.5;
+            const midY = (ay + by) * 0.5;
+            if (Math.hypot(mx - midX, my - midY) <= radius) {
+              if (this.isEdgeVisible(eIdx, qm, meshMatrix, isWireframe)) {
+                this.meshEditor.selectedEdges.add(eIdx);
+                this.meshEditor.selectedVertices.add(edge[0]);
+                this.meshEditor.selectedVertices.add(edge[1]);
+              }
+            }
+          }
+        });
+      } else if (this.uiManager.currentSubmode === 'face') {
+        qm.quads.forEach((quad, fIdx) => {
+          const center = new THREE.Vector3();
+          quad.forEach(vIdx => center.add(qm.vertices[vIdx].clone().applyMatrix4(meshMatrix)));
+          center.divideScalar(quad.length);
+          const cNDC = center.project(this.engine.activeCamera);
+          if (cNDC.z < 1.0) {
+            const cx = (cNDC.x * 0.5 + 0.5) * rect.width;
+            const cy = (-cNDC.y * 0.5 + 0.5) * rect.height;
+            if (Math.hypot(mx - cx, my - cy) <= radius) {
+              if (this.isFaceVisible(fIdx, qm, meshMatrix, isWireframe)) {
+                this.meshEditor.selectedFaces.add(fIdx);
+                quad.forEach(vIdx => this.meshEditor.selectedVertices.add(vIdx));
+              }
+            }
+          }
+        });
       }
+
       this.meshEditor.rebuildEditHelpers();
       this.meshEditor.updateTransformAnchor();
     } else {
@@ -324,34 +422,72 @@ export class SelectionTools {
     const boxMaxX = Math.max(x1, x2);
     const boxMinY = Math.min(y1, y2);
     const boxMaxY = Math.max(y1, y2);
+    const isWireframe = (this.engine.currentShading === 'wireframe');
 
     const rect = this.engine.canvas.getBoundingClientRect();
 
     if (this.uiManager.currentSubmode !== 'object' && this.meshEditor.activeMesh && this.meshEditor.activeMesh.userData.quadMesh) {
       const qm = this.meshEditor.activeMesh.userData.quadMesh;
+      const meshMatrix = this.meshEditor.activeMesh.matrixWorld;
+
       if (!shiftKey) {
         this.meshEditor.selectedVertices.clear();
         this.meshEditor.selectedFaces.clear();
         this.meshEditor.selectedEdges.clear();
       }
 
-      for (let i = 0; i < qm.vertices.length; i++) {
-        const vWorld = qm.vertices[i].clone().applyMatrix4(this.meshEditor.activeMesh.matrixWorld);
-        const vNDC = vWorld.project(this.engine.activeCamera);
-        if (vNDC.z < 1.0) {
-          const sx = (vNDC.x * 0.5 + 0.5) * rect.width;
-          const sy = (-vNDC.y * 0.5 + 0.5) * rect.height;
-          if (sx >= boxMinX && sx <= boxMaxX && sy >= boxMinY && sy <= boxMaxY) {
-            this.meshEditor.selectedVertices.add(i);
+      if (this.uiManager.currentSubmode === 'vertex') {
+        for (let i = 0; i < qm.vertices.length; i++) {
+          const vWorld = qm.vertices[i].clone().applyMatrix4(meshMatrix);
+          const vNDC = vWorld.project(this.engine.activeCamera);
+          if (vNDC.z < 1.0) {
+            const sx = (vNDC.x * 0.5 + 0.5) * rect.width;
+            const sy = (-vNDC.y * 0.5 + 0.5) * rect.height;
+            if (sx >= boxMinX && sx <= boxMaxX && sy >= boxMinY && sy <= boxMaxY) {
+              if (this.isVertexVisible(i, qm, meshMatrix, isWireframe)) {
+                this.meshEditor.selectedVertices.add(i);
+              }
+            }
           }
         }
-      }
-
-      if (this.uiManager.currentSubmode === 'face') {
+      } else if (this.uiManager.currentSubmode === 'edge') {
+        qm.edges.forEach((edge, eIdx) => {
+          const vA = qm.vertices[edge[0]].clone().applyMatrix4(meshMatrix).project(this.engine.activeCamera);
+          const vB = qm.vertices[edge[1]].clone().applyMatrix4(meshMatrix).project(this.engine.activeCamera);
+          if (vA.z < 1.0 && vB.z < 1.0) {
+            const ax = (vA.x * 0.5 + 0.5) * rect.width;
+            const ay = (-vA.y * 0.5 + 0.5) * rect.height;
+            const bx = (vB.x * 0.5 + 0.5) * rect.width;
+            const by = (-vB.y * 0.5 + 0.5) * rect.height;
+            const inBox = (ax >= boxMinX && ax <= boxMaxX && ay >= boxMinY && ay <= boxMaxY) &&
+                          (bx >= boxMinX && bx <= boxMaxX && by >= boxMinY && by <= boxMaxY);
+            if (inBox) {
+              if (this.isEdgeVisible(eIdx, qm, meshMatrix, isWireframe)) {
+                this.meshEditor.selectedEdges.add(eIdx);
+                this.meshEditor.selectedVertices.add(edge[0]);
+                this.meshEditor.selectedVertices.add(edge[1]);
+              }
+            }
+          }
+        });
+      } else if (this.uiManager.currentSubmode === 'face') {
         qm.quads.forEach((quad, fIdx) => {
-          const allEnclosed = quad.every(vIdx => this.meshEditor.selectedVertices.has(vIdx));
-          if (allEnclosed) {
-            this.meshEditor.selectedFaces.add(fIdx);
+          let allVertsInBox = true;
+          for (let vIdx of quad) {
+            const vNDC = qm.vertices[vIdx].clone().applyMatrix4(meshMatrix).project(this.engine.activeCamera);
+            if (vNDC.z >= 1.0) { allVertsInBox = false; break; }
+            const sx = (vNDC.x * 0.5 + 0.5) * rect.width;
+            const sy = (-vNDC.y * 0.5 + 0.5) * rect.height;
+            if (!(sx >= boxMinX && sx <= boxMaxX && sy >= boxMinY && sy <= boxMaxY)) {
+              allVertsInBox = false;
+              break;
+            }
+          }
+          if (allVertsInBox) {
+            if (this.isFaceVisible(fIdx, qm, meshMatrix, isWireframe)) {
+              this.meshEditor.selectedFaces.add(fIdx);
+              quad.forEach(vIdx => this.meshEditor.selectedVertices.add(vIdx));
+            }
           }
         });
       }
@@ -360,7 +496,6 @@ export class SelectionTools {
       this.meshEditor.updateTransformAnchor();
     } else {
       // Object Mode Box Select: True 2D AABB Overlap / Crossing test
-      // If the selection rectangle overlaps or crosses ANY part of the object: MATCHED!
       const matched = [];
       this.sceneManager.getAllMeshes().forEach((mesh) => {
         if (mesh.visible) {
@@ -389,6 +524,7 @@ export class SelectionTools {
 
   applyLassoSelection(points, shiftKey) {
     const rect = this.engine.canvas.getBoundingClientRect();
+    const isWireframe = (this.engine.currentShading === 'wireframe');
 
     const isPointInPoly = (px, py, poly) => {
       let inside = false;
@@ -403,19 +539,65 @@ export class SelectionTools {
 
     if (this.uiManager.currentSubmode !== 'object' && this.meshEditor.activeMesh && this.meshEditor.activeMesh.userData.quadMesh) {
       const qm = this.meshEditor.activeMesh.userData.quadMesh;
-      if (!shiftKey) this.meshEditor.selectedVertices.clear();
+      const meshMatrix = this.meshEditor.activeMesh.matrixWorld;
 
-      for (let i = 0; i < qm.vertices.length; i++) {
-        const vWorld = qm.vertices[i].clone().applyMatrix4(this.meshEditor.activeMesh.matrixWorld);
-        const vNDC = vWorld.project(this.engine.activeCamera);
-        if (vNDC.z < 1.0) {
-          const sx = (vNDC.x * 0.5 + 0.5) * rect.width;
-          const sy = (-vNDC.y * 0.5 + 0.5) * rect.height;
-          if (isPointInPoly(sx, sy, points)) {
-            this.meshEditor.selectedVertices.add(i);
+      if (!shiftKey) {
+        this.meshEditor.selectedVertices.clear();
+        this.meshEditor.selectedFaces.clear();
+        this.meshEditor.selectedEdges.clear();
+      }
+
+      if (this.uiManager.currentSubmode === 'vertex') {
+        for (let i = 0; i < qm.vertices.length; i++) {
+          const vWorld = qm.vertices[i].clone().applyMatrix4(meshMatrix);
+          const vNDC = vWorld.project(this.engine.activeCamera);
+          if (vNDC.z < 1.0) {
+            const sx = (vNDC.x * 0.5 + 0.5) * rect.width;
+            const sy = (-vNDC.y * 0.5 + 0.5) * rect.height;
+            if (isPointInPoly(sx, sy, points)) {
+              if (this.isVertexVisible(i, qm, meshMatrix, isWireframe)) {
+                this.meshEditor.selectedVertices.add(i);
+              }
+            }
           }
         }
+      } else if (this.uiManager.currentSubmode === 'edge') {
+        qm.edges.forEach((edge, eIdx) => {
+          const vA = qm.vertices[edge[0]].clone().applyMatrix4(meshMatrix).project(this.engine.activeCamera);
+          const vB = qm.vertices[edge[1]].clone().applyMatrix4(meshMatrix).project(this.engine.activeCamera);
+          if (vA.z < 1.0 && vB.z < 1.0) {
+            const ax = (vA.x * 0.5 + 0.5) * rect.width;
+            const ay = (-vA.y * 0.5 + 0.5) * rect.height;
+            const bx = (vB.x * 0.5 + 0.5) * rect.width;
+            const by = (-vB.y * 0.5 + 0.5) * rect.height;
+            if (isPointInPoly(ax, ay, points) && isPointInPoly(bx, by, points)) {
+              if (this.isEdgeVisible(eIdx, qm, meshMatrix, isWireframe)) {
+                this.meshEditor.selectedEdges.add(eIdx);
+                this.meshEditor.selectedVertices.add(edge[0]);
+                this.meshEditor.selectedVertices.add(edge[1]);
+              }
+            }
+          }
+        });
+      } else if (this.uiManager.currentSubmode === 'face') {
+        qm.quads.forEach((quad, fIdx) => {
+          let allInPoly = true;
+          for (let vIdx of quad) {
+            const vNDC = qm.vertices[vIdx].clone().applyMatrix4(meshMatrix).project(this.engine.activeCamera);
+            if (vNDC.z >= 1.0) { allInPoly = false; break; }
+            const sx = (vNDC.x * 0.5 + 0.5) * rect.width;
+            const sy = (-vNDC.y * 0.5 + 0.5) * rect.height;
+            if (!isPointInPoly(sx, sy, points)) { allInPoly = false; break; }
+          }
+          if (allInPoly) {
+            if (this.isFaceVisible(fIdx, qm, meshMatrix, isWireframe)) {
+              this.meshEditor.selectedFaces.add(fIdx);
+              quad.forEach(vIdx => this.meshEditor.selectedVertices.add(vIdx));
+            }
+          }
+        });
       }
+
       this.meshEditor.rebuildEditHelpers();
       this.meshEditor.updateTransformAnchor();
     } else {
