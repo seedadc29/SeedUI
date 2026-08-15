@@ -433,6 +433,47 @@
       </div>
     </div>
 
+    <!-- Blender Right-Click Context Menu (Menu de Contexto do Clique Direito) -->
+    <div class="blender-right-click-menu hidden" id="blender-right-click-menu">
+      <div class="rc-menu-header">
+        <span id="rc-menu-title">Opções do Objeto</span>
+      </div>
+      <button class="rc-menu-item" data-action="shade-smooth">
+        <span class="item-icon">✨</span>
+        <span>Sombreamento Suave (Shade Smooth)</span>
+      </button>
+      <button class="rc-menu-item" data-action="shade-flat">
+        <span class="item-icon">🧊</span>
+        <span>Sombreamento Plano (Shade Flat)</span>
+      </button>
+      <button class="rc-menu-item" data-action="shade-auto">
+        <span class="item-icon">📐</span>
+        <span>Auto Suave (30°)</span>
+      </button>
+      <div class="rc-menu-divider"></div>
+      <button class="rc-menu-item" data-action="extrude">
+        <span class="item-icon">⏏️</span>
+        <span>Extrusão (E)</span>
+      </button>
+      <button class="rc-menu-item" data-action="inset">
+        <span class="item-icon">🔲</span>
+        <span>Inserir Face (I)</span>
+      </button>
+      <button class="rc-menu-item" data-action="subdivide">
+        <span class="item-icon">🪟</span>
+        <span>Subdividir Malha</span>
+      </button>
+      <div class="rc-menu-divider"></div>
+      <button class="rc-menu-item" data-action="duplicate">
+        <span class="item-icon">📋</span>
+        <span>Duplicar Objeto (Shift+D)</span>
+      </button>
+      <button class="rc-menu-item text-danger" data-action="delete">
+        <span class="item-icon">🗑️</span>
+        <span>Excluir (Del / X)</span>
+      </button>
+    </div>
+
     <!-- Diagnostics & Telemetry Modal -->
     <div class="diagnostics-modal hidden" id="diagnostics-modal">
       <div class="diagnostics-modal-backdrop"></div>

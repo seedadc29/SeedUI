@@ -13,12 +13,12 @@ export class SceneManager {
     this.onSelectionChange = null;
     this.onPrimitiveCreated = null;
 
-    // Blender 4.1 Viewport Solid Material
+    // Blender 4.1 Viewport Solid Material (Flat Shading by default)
     this.defaultMaterial = new THREE.MeshStandardMaterial({
       color: 0x9096a2,
       roughness: 0.65,
       metalness: 0.05,
-      flatShading: false,
+      flatShading: true,
       side: THREE.DoubleSide
     });
 
@@ -515,6 +515,39 @@ export class SceneManager {
 
   getAllMeshes() {
     return this.objects;
+  }
+
+  setShadeMode(mode, targetMesh = null, pushHistory = true) {
+    const mesh = targetMesh || this.getSelectedObject();
+    if (!mesh || !mesh.material) return;
+
+    const prevMode = mesh.userData.shading || (mesh.material.flatShading ? 'flat' : 'smooth');
+
+    if (mode === 'smooth') {
+      mesh.material.flatShading = false;
+      mesh.material.needsUpdate = true;
+      mesh.userData.shading = 'smooth';
+    } else if (mode === 'flat') {
+      mesh.material.flatShading = true;
+      mesh.material.needsUpdate = true;
+      mesh.userData.shading = 'flat';
+    } else if (mode === 'auto') {
+      mesh.material.flatShading = false;
+      mesh.material.needsUpdate = true;
+      mesh.userData.shading = 'auto';
+    }
+
+    if (pushHistory && this.historyManager) {
+      this.historyManager.push({
+        description: `Sombreamento: ${mode === 'smooth' ? 'Suave' : 'Plano'}`,
+        undo: () => {
+          this.setShadeMode(prevMode, mesh, false);
+        },
+        redo: () => {
+          this.setShadeMode(mode, mesh, false);
+        }
+      });
+    }
   }
 
   toggleEdges(show) {

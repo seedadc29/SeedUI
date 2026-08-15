@@ -75,6 +75,7 @@ export class UIManager {
     this.initInspector();
     this.initPaintUI();
     this.initShiftAContextMenu();
+    this.initRightClickContextMenu();
     this.initOperatorPanelEvents();
     this.initRaycasting();
     this.initShortcuts();
@@ -477,6 +478,79 @@ export class UIManager {
     } else {
       this.closeShiftAMenu();
     }
+  }
+
+  // --- BLENDER RIGHT-CLICK CONTEXT MENU ---
+
+  initRightClickContextMenu() {
+    const rcMenu = document.getElementById('blender-right-click-menu');
+    if (!rcMenu) return;
+
+    this.engine.canvas.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const rect = this.engine.canvas.getBoundingClientRect();
+      this.mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      this.mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      this.raycaster.setFromCamera(this.mouse, this.engine.activeCamera);
+
+      if (this.currentSubmode === 'object') {
+        const meshes = this.sceneManager.getAllMeshes().filter((m) => m.visible);
+        const intersects = this.raycaster.intersectObjects(meshes, false);
+        if (intersects.length > 0) {
+          this.sceneManager.selectObject(intersects[0].object, false);
+        }
+      }
+
+      // Title
+      const titleEl = document.getElementById('rc-menu-title');
+      if (titleEl) {
+        titleEl.textContent = this.currentSubmode === 'object' ? 'Menu de Contexto do Objeto' : 'Menu de Contexto de Edição';
+      }
+
+      // Position within screen boundaries
+      const posX = Math.max(10, Math.min(e.clientX, window.innerWidth - 240));
+      const posY = Math.max(35, Math.min(e.clientY, window.innerHeight - 300));
+      rcMenu.style.left = `${posX}px`;
+      rcMenu.style.top = `${posY}px`;
+      rcMenu.classList.remove('hidden');
+    });
+
+    window.addEventListener('click', (e) => {
+      if (!rcMenu.contains(e.target)) {
+        rcMenu.classList.add('hidden');
+      }
+    });
+
+    const items = rcMenu.querySelectorAll('.rc-menu-item');
+    items.forEach((item) => {
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const action = item.dataset.action;
+        rcMenu.classList.add('hidden');
+
+        if (action === 'shade-smooth') {
+          this.sceneManager.setShadeMode('smooth');
+        } else if (action === 'shade-flat') {
+          this.sceneManager.setShadeMode('flat');
+        } else if (action === 'shade-auto') {
+          this.sceneManager.setShadeMode('auto');
+        } else if (action === 'extrude') {
+          if (this.currentSubmode === 'object') this.setSubmode('face');
+          this.meshEditor.extrude();
+        } else if (action === 'inset') {
+          if (this.currentSubmode === 'object') this.setSubmode('face');
+          this.meshEditor.inset();
+        } else if (action === 'subdivide') {
+          this.meshEditor.subdivide();
+        } else if (action === 'duplicate') {
+          this.sceneManager.duplicateObject();
+        } else if (action === 'delete') {
+          this.sceneManager.deleteObject();
+        }
+      });
+    });
   }
 
   // --- OPERATOR PARAMETERS PANEL ---
