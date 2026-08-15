@@ -80,6 +80,60 @@ export class UIManager {
     this.initOperatorPanelEvents();
     this.initRaycasting();
     this.initShortcuts();
+    this.initThemeSwitcher();
+  }
+
+  initThemeSwitcher() {
+    const themeBtn = document.getElementById('btn-toggle-theme');
+    const savedTheme = localStorage.getItem('seed3d_theme') || 'opencode';
+    this.setTheme(savedTheme);
+
+    if (themeBtn) {
+      themeBtn.addEventListener('click', () => {
+        const nextTheme = this.currentTheme === 'opencode' ? 'glass' : 'opencode';
+        this.setTheme(nextTheme);
+      });
+    }
+  }
+
+  setTheme(theme) {
+    this.currentTheme = theme;
+    localStorage.setItem('seed3d_theme', theme);
+
+    const btnIcon = document.getElementById('theme-btn-icon');
+    const btnLabel = document.getElementById('theme-btn-label');
+
+    if (theme === 'opencode') {
+      document.body.classList.add('theme-opencode');
+      document.body.classList.remove('theme-glass');
+      if (btnIcon) btnIcon.textContent = '💎';
+      if (btnLabel) btnLabel.textContent = 'Vidro';
+      
+      // Update Three.js Grid & Background for OpenCode Underground Theme
+      if (this.engine && this.engine.scene) {
+        this.engine.scene.background = new THREE.Color(0x06070a);
+        if (this.engine.grid) {
+          this.engine.grid.material.color.set(0x00f0ff);
+          this.engine.grid.material.opacity = 0.30;
+          this.engine.grid.material.transparent = true;
+        }
+      }
+    } else {
+      document.body.classList.remove('theme-opencode');
+      document.body.classList.add('theme-glass');
+      if (btnIcon) btnIcon.textContent = '📟';
+      if (btnLabel) btnLabel.textContent = 'OpenCode';
+
+      // Update Three.js Grid & Background for Liquid Glass Theme
+      if (this.engine && this.engine.scene) {
+        this.engine.scene.background = new THREE.Color(0x282830);
+        if (this.engine.grid) {
+          this.engine.grid.material.color.set(0x484856);
+          this.engine.grid.material.opacity = 1.0;
+          this.engine.grid.material.transparent = false;
+        }
+      }
+    }
   }
 
   initFileMenu() {
