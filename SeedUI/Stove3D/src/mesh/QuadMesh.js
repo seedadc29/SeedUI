@@ -392,18 +392,13 @@ export class QuadMesh {
     return { n0, n1, n2, n3 };
   }
 
-  // --- THREE.JS BUFFER GENERATION (OPTION 2: TRUE BILINEAR QUAD SHADER GEOMETRY) ---
+  // --- THREE.JS BUFFER GENERATION (OPTION 3: 2x2 SUBDIVIDED QUAD GRID) ---
 
   toBufferGeometry() {
     const geo = new THREE.BufferGeometry();
     const positions = [];
     const normals = [];
     const uvs = [];
-    const qC0 = [];
-    const qC1 = [];
-    const qC2 = [];
-    const qC3 = [];
-    const isQ = [];
 
     this.quads.forEach((face) => {
       const unique = Array.from(new Set(face));
@@ -415,24 +410,50 @@ export class QuadMesh {
 
         const { n0, n1, n2, n3 } = this.computeQuadCornerNormals(v0, v1, v2, v3);
 
-        // Tri 1: (v0, v1, v2)
-        positions.push(v0.x, v0.y, v0.z, v1.x, v1.y, v1.z, v2.x, v2.y, v2.z);
-        normals.push(n0.x, n0.y, n0.z, n1.x, n1.y, n1.z, n2.x, n2.y, n2.z);
-        uvs.push(0, 0, 1, 0, 1, 1);
+        // Midpoints
+        const m01 = new THREE.Vector3().addVectors(v0, v1).multiplyScalar(0.5);
+        const m12 = new THREE.Vector3().addVectors(v1, v2).multiplyScalar(0.5);
+        const m23 = new THREE.Vector3().addVectors(v2, v3).multiplyScalar(0.5);
+        const m30 = new THREE.Vector3().addVectors(v3, v0).multiplyScalar(0.5);
+        const mCenter = new THREE.Vector3(
+          (v0.x + v1.x + v2.x + v3.x) * 0.25,
+          (v0.y + v1.y + v2.y + v3.y) * 0.25,
+          (v0.z + v1.z + v2.z + v3.z) * 0.25
+        );
 
-        // Tri 2: (v0, v2, v3)
-        positions.push(v0.x, v0.y, v0.z, v2.x, v2.y, v2.z, v3.x, v3.y, v3.z);
-        normals.push(n0.x, n0.y, n0.z, n2.x, n2.y, n2.z, n3.x, n3.y, n3.z);
-        uvs.push(0, 0, 1, 1, 0, 1);
+        // Midpoint Normals
+        const n01 = new THREE.Vector3().addVectors(n0, n1).normalize();
+        const n12 = new THREE.Vector3().addVectors(n1, n2).normalize();
+        const n23 = new THREE.Vector3().addVectors(n2, n3).normalize();
+        const n30 = new THREE.Vector3().addVectors(n3, n0).normalize();
+        const nCenter = new THREE.Vector3(
+          (n0.x + n1.x + n2.x + n3.x) * 0.25,
+          (n0.y + n1.y + n2.y + n3.y) * 0.25,
+          (n0.z + n1.z + n2.z + n3.z) * 0.25
+        ).normalize();
 
-        // Corner attributes for all 6 vertices of the Quad
-        for (let i = 0; i < 6; i++) {
-          qC0.push(v0.x, v0.y, v0.z);
-          qC1.push(v1.x, v1.y, v1.z);
-          qC2.push(v2.x, v2.y, v2.z);
-          qC3.push(v3.x, v3.y, v3.z);
-          isQ.push(1.0);
-        }
+        const addTri = (pA, pB, pC, nA, nB, nC, uA, uB, uC) => {
+          positions.push(pA.x, pA.y, pA.z, pB.x, pB.y, pB.z, pC.x, pC.y, pC.z);
+          normals.push(nA.x, nA.y, nA.z, nB.x, nB.y, nB.z, nC.x, nC.y, nC.z);
+          uvs.push(uA[0], uA[1], uB[0], uB[1], uC[0], uC[1]);
+        };
+
+        // Sub-Quad 0: [v0, m01, mCenter, m30]
+        addTri(v0, m01, mCenter, n0, n01, nCenter, [0, 0], [0.5, 0], [0.5, 0.5]);
+        addTri(v0, mCenter, m30, n0, nCenter, n30, [0, 0], [0.5, 0.5], [0, 0.5]);
+
+        // Sub-Quad 1: [m01, v1, m12, mCenter]
+        addTri(m01, v1, m12, n01, n1, n12, [0.5, 0], [1, 0], [1, 0.5]);
+        addTri(m01, m12, mCenter, n01, n12, nCenter, [0.5, 0], [1, 0.5], [0.5, 0.5]);
+
+        // Sub-Quad 2: [mCenter, m12, v2, m23]
+        addTri(mCenter, m12, v2, nCenter, n12, n2, [0.5, 0.5], [1, 0.5], [1, 1]);
+        addTri(mCenter, v2, m23, nCenter, n2, n23, [0.5, 0.5], [1, 1], [0.5, 1]);
+
+        // Sub-Quad 3: [m30, mCenter, m23, v3]
+        addTri(m30, mCenter, m23, n30, nCenter, n23, [0, 0.5], [0.5, 0.5], [0.5, 1]);
+        addTri(m30, m23, v3, n30, n23, n3, [0, 0.5], [0.5, 1], [0, 1]);
+
       } else if (unique.length === 3) {
         const v0 = this.vertices[unique[0]];
         const v1 = this.vertices[unique[1]];
@@ -445,23 +466,12 @@ export class QuadMesh {
         positions.push(v0.x, v0.y, v0.z, v1.x, v1.y, v1.z, v2.x, v2.y, v2.z);
         normals.push(triNormal.x, triNormal.y, triNormal.z, triNormal.x, triNormal.y, triNormal.z, triNormal.x, triNormal.y, triNormal.z);
         uvs.push(0, 0, 1, 0, 0.5, 1);
-
-        for (let i = 0; i < 3; i++) {
-          qC0.push(0, 0, 0); qC1.push(0, 0, 0); qC2.push(0, 0, 0); qC3.push(0, 0, 0);
-          isQ.push(0.0);
-        }
       }
     });
 
     geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
     geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
     geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-    geo.setAttribute('quadCorner0', new THREE.Float32BufferAttribute(qC0, 3));
-    geo.setAttribute('quadCorner1', new THREE.Float32BufferAttribute(qC1, 3));
-    geo.setAttribute('quadCorner2', new THREE.Float32BufferAttribute(qC2, 3));
-    geo.setAttribute('quadCorner3', new THREE.Float32BufferAttribute(qC3, 3));
-    geo.setAttribute('isQuad', new THREE.Float32BufferAttribute(isQ, 1));
-
     geo.computeBoundingBox();
     geo.computeBoundingSphere();
 
@@ -488,10 +498,6 @@ export class QuadMesh {
   updateGeometryPositions(geo, lineMesh) {
     const posAttr = geo.attributes.position;
     const normAttr = geo.attributes.normal;
-    const qC0Attr = geo.attributes.quadCorner0;
-    const qC1Attr = geo.attributes.quadCorner1;
-    const qC2Attr = geo.attributes.quadCorner2;
-    const qC3Attr = geo.attributes.quadCorner3;
     let ptr = 0;
 
     this.quads.forEach((face) => {
@@ -504,25 +510,48 @@ export class QuadMesh {
 
         const { n0, n1, n2, n3 } = this.computeQuadCornerNormals(v0, v1, v2, v3);
 
-        // Tri 1: (v0, v1, v2)
-        posAttr.setXYZ(ptr, v0.x, v0.y, v0.z); normAttr.setXYZ(ptr, n0.x, n0.y, n0.z); ptr++;
-        posAttr.setXYZ(ptr, v1.x, v1.y, v1.z); normAttr.setXYZ(ptr, n1.x, n1.y, n1.z); ptr++;
-        posAttr.setXYZ(ptr, v2.x, v2.y, v2.z); normAttr.setXYZ(ptr, n2.x, n2.y, n2.z); ptr++;
+        const m01 = { x: (v0.x + v1.x) * 0.5, y: (v0.y + v1.y) * 0.5, z: (v0.z + v1.z) * 0.5 };
+        const m12 = { x: (v1.x + v2.x) * 0.5, y: (v1.y + v2.y) * 0.5, z: (v1.z + v2.z) * 0.5 };
+        const m23 = { x: (v2.x + v3.x) * 0.5, y: (v2.y + v3.y) * 0.5, z: (v2.z + v3.z) * 0.5 };
+        const m30 = { x: (v3.x + v0.x) * 0.5, y: (v3.y + v0.y) * 0.5, z: (v3.z + v0.z) * 0.5 };
+        const mCenter = {
+          x: (v0.x + v1.x + v2.x + v3.x) * 0.25,
+          y: (v0.y + v1.y + v2.y + v3.y) * 0.25,
+          z: (v0.z + v1.z + v2.z + v3.z) * 0.25
+        };
 
-        // Tri 2: (v0, v2, v3)
-        posAttr.setXYZ(ptr, v0.x, v0.y, v0.z); normAttr.setXYZ(ptr, n0.x, n0.y, n0.z); ptr++;
-        posAttr.setXYZ(ptr, v2.x, v2.y, v2.z); normAttr.setXYZ(ptr, n2.x, n2.y, n2.z); ptr++;
-        posAttr.setXYZ(ptr, v3.x, v3.y, v3.z); normAttr.setXYZ(ptr, n3.x, n3.y, n3.z); ptr++;
+        const n01 = new THREE.Vector3().addVectors(n0, n1).normalize();
+        const n12 = new THREE.Vector3().addVectors(n1, n2).normalize();
+        const n23 = new THREE.Vector3().addVectors(n2, n3).normalize();
+        const n30 = new THREE.Vector3().addVectors(n3, n0).normalize();
+        const nCenter = new THREE.Vector3(
+          (n0.x + n1.x + n2.x + n3.x) * 0.25,
+          (n0.y + n1.y + n2.y + n3.y) * 0.25,
+          (n0.z + n1.z + n2.z + n3.z) * 0.25
+        ).normalize();
 
-        if (qC0Attr) {
-          const start = ptr - 6;
-          for (let i = 0; i < 6; i++) {
-            qC0Attr.setXYZ(start + i, v0.x, v0.y, v0.z);
-            qC1Attr.setXYZ(start + i, v1.x, v1.y, v1.z);
-            qC2Attr.setXYZ(start + i, v2.x, v2.y, v2.z);
-            qC3Attr.setXYZ(start + i, v3.x, v3.y, v3.z);
-          }
-        }
+        const setTri = (pA, pB, pC, nA, nB, nC) => {
+          posAttr.setXYZ(ptr, pA.x, pA.y, pA.z); normAttr.setXYZ(ptr, nA.x, nA.y, nA.z); ptr++;
+          posAttr.setXYZ(ptr, pB.x, pB.y, pB.z); normAttr.setXYZ(ptr, nB.x, nB.y, nB.z); ptr++;
+          posAttr.setXYZ(ptr, pC.x, pC.y, pC.z); normAttr.setXYZ(ptr, nC.x, nC.y, nC.z); ptr++;
+        };
+
+        // Sub-Quad 0
+        setTri(v0, m01, mCenter, n0, n01, nCenter);
+        setTri(v0, mCenter, m30, n0, nCenter, n30);
+
+        // Sub-Quad 1
+        setTri(m01, v1, m12, n01, n1, n12);
+        setTri(m01, m12, mCenter, n01, n12, nCenter);
+
+        // Sub-Quad 2
+        setTri(mCenter, m12, v2, nCenter, n12, n2);
+        setTri(mCenter, v2, m23, nCenter, n2, n23);
+
+        // Sub-Quad 3
+        setTri(m30, mCenter, m23, n30, nCenter, n23);
+        setTri(m30, m23, v3, n30, n23, n3);
+
       } else if (unique.length === 3) {
         const v0 = this.vertices[unique[0]];
         const v1 = this.vertices[unique[1]];
@@ -540,12 +569,6 @@ export class QuadMesh {
 
     posAttr.needsUpdate = true;
     if (normAttr) normAttr.needsUpdate = true;
-    if (qC0Attr) {
-      qC0Attr.needsUpdate = true;
-      qC1Attr.needsUpdate = true;
-      qC2Attr.needsUpdate = true;
-      qC3Attr.needsUpdate = true;
-    }
     geo.computeBoundingBox();
     geo.computeBoundingSphere();
 

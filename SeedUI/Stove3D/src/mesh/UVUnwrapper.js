@@ -36,16 +36,29 @@ export class UVUnwrapper {
 
       const unique = Array.from(new Set(face));
       if (unique.length === 4) {
-        // Quad face: 2 Triangles -> 6 UV vertices
-        // Tri 1: v0, v1, v2
-        uvs.push(uMin, vMin);
-        uvs.push(uMax, vMin);
-        uvs.push(uMax, vMax);
+        // Quad face: 2x2 Subdivided Quad Grid (8 Triangles)
+        const uMid = (uMin + uMax) * 0.5;
+        const vMid = (vMin + vMax) * 0.5;
 
-        // Tri 2: v0, v2, v3
-        uvs.push(uMin, vMin);
-        uvs.push(uMax, vMax);
-        uvs.push(uMin, vMax);
+        const addTriUV = (uA, vA, uB, vB, uC, vC) => {
+          uvs.push(uA, vA, uB, vB, uC, vC);
+        };
+
+        // Sub-Quad 0
+        addTriUV(uMin, vMin, uMid, vMin, uMid, vMid);
+        addTriUV(uMin, vMin, uMid, vMid, uMin, vMid);
+
+        // Sub-Quad 1
+        addTriUV(uMid, vMin, uMax, vMin, uMax, vMid);
+        addTriUV(uMid, vMin, uMax, vMid, uMid, vMid);
+
+        // Sub-Quad 2
+        addTriUV(uMid, vMid, uMax, vMid, uMax, vMax);
+        addTriUV(uMid, vMid, uMax, vMax, uMid, vMax);
+
+        // Sub-Quad 3
+        addTriUV(uMin, vMid, uMid, vMid, uMid, vMax);
+        addTriUV(uMin, vMid, uMid, vMax, uMin, vMax);
       } else if (unique.length === 3) {
         // Triangle face: 1 Triangle -> 3 UV vertices
         uvs.push(uMin, vMin);
