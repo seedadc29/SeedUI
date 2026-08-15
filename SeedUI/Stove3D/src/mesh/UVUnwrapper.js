@@ -36,16 +36,18 @@ export class UVUnwrapper {
 
       const unique = Array.from(new Set(face));
       if (unique.length === 4) {
-        // Quad face: 2 Triangles -> 6 UV vertices
-        // Tri 1: v0, v1, v2
-        uvs.push(uMin, vMin);
-        uvs.push(uMax, vMin);
-        uvs.push(uMax, vMax);
+        // Quad face: 4 Radial Triangles meeting at center
+        const uMid = (uMin + uMax) * 0.5;
+        const vMid = (vMin + vMax) * 0.5;
 
-        // Tri 2: v0, v2, v3
-        uvs.push(uMin, vMin);
-        uvs.push(uMax, vMax);
-        uvs.push(uMin, vMax);
+        // Tri 0: (v0, v1, vCenter)
+        uvs.push(uMin, vMin, uMax, vMin, uMid, vMid);
+        // Tri 1: (v1, v2, vCenter)
+        uvs.push(uMax, vMin, uMax, vMax, uMid, vMid);
+        // Tri 2: (v2, v3, vCenter)
+        uvs.push(uMax, vMax, uMin, vMax, uMid, vMid);
+        // Tri 3: (v3, v0, vCenter)
+        uvs.push(uMin, vMax, uMin, vMin, uMid, vMid);
       } else if (unique.length === 3) {
         // Triangle face: 1 Triangle -> 3 UV vertices
         uvs.push(uMin, vMin);
