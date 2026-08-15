@@ -5,5 +5,6 @@ echo ========================================================
 echo   Iniciando Blender Pro 3D (Interface Blender 4.1 Pura)
 echo ========================================================
 echo.
-npm run dev
+start http://localhost:5175/
+call npx vite --port 5175 --open
 pause
