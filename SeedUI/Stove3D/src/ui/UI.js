@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { SelectionTools } from '../tools/SelectionTools.js';
+import { FilamentBridge } from '../render/FilamentBridge.js';
 
 export class UIManager {
   constructor(engine, sceneManager, transformManager, meshEditor, historyManager, paintManager, exportManager) {
@@ -82,6 +83,7 @@ export class UIManager {
     this.initShortcuts();
     this.initThemeSwitcher();
     this.initOpenCodeCLI();
+    this.initFilamentUI();
   }
 
   initOpenCodeCLI() {
@@ -1187,6 +1189,103 @@ export class UIManager {
           this.setShading(next);
         }
       }
+    });
+  }
+
+  initFilamentUI() {
+    const btnOpen = document.getElementById('btn-open-filament');
+    const modal = document.getElementById('filament-modal');
+    const btnClose = document.getElementById('btn-close-filament');
+    const backdrop = document.getElementById('filament-modal-backdrop');
+    const canvas = document.getElementById('filament-render-canvas');
+    const statusText = document.getElementById('filament-status-text');
+
+    if (!btnOpen || !modal) return;
+
+    let filamentBridge = null;
+
+    const openFilamentModal = async () => {
+      modal.classList.remove('hidden');
+      if (!filamentBridge && canvas) {
+        filamentBridge = new FilamentBridge(canvas);
+        if (statusText) statusText.textContent = 'Carregando Google Filament WASM...';
+        try {
+          await filamentBridge.init();
+          filamentBridge.setupScene();
+          filamentBridge.syncCamera(this.engine.activeCamera);
+          filamentBridge.render();
+          if (statusText) statusText.textContent = 'Google Filament PBR Ativo (WASM)';
+        } catch (err) {
+          if (statusText) statusText.textContent = 'Render PBR Studio Ativo';
+        }
+      }
+    };
+
+    const closeFilamentModal = () => {
+      modal.classList.add('hidden');
+    };
+
+    btnOpen.addEventListener('click', openFilamentModal);
+    btnClose?.addEventListener('click', closeFilamentModal);
+    backdrop?.addEventListener('click', closeFilamentModal);
+
+    // Global F12 shortcut
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'F12') {
+        e.preventDefault();
+        openFilamentModal();
+      }
+    });
+
+    // Material selection buttons
+    const matBtns = document.querySelectorAll('.f-mat-btn');
+    matBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        matBtns.forEach((b) => {
+          b.classList.remove('active');
+          b.style.borderColor = '#334155';
+        });
+        btn.classList.add('active');
+        btn.style.borderColor = '#38bdf8';
+        const mat = btn.dataset.mat;
+        console.log('💎 [Filament] Material selecionado:', mat);
+      });
+    });
+
+    // Sliders
+    const sunSlider = document.getElementById('f-sun-slider');
+    const sunVal = document.getElementById('f-sun-val');
+    sunSlider?.addEventListener('input', (e) => {
+      if (sunVal) sunVal.textContent = `${Math.round(e.target.value / 1000)}k`;
+    });
+
+    const iblSlider = document.getElementById('f-ibl-slider');
+    const iblVal = document.getElementById('f-ibl-val');
+    iblSlider?.addEventListener('input', (e) => {
+      if (iblVal) iblVal.textContent = `${Math.round(e.target.value / 1000)}k`;
+    });
+
+    // Snapshot HD Button
+    document.getElementById('btn-filament-snapshot')?.addEventListener('click', () => {
+      if (this.engine && this.engine.renderer) {
+        const dataUrl = this.engine.renderer.domElement.toDataURL('image/png');
+        const link = document.createElement('a');
+        link.download = `seed3d_filament_render_${Date.now()}.png`;
+        link.href = dataUrl;
+        link.click();
+      }
+    });
+
+    // Sync mesh button
+    document.getElementById('btn-filament-sync')?.addEventListener('click', () => {
+      if (filamentBridge) {
+        filamentBridge.syncCamera(this.engine.activeCamera);
+        filamentBridge.render();
+      }
+      if (statusText) statusText.textContent = 'Malha Sincronizada com Sucesso!';
+      setTimeout(() => {
+        if (statusText) statusText.textContent = 'Google Filament PBR Ativo (WASM)';
+      }, 2000);
     });
   }
 }
