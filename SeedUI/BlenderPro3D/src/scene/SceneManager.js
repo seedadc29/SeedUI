@@ -64,12 +64,12 @@ export class SceneManager {
     camera.up.set(0, 0, 1);
     cameraGroup.add(camera);
 
-    // 3. Blender Iconic Camera Wireframe Gizmo (Apex at origin, frustum frame expanding forward along -Z)
+    // 3. Blender Iconic Camera Wireframe Gizmo (Apex at sensor, frustum lens opening pointed directly at the Cube)
     const gizmoGeom = new THREE.BufferGeometry();
-    const s = 1.0;
+    const s = 1.1;
     const fw = s * 0.65;
     const fh = s * 0.42;
-    const fd = -s * 1.1; // Extends forward along -Z (camera lens direction)
+    const fd = s * 1.25; // Expands forward towards the cube at (0, 0, 0)
 
     const vertices = new Float32Array([
       // 4 Frustum lines from camera apex (0,0,0) to 4 frame corners
@@ -84,9 +84,9 @@ export class SceneManager {
        fw,  fh, fd,  -fw,  fh, fd,
       -fw,  fh, fd,  -fw, -fh, fd,
 
-      // Top triangular UP indicator on the front frame
-      -fw * 0.4, fh, fd,   0, fh * 1.6, fd,
-       0, fh * 1.6, fd,    fw * 0.4, fh, fd
+      // Top triangular UP indicator on the front frame (pointing upwards)
+      -fw * 0.35, fh, fd,   0, fh * 1.55, fd,
+       0, fh * 1.55, fd,    fw * 0.35, fh, fd
     ]);
     gizmoGeom.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
     const gizmoMat = new THREE.LineBasicMaterial({ color: 0x38bdf8, linewidth: 2 });
