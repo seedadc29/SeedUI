@@ -5,6 +5,7 @@ import { HistoryManager } from './core/HistoryManager.js';
 import { MeshEditor } from './mesh/MeshEditor.js';
 import { PaintManager } from './paint/PaintManager.js';
 import { ExportManager } from './io/ExportManager.js';
+import { ShadingManager } from './render/ShadingManager.js';
 import { DiagnosticsManager } from './core/DiagnosticsManager.js';
 import { UIManager } from './ui/UI.js';
 
@@ -18,7 +19,9 @@ window.addEventListener('DOMContentLoaded', () => {
   const meshEditor = new MeshEditor(engine, sceneManager, transformManager, historyManager);
   const paintManager = new PaintManager(engine, sceneManager, historyManager);
   const exportManager = new ExportManager(sceneManager);
+  const shadingManager = new ShadingManager(engine, sceneManager);
   const ui = new UIManager(engine, sceneManager, transformManager, meshEditor, historyManager, paintManager, exportManager);
+  ui.shadingManager = shadingManager;
   const diagnostics = new DiagnosticsManager(engine, sceneManager, transformManager, meshEditor, ui);
   ui.diagnostics = diagnostics;
 
@@ -31,9 +34,10 @@ window.addEventListener('DOMContentLoaded', () => {
     meshEditor,
     paintManager,
     exportManager,
+    shadingManager,
     diagnostics,
     ui
   };
 
-  console.log('✅ Stove 3D Studio - Diagnóstico, Topologia, Pintura 3D e Undo/Redo Ativos!');
+  console.log('✅ Stove 3D Studio - Zoo Mode, Shading Studio, UV Atlas, Diagnóstico e Topologia Ativos!');
 });

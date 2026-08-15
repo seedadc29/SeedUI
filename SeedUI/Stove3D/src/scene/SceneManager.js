@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { QuadMesh } from '../mesh/QuadMesh.js';
+import { ZooPresets } from '../mesh/ZooPresets.js';
 
 export class SceneManager {
   constructor(engine) {
@@ -145,6 +146,84 @@ export class SceneManager {
 
     if (this.onPrimitiveCreated) {
       this.onPrimitiveCreated(mesh, type, finalParams);
+    }
+
+    return mesh;
+  }
+
+  createZooPreset(presetType, customName, pushHistory = true) {
+    let quadMesh;
+    const names = {
+      humanoid: 'Humanoide_Base',
+      quadruped: 'Quadrupede_Cao',
+      bird: 'Passaro_Base',
+      fish: 'Peixe_Base',
+      tree: 'Arvore_LowPoly'
+    };
+    const name = customName || `${names[presetType] || 'Criatura'}_${this.objects.length + 1}`;
+
+    switch (presetType) {
+      case 'humanoid': quadMesh = ZooPresets.createHumanoid(); break;
+      case 'quadruped': quadMesh = ZooPresets.createQuadruped(); break;
+      case 'bird': quadMesh = ZooPresets.createBird(); break;
+      case 'fish': quadMesh = ZooPresets.createFish(); break;
+      case 'tree': quadMesh = ZooPresets.createTree(); break;
+      default: quadMesh = ZooPresets.createHumanoid();
+    }
+
+    const geometry = quadMesh.toBufferGeometry();
+    const material = this.defaultMaterial.clone();
+
+    if (this.objects.length > 0) {
+      const hue = (this.objects.length * 0.17) % 1.0;
+      material.color.setHSL(hue, 0.35, 0.55);
+    }
+
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = name;
+    mesh.position.set(0, 0, 0);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.userData.quadMesh = quadMesh;
+    mesh.userData.primitiveType = presetType;
+    mesh.userData.isZooPreset = true;
+
+    // 1. Structural Edge Lines
+    const edgeLineMesh = quadMesh.createEdgeLines(this.edgeMaterial);
+    edgeLineMesh.name = `${name}_edges`;
+    edgeLineMesh.visible = false;
+    mesh.add(edgeLineMesh);
+
+    // 2. Selection Outline
+    const outlineMesh = quadMesh.createEdgeLines(this.selectionOutlineMaterial);
+    outlineMesh.name = `${name}_outline`;
+    outlineMesh.renderOrder = 999;
+    outlineMesh.visible = true;
+    mesh.add(outlineMesh);
+
+    this.engine.scene.add(mesh);
+    this.objects.push(mesh);
+    this.selectObject(mesh, false);
+    this.updateStats();
+
+    if (pushHistory && this.historyManager) {
+      this.historyManager.push({
+        description: `Criar ${name}`,
+        undo: () => {
+          this.engine.scene.remove(mesh);
+          const idx = this.objects.indexOf(mesh);
+          if (idx !== -1) this.objects.splice(idx, 1);
+          this.selectedObjects.delete(mesh);
+          this.selectObject(this.objects[this.objects.length - 1] || null);
+          this.updateStats();
+        },
+        redo: () => {
+          this.engine.scene.add(mesh);
+          if (!this.objects.includes(mesh)) this.objects.push(mesh);
+          this.selectObject(mesh);
+          this.updateStats();
+        }
+      });
     }
 
     return mesh;

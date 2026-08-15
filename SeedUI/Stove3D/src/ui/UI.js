@@ -339,14 +339,18 @@ export class UIManager {
   }
 
   setShading(shading) {
-    const meshes = this.sceneManager.getAllMeshes();
-    meshes.forEach((mesh) => {
-      if (shading === 'wireframe') {
-        mesh.material.wireframe = true;
-      } else {
-        mesh.material.wireframe = false;
-      }
-    });
+    if (this.shadingManager) {
+      this.shadingManager.setShadingMode(shading);
+    } else {
+      const meshes = this.sceneManager.getAllMeshes();
+      meshes.forEach((mesh) => {
+        if (shading === 'wireframe') {
+          mesh.material.wireframe = true;
+        } else {
+          mesh.material.wireframe = false;
+        }
+      });
+    }
   }
 
   initCameraGizmos() {
@@ -419,13 +423,20 @@ export class UIManager {
     const menu = document.getElementById('shift-a-popup');
     if (!menu) return;
 
-    // Action clicks on menu items
+    // Action clicks on menu items (Primitives & Zoo Mode)
     const actionBtns = menu.querySelectorAll('.context-menu-action');
     actionBtns.forEach((btn) => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const prim = btn.dataset.prim;
-        this.sceneManager.createPrimitive(prim);
+        const zoo = btn.dataset.zoo;
+
+        if (prim) {
+          this.sceneManager.createPrimitive(prim);
+        } else if (zoo) {
+          this.sceneManager.createZooPreset(zoo);
+        }
+
         this.closeShiftAMenu();
       });
     });
