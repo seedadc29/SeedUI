@@ -112,7 +112,7 @@ export class Engine {
       if (e.button === 2) isRMBDown = true;
 
       // Check MMB + RMB simultaneous press for Pan
-      if ((isMMBDown && isRMBDown) || (e.buttons & 4 && e.buttons & 2)) {
+      if ((isMMBDown && isRMBDown) || ((e.buttons & 4) && (e.buttons & 2))) {
         this.isMMBRMBPanning = true;
         this.lastMMBRMBPanTime = Date.now();
         lastPanPos.x = e.clientX;
@@ -147,23 +147,36 @@ export class Engine {
     };
 
     const onPointerMove = (e) => {
-      // 1. MMB + RMB Pan
-      if (this.isMMBRMBPanning || (isMMBDown && isRMBDown) || (e.buttons & 4 && e.buttons & 2)) {
-        this.isMMBRMBPanning = true;
-        this.lastMMBRMBPanTime = Date.now();
-        this.controls.enabled = false;
+      const isBothDown = (isMMBDown && isRMBDown) || ((e.buttons & 4) && (e.buttons & 2));
 
+      // 1. MMB + RMB Pan (Smooth and Jump-Free)
+      if (isBothDown) {
+        if (!this.isMMBRMBPanning) {
+          this.isMMBRMBPanning = true;
+          this.lastMMBRMBPanTime = Date.now();
+          lastPanPos.x = e.clientX;
+          lastPanPos.y = e.clientY;
+          this.controls.enabled = false;
+          return;
+        }
+
+        this.lastMMBRMBPanTime = Date.now();
         const deltaX = e.clientX - lastPanPos.x;
         const deltaY = e.clientY - lastPanPos.y;
         lastPanPos.x = e.clientX;
         lastPanPos.y = e.clientY;
+
+        // Prevent jump spikes
+        if (Math.abs(deltaX) > 80 || Math.abs(deltaY) > 80) {
+          return;
+        }
 
         if (deltaX !== 0 || deltaY !== 0) {
           const cam = this.activeCamera;
           const target = this.controls.target;
           const dist = cam.position.distanceTo(target);
           
-          let panSpeed = 0.0018 * dist;
+          let panSpeed = 0.0015 * dist;
           if (cam.isOrthographicCamera) {
             panSpeed = 0.005 / cam.zoom;
           }
@@ -220,7 +233,9 @@ export class Engine {
         isCtrlAltZooming = false;
       }
 
-      this.controls.enabled = true;
+      if (!isMMBDown && !isRMBDown) {
+        this.controls.enabled = true;
+      }
     };
 
     this.canvas.addEventListener('pointerdown', onPointerDownGate, { capture: true });
