@@ -486,6 +486,11 @@ export class UIManager {
     }
 
     const isCollapsed = sidebar.classList.contains('collapsed');
+    if (isCollapsed) {
+      document.body.classList.add('sidebar-collapsed');
+    } else {
+      document.body.classList.remove('sidebar-collapsed');
+    }
 
     if (reopenBtn) {
       if (isCollapsed) reopenBtn.classList.remove('hidden');

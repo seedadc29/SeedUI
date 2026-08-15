@@ -1,28 +1,36 @@
 /* ==========================================================================
-   SEED3D STUDIO — MODERN DARK FROSTED GLASS (ACRYLIC GLASSMORPHISM)
+   SEED3D STUDIO — AUTHENTIC DARK LIQUID FROSTED GLASS (ACRYLIC GLASSMORPHISM)
    ========================================================================== */
 
 :root {
-  --bg-darkest: #0e0f14;
-  --bg-dark: #14161c;
-  --bg-panel: rgba(16, 18, 24, 0.75);
-  --bg-panel-light: rgba(26, 29, 38, 0.65);
-  --bg-hover: rgba(255, 255, 255, 0.08);
-  --bg-active: rgba(255, 255, 255, 0.14);
+  --bg-darkest: #090a0f;
+  --bg-dark: #0e1017;
   
-  --glass-bg: rgba(14, 16, 22, 0.72);
-  --glass-subtle: rgba(22, 25, 34, 0.55);
-  --glass-modal: rgba(10, 11, 16, 0.84);
-  --glass-card: rgba(26, 30, 40, 0.60);
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --glass-border-light: rgba(255, 255, 255, 0.15);
-  --glass-border-focus: rgba(96, 165, 250, 0.5);
+  /* Authentic Dark Liquid Frosted Glass System */
+  --liquid-glass-bg: linear-gradient(140deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.03) 20%, rgba(18, 22, 32, 0.62) 45%, rgba(9, 11, 16, 0.80) 100%);
+  --liquid-glass-header: linear-gradient(180deg, rgba(255, 255, 255, 0.10) 0%, rgba(12, 14, 22, 0.72) 100%);
+  --liquid-glass-card: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(24, 28, 42, 0.58) 100%);
+  --liquid-glass-modal: linear-gradient(145deg, rgba(255, 255, 255, 0.12) 0%, rgba(20, 24, 36, 0.80) 30%, rgba(8, 10, 15, 0.92) 100%);
   
-  --border: rgba(255, 255, 255, 0.08);
-  --border-light: rgba(255, 255, 255, 0.12);
+  --liquid-glass-border: rgba(255, 255, 255, 0.18);
+  --liquid-glass-border-light: rgba(255, 255, 255, 0.28);
+  --liquid-glass-blur: blur(28px) saturate(220%) contrast(108%);
+  
+  --liquid-glass-shadow: 
+    inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 1px 0 rgba(0, 0, 0, 0.45),
+    0 16px 40px 0 rgba(0, 0, 0, 0.65),
+    0 2px 8px 0 rgba(0, 0, 0, 0.35);
+    
+  --liquid-glass-card-shadow:
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.30),
+    0 8px 24px 0 rgba(0, 0, 0, 0.5);
+
+  --border: rgba(255, 255, 255, 0.10);
+  --border-light: rgba(255, 255, 255, 0.16);
   --border-focus: #3b82f6;
   
-  --text-primary: #f1f5f9;
+  --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
   --text-muted: #64748b;
   
@@ -37,8 +45,6 @@
 
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
-
-  --glass-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.12), 0 8px 32px 0 rgba(0, 0, 0, 0.45);
 }
 
 * {
@@ -75,16 +81,16 @@ input, button, select {
    TOP HEADER BAR — VIDRO FOSCO ESCURO
    ========================================================================== */
 .top-header {
-  height: 34px;
-  background: var(--glass-bg);
-  backdrop-filter: blur(24px) saturate(190%);
-  -webkit-backdrop-filter: blur(24px) saturate(190%);
-  border-bottom: 1px solid var(--glass-border);
-  box-shadow: inset 0 -1px 0 0 rgba(255, 255, 255, 0.03), 0 4px 20px rgba(0, 0, 0, 0.4);
+  height: 38px;
+  background: var(--liquid-glass-header);
+  backdrop-filter: var(--liquid-glass-blur);
+  -webkit-backdrop-filter: var(--liquid-glass-blur);
+  border-bottom: 1px solid var(--liquid-glass-border);
+  box-shadow: inset 0 -1px 1px 0 rgba(0, 0, 0, 0.4), 0 8px 28px rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 12px;
+  padding: 0 14px;
   z-index: 100;
 }
 
@@ -128,25 +134,26 @@ input, button, select {
 
 .header-menu {
   display: flex;
-  gap: 3px;
+  gap: 4px;
 }
 
 .menu-btn {
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   color: var(--text-secondary);
   font-size: 11px;
-  padding: 4px 9px;
-  border-radius: 5px;
+  padding: 5px 10px;
+  border-radius: 6px;
   cursor: pointer;
   transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .menu-btn:hover {
-  background: rgba(255, 255, 255, 0.07);
-  border-color: rgba(255, 255, 255, 0.12);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04));
+  border-color: rgba(255, 255, 255, 0.25);
   color: var(--text-primary);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.3), 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 /* Header Dropdown Menus — Frosted Glass */
@@ -155,18 +162,18 @@ input, button, select {
   top: 100%;
   left: 0;
   margin-top: 6px;
-  background: var(--glass-modal);
-  backdrop-filter: blur(28px) saturate(200%);
-  -webkit-backdrop-filter: blur(28px) saturate(200%);
-  border: 1px solid var(--glass-border-light);
-  border-radius: 8px;
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.12), 0 16px 40px rgba(0, 0, 0, 0.7);
-  padding: 5px;
+  background: var(--liquid-glass-modal);
+  backdrop-filter: var(--liquid-glass-blur);
+  -webkit-backdrop-filter: var(--liquid-glass-blur);
+  border: 1px solid var(--liquid-glass-border-light);
+  border-radius: 10px;
+  box-shadow: var(--liquid-glass-shadow);
+  padding: 6px;
   min-width: 220px;
   z-index: 100;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 
 .menu-dropdown-content.hidden {
@@ -176,7 +183,7 @@ input, button, select {
 .menu-dropdown-item {
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 5px;
+  border-radius: 6px;
   color: var(--text-primary);
   font-size: 11.5px;
   text-align: left;
@@ -189,15 +196,15 @@ input, button, select {
 }
 
 .menu-dropdown-item:hover {
-  background: rgba(37, 99, 235, 0.35);
-  border-color: rgba(96, 165, 250, 0.3);
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.5), rgba(29, 78, 216, 0.4));
+  border-color: rgba(96, 165, 250, 0.4);
   color: #fff;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 2px 8px rgba(37, 99, 235, 0.3);
 }
 
 .menu-dropdown-divider {
   height: 1px;
-  background: var(--border);
+  background: var(--liquid-glass-border);
   margin: 4px 0;
 }
 
@@ -209,14 +216,14 @@ input, button, select {
 
 .mode-tabs {
   display: flex;
-  background: var(--glass-subtle);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--glass-border);
+  background: rgba(18, 22, 32, 0.65);
+  backdrop-filter: var(--liquid-glass-blur);
+  -webkit-backdrop-filter: var(--liquid-glass-blur);
+  border: 1px solid var(--liquid-glass-border);
   padding: 3px;
-  border-radius: 7px;
+  border-radius: 8px;
   gap: 3px;
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .mode-tab {
@@ -225,27 +232,27 @@ input, button, select {
   color: var(--text-secondary);
   font-size: 11px;
   font-weight: 500;
-  padding: 4px 11px;
-  border-radius: 5px;
+  padding: 4px 12px;
+  border-radius: 6px;
   cursor: pointer;
   transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
 }
 
 .mode-tab:hover {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
 }
 
 .mode-tab.active {
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.85), rgba(29, 78, 216, 0.75));
-  border-color: rgba(96, 165, 250, 0.4);
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.90), rgba(29, 78, 216, 0.80));
+  border-color: rgba(96, 165, 250, 0.5);
   color: #fff;
   font-weight: 600;
-  box-shadow: 0 0 16px rgba(37, 99, 235, 0.4), inset 0 1px 0 0 rgba(255, 255, 255, 0.2);
+  box-shadow: 0 0 18px rgba(37, 99, 235, 0.5), inset 0 1px 1px 0 rgba(255, 255, 255, 0.4);
 }
 
 .mode-key {
@@ -256,20 +263,20 @@ input, button, select {
 .header-right {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .stat-badge {
-  background: var(--glass-subtle);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--glass-border);
+  background: rgba(18, 22, 32, 0.65);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--liquid-glass-border);
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--text-muted);
-  padding: 3px 8px;
-  border-radius: 5px;
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
+  padding: 4px 9px;
+  border-radius: 6px;
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
 }
 
 #stat-fps {
@@ -277,130 +284,150 @@ input, button, select {
 }
 
 .icon-toggle-btn {
-  background: var(--glass-subtle);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--glass-border);
+  background: rgba(18, 22, 32, 0.65);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--liquid-glass-border);
   color: var(--text-secondary);
   font-size: 10.5px;
-  padding: 4px 9px;
-  border-radius: 5px;
+  padding: 4px 10px;
+  border-radius: 6px;
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 5px;
   transition: all 0.15s ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .icon-toggle-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.10);
+  border-color: rgba(255, 255, 255, 0.22);
   color: #fff;
 }
 
 .icon-toggle-btn.active {
-  background: rgba(37, 99, 235, 0.3);
-  border-color: rgba(96, 165, 250, 0.4);
+  background: rgba(37, 99, 235, 0.35);
+  border-color: rgba(96, 165, 250, 0.5);
   color: #93c5fd;
-  box-shadow: 0 0 12px rgba(37, 99, 235, 0.35);
+  box-shadow: 0 0 12px rgba(37, 99, 235, 0.4);
 }
 
 /* ==========================================================================
-   MAIN WORKSPACE
+   MAIN WORKSPACE & FULL-BLEED 3D VIEWPORT
    ========================================================================== */
 .workspace {
-  display: flex;
-  flex: 1;
-  overflow: hidden;
   position: relative;
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #090a0f;
+}
+
+/* 3D Viewport Full Screen Canvas Area */
+.viewport-area {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 40%, #1e2230 0%, #0a0b10 100%);
+  display: flex;
+  flex-direction: column;
 }
 
 /* ==========================================================================
    LEFT VERTICAL TOOLBAR — VIDRO FOSCO FLUTUANTE
    ========================================================================== */
 .left-toolbar {
-  width: 42px;
-  background: var(--glass-bg);
-  backdrop-filter: blur(24px) saturate(190%);
-  -webkit-backdrop-filter: blur(24px) saturate(190%);
-  border: 1px solid var(--glass-border);
-  border-radius: 8px;
-  margin: 8px 0 8px 8px;
-  box-shadow: var(--glass-shadow);
+  position: absolute;
+  top: 56px;
+  left: 14px;
+  width: 44px;
+  z-index: 20;
+  margin: 0;
+  background: var(--liquid-glass-bg);
+  backdrop-filter: var(--liquid-glass-blur);
+  -webkit-backdrop-filter: var(--liquid-glass-blur);
+  border: 1px solid var(--liquid-glass-border);
+  border-radius: 12px;
+  box-shadow: var(--liquid-glass-shadow);
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 6px 0;
-  gap: 4px;
-  z-index: 20;
+  padding: 8px 0;
+  gap: 5px;
 }
 
 .tool-group {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 
 .tool-btn {
-  width: 30px;
-  height: 30px;
-  background: transparent;
-  border: 1px solid transparent;
+  width: 32px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   color: var(--text-secondary);
-  border-radius: 6px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .tool-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.12);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04));
+  border-color: rgba(255, 255, 255, 0.25);
   color: var(--text-primary);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.3), 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .tool-btn.active {
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.85), rgba(29, 78, 216, 0.75));
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.90), rgba(29, 78, 216, 0.80));
   color: #fff;
-  border-color: rgba(96, 165, 250, 0.4);
-  box-shadow: 0 0 14px rgba(37, 99, 235, 0.4), inset 0 1px 0 0 rgba(255, 255, 255, 0.2);
+  border-color: rgba(96, 165, 250, 0.5);
+  box-shadow: 0 0 16px rgba(37, 99, 235, 0.5), inset 0 1px 1px 0 rgba(255, 255, 255, 0.4);
 }
 
 .tool-divider {
-  width: 22px;
+  width: 24px;
   height: 1px;
-  background: var(--glass-border);
-  margin: 3px 0;
+  background: var(--liquid-glass-border);
+  margin: 4px 0;
 }
 
 /* ==========================================================================
-   CENTER 3D VIEWPORT & INTEGRATED HEADER
+   INTEGRATED VIEWPORT HEADER BAR — FLOATING GLASS CAPSULE
    ========================================================================== */
-.viewport-area {
-  flex: 1;
-  position: relative;
-  overflow: hidden;
-  background: radial-gradient(circle at 50% 40%, #202432 0%, #10121a 100%);
-  display: flex;
-  flex-direction: column;
-}
-
-/* Integrated Viewport Header Bar — Frosted Glass */
 .viewport-header-bar {
-  height: 30px;
-  background: var(--glass-bg);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border-bottom: 1px solid var(--glass-border);
-  box-shadow: inset 0 -1px 0 0 rgba(255, 255, 255, 0.02);
+  position: absolute;
+  top: 10px;
+  left: 14px;
+  right: 300px;
+  height: 38px;
+  background: var(--liquid-glass-bg);
+  backdrop-filter: var(--liquid-glass-blur);
+  -webkit-backdrop-filter: var(--liquid-glass-blur);
+  border: 1px solid var(--liquid-glass-border);
+  border-radius: 10px;
+  box-shadow: var(--liquid-glass-shadow);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 12px;
   z-index: 30;
+  transition: right 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+body.sidebar-collapsed .viewport-header-bar {
+  right: 14px;
 }
 
 .viewport-header-left {
@@ -412,30 +439,30 @@ input, button, select {
 .submode-selector {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
 }
 
 .mode-pill {
   display: flex;
   align-items: center;
-  gap: 5px;
-  background: var(--glass-subtle);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--glass-border);
+  gap: 6px;
+  background: var(--liquid-glass-card);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--liquid-glass-border);
   color: var(--text-primary);
   font-size: 11px;
   font-weight: 600;
-  padding: 3px 9px;
-  border-radius: 5px;
+  padding: 4px 10px;
+  border-radius: 6px;
   cursor: pointer;
   transition: all 0.15s ease;
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.15);
 }
 
 .mode-pill:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.15);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04));
+  border-color: rgba(255, 255, 255, 0.25);
 }
 
 .dropdown-arrow {
@@ -445,16 +472,16 @@ input, button, select {
 
 .mesh-submode-group {
   display: flex;
-  background: var(--glass-subtle);
-  border: 1px solid var(--glass-border);
-  border-radius: 5px;
+  background: rgba(18, 22, 32, 0.65);
+  border: 1px solid var(--liquid-glass-border);
+  border-radius: 6px;
   padding: 2px;
   gap: 2px;
 }
 
 .mesh-sub-btn {
-  width: 24px;
-  height: 22px;
+  width: 26px;
+  height: 24px;
   background: transparent;
   border: 1px solid transparent;
   color: var(--text-secondary);
@@ -469,52 +496,53 @@ input, button, select {
 }
 
 .mesh-sub-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.10);
   color: #fff;
 }
 
 .mesh-sub-btn.active {
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.85), rgba(29, 78, 216, 0.75));
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.90), rgba(29, 78, 216, 0.80));
   color: #fff;
-  border-color: rgba(96, 165, 250, 0.35);
-  box-shadow: 0 0 10px rgba(37, 99, 235, 0.35);
+  border-color: rgba(96, 165, 250, 0.45);
+  box-shadow: 0 0 12px rgba(37, 99, 235, 0.4), inset 0 1px 0 0 rgba(255, 255, 255, 0.3);
 }
 
 .v-header-divider {
   width: 1px;
-  height: 16px;
-  background: var(--glass-border);
-  margin: 0 2px;
+  height: 18px;
+  background: var(--liquid-glass-border);
+  margin: 0 3px;
 }
 
 .selection-tool-group {
   display: flex;
-  gap: 2px;
+  gap: 3px;
 }
 
 .v-header-btn {
-  background: transparent;
-  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   color: var(--text-secondary);
   font-size: 10.5px;
   font-weight: 500;
-  padding: 3px 8px;
-  border-radius: 5px;
+  padding: 4px 9px;
+  border-radius: 6px;
   cursor: pointer;
   transition: all 0.15s ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .v-header-btn:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04));
+  border-color: rgba(255, 255, 255, 0.20);
   color: var(--text-primary);
 }
 
 .v-header-btn.active {
-  background: var(--glass-card);
+  background: var(--liquid-glass-card);
   color: #fff;
-  border-color: var(--glass-border-light);
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
+  border-color: var(--liquid-glass-border-light);
+  box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.25);
 }
 
 .v-header-menus {
@@ -523,19 +551,19 @@ input, button, select {
 }
 
 .v-header-menu-item {
-  background: transparent;
-  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   color: var(--text-secondary);
   font-size: 11px;
-  padding: 3px 7px;
+  padding: 4px 8px;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: 6px;
   transition: all 0.12s ease;
 }
 
 .v-header-menu-item:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.10);
+  border-color: rgba(255, 255, 255, 0.20);
   color: var(--text-primary);
 }
 
@@ -547,19 +575,19 @@ input, button, select {
 
 .shading-group {
   display: flex;
-  background: var(--glass-subtle);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--glass-border);
-  border-radius: 16px;
+  background: rgba(18, 22, 32, 0.65);
+  backdrop-filter: var(--liquid-glass-blur);
+  -webkit-backdrop-filter: var(--liquid-glass-blur);
+  border: 1px solid var(--liquid-glass-border);
+  border-radius: 20px;
   padding: 3px 6px;
   gap: 5px;
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .shading-icon-btn {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   background: transparent;
   border: none;
   border-radius: 50%;
@@ -572,8 +600,8 @@ input, button, select {
 }
 
 .shading-circle {
-  width: 12px;
-  height: 12px;
+  width: 13px;
+  height: 13px;
   border-radius: 50%;
   display: block;
   transition: all 0.15s ease;
@@ -598,8 +626,8 @@ input, button, select {
 }
 
 .shading-icon-btn.active {
-  background: rgba(37, 99, 235, 0.4);
-  box-shadow: 0 0 8px rgba(37, 99, 235, 0.5);
+  background: rgba(37, 99, 235, 0.45);
+  box-shadow: 0 0 10px rgba(37, 99, 235, 0.6);
 }
 
 .shading-icon-btn.active .shading-circle.solid {
@@ -608,30 +636,35 @@ input, button, select {
 
 #viewport-canvas {
   width: 100%;
-  flex: 1;
+  height: 100%;
   display: block;
 }
 
-/* Camera Gizmo Controls — Floating Frosted Glass */
+/* Camera Gizmo Controls — Floating Liquid Glass */
 .camera-gizmo-bar {
   position: absolute;
   bottom: 14px;
-  right: 14px;
+  right: 300px;
   display: flex;
-  background: var(--glass-bg);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid var(--glass-border);
+  background: var(--liquid-glass-bg);
+  backdrop-filter: var(--liquid-glass-blur);
+  -webkit-backdrop-filter: var(--liquid-glass-blur);
+  border: 1px solid var(--liquid-glass-border);
   border-radius: 8px;
-  padding: 3px;
-  gap: 3px;
+  padding: 4px;
+  gap: 4px;
   z-index: 20;
-  box-shadow: var(--glass-shadow);
+  box-shadow: var(--liquid-glass-card-shadow);
+  transition: right 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+body.sidebar-collapsed .camera-gizmo-bar {
+  right: 14px;
 }
 
 .cam-btn {
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   color: var(--text-secondary);
   font-size: 10px;
   font-weight: 600;
@@ -642,23 +675,23 @@ input, button, select {
 }
 
 .cam-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.12);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04));
+  border-color: rgba(255, 255, 255, 0.25);
   color: #fff;
 }
 
-/* Operator Parameter Adjustment Panel — Dark Frosted Glass Card */
+/* Operator Parameter Adjustment Panel — Floating Liquid Glass Card */
 .operator-panel {
   position: absolute;
   bottom: 14px;
-  left: 14px;
+  left: 68px;
   width: 240px;
-  background: var(--glass-modal);
-  backdrop-filter: blur(24px) saturate(190%);
-  -webkit-backdrop-filter: blur(24px) saturate(190%);
-  border: 1px solid var(--glass-border-light);
-  border-radius: 8px;
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.1), 0 12px 36px rgba(0, 0, 0, 0.6);
+  background: var(--liquid-glass-modal);
+  backdrop-filter: var(--liquid-glass-blur);
+  -webkit-backdrop-filter: var(--liquid-glass-blur);
+  border: 1px solid var(--liquid-glass-border-light);
+  border-radius: 10px;
+  box-shadow: var(--liquid-glass-shadow);
   z-index: 50;
   overflow: hidden;
   transition: all 0.2s ease;
@@ -676,9 +709,9 @@ input, button, select {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 7px 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border-bottom: 1px solid var(--glass-border);
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--liquid-glass-border);
   cursor: pointer;
 }
 
@@ -719,9 +752,9 @@ input, button, select {
 
 .operator-input {
   width: 70px;
-  background: var(--glass-subtle);
-  border: 1px solid var(--glass-border);
-  border-radius: 4px;
+  background: rgba(18, 22, 32, 0.65);
+  border: 1px solid var(--liquid-glass-border);
+  border-radius: 5px;
   color: #fff;
   font-size: 11px;
   padding: 3px 6px;
@@ -732,7 +765,7 @@ input, button, select {
 .operator-input:focus {
   border-color: var(--accent);
   outline: none;
-  box-shadow: 0 0 8px rgba(37, 99, 235, 0.3);
+  box-shadow: 0 0 8px rgba(37, 99, 235, 0.4);
 }
 
 .operator-checkbox {
@@ -745,30 +778,30 @@ input, button, select {
   display: flex;
   align-items: center;
   gap: 5px;
-  background: var(--glass-subtle);
+  background: var(--liquid-glass-card);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--glass-border);
+  border: 1px solid var(--liquid-glass-border);
   color: var(--text-primary);
   font-size: 11px;
   font-weight: 600;
-  padding: 3px 9px;
-  border-radius: 5px;
+  padding: 4px 10px;
+  border-radius: 6px;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .sidebar-toggle-pill:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: var(--glass-border-light);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04));
+  border-color: var(--liquid-glass-border-light);
   color: #fff;
 }
 
 .sidebar-toggle-pill.collapsed {
-  background: rgba(37, 99, 235, 0.3);
-  border-color: rgba(96, 165, 250, 0.4);
+  background: rgba(37, 99, 235, 0.35);
+  border-color: rgba(96, 165, 250, 0.5);
   color: #93c5fd;
-  box-shadow: 0 0 12px rgba(37, 99, 235, 0.35);
+  box-shadow: 0 0 12px rgba(37, 99, 235, 0.4);
 }
 
 .toggle-pill-icon {
@@ -795,7 +828,7 @@ input, button, select {
 }
 
 .sidebar-close-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.10);
   color: #fff;
 }
 
@@ -808,30 +841,30 @@ input, button, select {
 /* Floating Side Tab on Viewport edge (N-Panel Handle) */
 .viewport-sidebar-tab {
   position: absolute;
-  top: 38px;
+  top: 56px;
   right: 0;
-  background: var(--glass-bg);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid var(--glass-border);
+  background: var(--liquid-glass-bg);
+  backdrop-filter: var(--liquid-glass-blur);
+  -webkit-backdrop-filter: var(--liquid-glass-blur);
+  border: 1px solid var(--liquid-glass-border);
   border-right: none;
-  border-radius: 6px 0 0 6px;
+  border-radius: 8px 0 0 8px;
   color: #fff;
   font-size: 11px;
   font-weight: 600;
-  padding: 7px 11px;
+  padding: 8px 12px;
   display: flex;
   align-items: center;
   gap: 6px;
   cursor: pointer;
   z-index: 40;
-  box-shadow: var(--glass-shadow);
+  box-shadow: var(--liquid-glass-shadow);
   transition: all 0.15s ease;
 }
 
 .viewport-sidebar-tab:hover {
-  background: rgba(37, 99, 235, 0.4);
-  border-color: rgba(96, 165, 250, 0.4);
+  background: rgba(37, 99, 235, 0.45);
+  border-color: rgba(96, 165, 250, 0.5);
   color: #fff;
 }
 
@@ -840,22 +873,26 @@ input, button, select {
 }
 
 /* ==========================================================================
-   RIGHT SIDEBAR — VIDRO FOSCO ESCURO
+   RIGHT SIDEBAR — FLOATING LIQUID FROSTED GLASS
    ========================================================================== */
 .right-sidebar {
-  width: 270px;
-  min-width: 270px;
-  max-width: 270px;
-  background: var(--glass-bg);
-  backdrop-filter: blur(24px) saturate(190%);
-  -webkit-backdrop-filter: blur(24px) saturate(190%);
-  border-left: 1px solid var(--glass-border);
-  box-shadow: inset 1px 0 0 0 rgba(255, 255, 255, 0.03), -4px 0 24px rgba(0, 0, 0, 0.4);
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  bottom: 10px;
+  width: 276px;
+  background: var(--liquid-glass-bg);
+  backdrop-filter: var(--liquid-glass-blur);
+  -webkit-backdrop-filter: var(--liquid-glass-blur);
+  border: 1px solid var(--liquid-glass-border);
+  border-radius: 12px;
+  box-shadow: var(--liquid-glass-shadow);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  overflow-x: hidden;
   z-index: 20;
-  flex-shrink: 0;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .right-sidebar.collapsed {
@@ -985,21 +1022,21 @@ input, button, select {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.02);
-  border-bottom: 1px solid var(--glass-border);
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--liquid-glass-border);
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
   text-transform: uppercase;
   color: var(--text-secondary);
 }
 
 .properties-body {
-  padding: 12px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
 
 .transform-category {
@@ -1016,31 +1053,31 @@ input, button, select {
   letter-spacing: 0.5px;
 }
 
-/* Stacked Axis Inputs — Modern Dark Glass Inputs */
+/* Stacked Axis Inputs — Modern Liquid Glass Inputs */
 .axis-input-group {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
 }
 
 .axis-field {
   display: flex;
   align-items: center;
-  background: var(--glass-subtle);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--glass-border);
-  border-radius: 5px;
+  background: var(--liquid-glass-card);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--liquid-glass-border);
+  border-radius: 6px;
   overflow: hidden;
-  height: 25px;
+  height: 26px;
   transition: all 0.15s ease;
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.15);
 }
 
 .axis-field:focus-within {
-  border-color: var(--border-focus);
-  background: rgba(30, 41, 59, 0.5);
-  box-shadow: 0 0 10px rgba(59, 130, 246, 0.35);
+  border-color: var(--accent);
+  background: rgba(30, 41, 59, 0.65);
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.45);
 }
 
 .axis-tag {
@@ -1099,7 +1136,7 @@ input, button, select {
 .color-box {
   width: 28px;
   height: 20px;
-  border: 1px solid var(--glass-border);
+  border: 1px solid var(--liquid-glass-border);
   background: transparent;
   border-radius: 4px;
   cursor: pointer;
@@ -1111,19 +1148,19 @@ input, button, select {
 }
 
 /* ==========================================================================
-   BOTTOM STATUS BAR — VIDRO FOSCO
+   BOTTOM STATUS BAR — LIQUID FROSTED GLASS
    ========================================================================== */
 .statusbar {
-  height: 26px;
-  background: var(--glass-bg);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border-top: 1px solid var(--glass-border);
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.03);
+  height: 28px;
+  background: var(--liquid-glass-header);
+  backdrop-filter: var(--liquid-glass-blur);
+  -webkit-backdrop-filter: var(--liquid-glass-blur);
+  border-top: 1px solid var(--liquid-glass-border);
+  box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.15);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 12px;
+  padding: 0 14px;
   font-size: 10.5px;
   color: var(--text-muted);
   z-index: 100;
@@ -1132,40 +1169,40 @@ input, button, select {
 .status-left {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .key-hint {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
 }
 
 .key-hint kbd {
-  background: var(--glass-card);
-  border: 1px solid var(--glass-border-light);
+  background: var(--liquid-glass-card);
+  border: 1px solid var(--liquid-glass-border-light);
   color: var(--text-primary);
   font-family: var(--font-mono);
   font-size: 9px;
-  padding: 1px 5px;
+  padding: 2px 6px;
   border-radius: 4px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 
 /* ==========================================================================
-   FLOATING RETRACTABLE BLENDER CONTEXT MENU (Shift+A) — VIDRO FOSCO
+   FLOATING RETRACTABLE BLENDER CONTEXT MENU (Shift+A) — LIQUID GLASS
    ========================================================================== */
 .blender-context-menu {
   position: fixed;
-  background: var(--glass-modal);
-  backdrop-filter: blur(32px) saturate(200%);
-  -webkit-backdrop-filter: blur(32px) saturate(200%);
-  border: 1px solid var(--glass-border-light);
-  border-radius: 8px;
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.12), 0 16px 48px rgba(0, 0, 0, 0.7);
+  background: var(--liquid-glass-modal);
+  backdrop-filter: var(--liquid-glass-blur);
+  -webkit-backdrop-filter: var(--liquid-glass-blur);
+  border: 1px solid var(--liquid-glass-border-light);
+  border-radius: 10px;
+  box-shadow: var(--liquid-glass-shadow);
   z-index: 1000;
-  min-width: 180px;
-  padding: 5px;
+  min-width: 190px;
+  padding: 6px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -1188,8 +1225,8 @@ input, button, select {
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.6px;
-  border-bottom: 1px solid var(--glass-border);
-  margin-bottom: 2px;
+  border-bottom: 1px solid var(--liquid-glass-border);
+  margin-bottom: 3px;
 }
 
 .context-menu-item {
@@ -1197,16 +1234,17 @@ input, button, select {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 10px;
-  border-radius: 5px;
+  padding: 7px 11px;
+  border-radius: 6px;
   cursor: pointer;
   color: var(--text-primary);
   font-size: 11px;
-  transition: all 0.1s ease;
+  transition: all 0.12s ease;
 }
 
 .context-menu-item:hover {
-  background: rgba(37, 99, 235, 0.35);
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.45), rgba(29, 78, 216, 0.35));
+  border-color: rgba(96, 165, 250, 0.35);
   color: #fff;
 }
 
@@ -1225,20 +1263,20 @@ input, button, select {
   opacity: 0.7;
 }
 
-/* Submenu Flyout — Frosted Glass */
+/* Submenu Flyout — Liquid Glass */
 .blender-submenu {
   position: absolute;
   top: -4px;
   left: 100%;
-  margin-left: 4px;
-  background: var(--glass-modal);
-  backdrop-filter: blur(32px) saturate(200%);
-  -webkit-backdrop-filter: blur(32px) saturate(200%);
-  border: 1px solid var(--glass-border-light);
-  border-radius: 8px;
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.12), 0 16px 48px rgba(0, 0, 0, 0.7);
+  margin-left: 5px;
+  background: var(--liquid-glass-modal);
+  backdrop-filter: var(--liquid-glass-blur);
+  -webkit-backdrop-filter: var(--liquid-glass-blur);
+  border: 1px solid var(--liquid-glass-border-light);
+  border-radius: 10px;
+  box-shadow: var(--liquid-glass-shadow);
   min-width: 190px;
-  padding: 5px;
+  padding: 6px;
   display: none;
   flex-direction: column;
   gap: 2px;
@@ -1253,8 +1291,8 @@ input, button, select {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
-  border-radius: 5px;
+  padding: 7px 11px;
+  border-radius: 6px;
   border: none;
   background: transparent;
   color: var(--text-primary);
@@ -1262,35 +1300,35 @@ input, button, select {
   text-align: left;
   cursor: pointer;
   width: 100%;
-  transition: all 0.1s ease;
+  transition: all 0.12s ease;
 }
 
 .context-menu-action:hover {
-  background: rgba(37, 99, 235, 0.35);
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.45), rgba(29, 78, 216, 0.35));
   color: #fff;
 }
 
-/* Diagnostics Header Button & Modal — Frosted Glass */
+/* Diagnostics Header Button & Modal — Liquid Glass */
 .diag-header-btn {
-  background: rgba(37, 99, 235, 0.25);
-  border: 1px solid rgba(96, 165, 250, 0.4);
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.3), rgba(29, 78, 216, 0.2));
+  border: 1px solid rgba(96, 165, 250, 0.45);
   color: #93c5fd;
   font-size: 11px;
   font-weight: 600;
-  padding: 4px 10px;
-  border-radius: 5px;
+  padding: 4px 11px;
+  border-radius: 6px;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   transition: all 0.15s ease;
-  box-shadow: 0 0 10px rgba(37, 99, 235, 0.2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 0 12px rgba(37, 99, 235, 0.25);
 }
 
 .diag-header-btn:hover {
-  background: #2563eb;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
   color: #fff;
-  box-shadow: 0 0 16px rgba(37, 99, 235, 0.5);
+  box-shadow: 0 0 18px rgba(37, 99, 235, 0.6);
 }
 
 .diagnostics-modal {
@@ -1315,9 +1353,9 @@ input, button, select {
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 
 .diagnostics-modal-window {
@@ -1325,12 +1363,12 @@ input, button, select {
   width: 760px;
   max-width: 90vw;
   max-height: 85vh;
-  background: var(--glass-modal);
-  backdrop-filter: blur(36px) saturate(200%);
-  -webkit-backdrop-filter: blur(36px) saturate(200%);
-  border: 1px solid var(--glass-border-light);
-  border-radius: 12px;
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.15), 0 24px 64px rgba(0, 0, 0, 0.85);
+  background: var(--liquid-glass-modal);
+  backdrop-filter: var(--liquid-glass-blur);
+  -webkit-backdrop-filter: var(--liquid-glass-blur);
+  border: 1px solid var(--liquid-glass-border-light);
+  border-radius: 14px;
+  box-shadow: var(--liquid-glass-shadow);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1338,13 +1376,13 @@ input, button, select {
 }
 
 .diagnostics-modal-header {
-  height: 46px;
-  background: rgba(255, 255, 255, 0.02);
-  border-bottom: 1px solid var(--glass-border);
+  height: 48px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid var(--liquid-glass-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 18px;
+  padding: 0 20px;
 }
 
 .header-title-box {
@@ -1366,40 +1404,40 @@ input, button, select {
 }
 
 .diag-action-btn {
-  background: var(--glass-subtle);
-  border: 1px solid var(--glass-border);
+  background: var(--liquid-glass-card);
+  border: 1px solid var(--liquid-glass-border);
   color: var(--text-primary);
   font-size: 11px;
-  padding: 5px 12px;
-  border-radius: 5px;
+  padding: 5px 14px;
+  border-radius: 6px;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .diag-action-btn:hover {
-  background: rgba(255, 255, 255, 0.09);
-  border-color: var(--glass-border-light);
+  background: rgba(255, 255, 255, 0.12);
+  border-color: var(--liquid-glass-border-light);
   color: #fff;
 }
 
 .diagnostics-modal-body {
-  padding: 18px;
+  padding: 20px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
 
 .diag-banner {
-  background: linear-gradient(135deg, rgba(13, 34, 56, 0.7), rgba(20, 50, 85, 0.6));
-  border: 1px solid rgba(59, 130, 246, 0.4);
+  background: linear-gradient(135deg, rgba(13, 34, 56, 0.75), rgba(20, 50, 85, 0.65));
+  border: 1px solid rgba(59, 130, 246, 0.45);
   border-radius: 8px;
-  padding: 12px 16px;
+  padding: 14px 18px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.15);
 }
 
 .banner-text {
@@ -1416,32 +1454,32 @@ input, button, select {
   color: #fff;
   font-size: 12px;
   font-weight: 600;
-  padding: 8px 16px;
+  padding: 8px 18px;
   border-radius: 6px;
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.15s ease;
-  box-shadow: 0 2px 10px rgba(37, 99, 235, 0.4);
+  box-shadow: 0 2px 12px rgba(37, 99, 235, 0.45);
 }
 
 .diag-copy-btn:hover {
   background: #1d4ed8;
-  box-shadow: 0 0 16px rgba(37, 99, 235, 0.7);
+  box-shadow: 0 0 18px rgba(37, 99, 235, 0.75);
 }
 
 .diag-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
+  gap: 14px;
 }
 
 .diag-card {
-  background: var(--glass-subtle);
-  border: 1px solid var(--glass-border);
+  background: var(--liquid-glass-card);
+  border: 1px solid var(--liquid-glass-border);
   border-radius: 8px;
   padding: 12px 14px;
   font-size: 11px;
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
+  box-shadow: var(--liquid-glass-card-shadow);
 }
 
 .diag-card h4 {
@@ -1480,8 +1518,8 @@ input, button, select {
 .diag-raw-box textarea {
   width: 100%;
   height: 110px;
-  background: rgba(10, 12, 16, 0.75);
-  border: 1px solid var(--glass-border);
+  background: rgba(10, 12, 16, 0.85);
+  border: 1px solid var(--liquid-glass-border);
   border-radius: 6px;
   color: #4ade80;
   font-family: var(--font-mono);
@@ -1498,8 +1536,8 @@ input, button, select {
 }
 
 .diag-logs-list {
-  background: rgba(10, 12, 16, 0.75);
-  border: 1px solid var(--glass-border);
+  background: rgba(10, 12, 16, 0.85);
+  border: 1px solid var(--liquid-glass-border);
   border-radius: 6px;
   max-height: 120px;
   overflow-y: auto;
@@ -1530,17 +1568,17 @@ input, button, select {
   color: var(--text-primary);
 }
 
-/* Blender Right-Click Context Menu — Frosted Glass */
+/* Blender Right-Click Context Menu — Liquid Glass */
 .blender-right-click-menu {
   position: fixed;
-  background: var(--glass-modal);
-  backdrop-filter: blur(32px) saturate(200%);
-  -webkit-backdrop-filter: blur(32px) saturate(200%);
-  border: 1px solid var(--glass-border-light);
-  border-radius: 8px;
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.12), 0 16px 48px rgba(0, 0, 0, 0.75);
+  background: var(--liquid-glass-modal);
+  backdrop-filter: var(--liquid-glass-blur);
+  -webkit-backdrop-filter: var(--liquid-glass-blur);
+  border: 1px solid var(--liquid-glass-border-light);
+  border-radius: 10px;
+  box-shadow: var(--liquid-glass-shadow);
   min-width: 220px;
-  padding: 5px;
+  padding: 6px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -1558,9 +1596,9 @@ input, button, select {
   font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  border-bottom: 1px solid var(--glass-border);
-  margin-bottom: 2px;
+  letter-spacing: 0.6px;
+  border-bottom: 1px solid var(--liquid-glass-border);
+  margin-bottom: 3px;
 }
 
 .rc-menu-item {
@@ -1568,7 +1606,7 @@ input, button, select {
   align-items: center;
   gap: 8px;
   padding: 7px 11px;
-  border-radius: 5px;
+  border-radius: 6px;
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-primary);
@@ -1580,19 +1618,19 @@ input, button, select {
 }
 
 .rc-menu-item:hover {
-  background: rgba(37, 99, 235, 0.35);
-  border-color: rgba(96, 165, 250, 0.3);
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.45), rgba(29, 78, 216, 0.35));
+  border-color: rgba(96, 165, 250, 0.35);
   color: #fff;
 }
 
 .rc-menu-item.text-danger:hover {
-  background: rgba(220, 38, 38, 0.4);
-  border-color: rgba(239, 68, 68, 0.4);
+  background: linear-gradient(135deg, rgba(220, 38, 38, 0.5), rgba(185, 28, 28, 0.4));
+  border-color: rgba(239, 68, 68, 0.45);
   color: #fff;
 }
 
 .rc-menu-divider {
   height: 1px;
-  background: var(--glass-border);
+  background: var(--liquid-glass-border);
   margin: 3px 4px;
 }
