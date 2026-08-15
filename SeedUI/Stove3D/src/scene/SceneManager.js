@@ -13,7 +13,7 @@ export class SceneManager {
     this.onSelectionChange = null;
     this.onPrimitiveCreated = null;
 
-    // Blender 4.1 Viewport Solid Material (Uses Quad-Uniform Split Normals)
+    // Blender 4.1 Viewport Solid Material with True Bilinear Quad Shader (Option 2)
     this.defaultMaterial = new THREE.MeshStandardMaterial({
       color: 0x9096a2,
       roughness: 0.65,
@@ -21,6 +21,60 @@ export class SceneManager {
       flatShading: false,
       side: THREE.DoubleSide
     });
+
+    this.defaultMaterial.onBeforeCompile = (shader) => {
+      shader.vertexShader = `
+        attribute vec3 quadCorner0;
+        attribute vec3 quadCorner1;
+        attribute vec3 quadCorner2;
+        attribute vec3 quadCorner3;
+        attribute float isQuad;
+
+        varying vec3 vQuadP0;
+        varying vec3 vQuadP1;
+        varying vec3 vQuadP2;
+        varying vec3 vQuadP3;
+        varying float vIsQuad;
+        ${shader.vertexShader}
+      `;
+
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <begin_vertex>',
+        `
+        #include <begin_vertex>
+        vQuadP0 = (modelMatrix * vec4(quadCorner0, 1.0)).xyz;
+        vQuadP1 = (modelMatrix * vec4(quadCorner1, 1.0)).xyz;
+        vQuadP2 = (modelMatrix * vec4(quadCorner2, 1.0)).xyz;
+        vQuadP3 = (modelMatrix * vec4(quadCorner3, 1.0)).xyz;
+        vIsQuad = isQuad;
+        `
+      );
+
+      shader.fragmentShader = `
+        varying vec3 vQuadP0;
+        varying vec3 vQuadP1;
+        varying vec3 vQuadP2;
+        varying vec3 vQuadP3;
+        varying float vIsQuad;
+        ${shader.fragmentShader}
+      `;
+
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <normal_fragment_begin>',
+        `
+        #include <normal_fragment_begin>
+        if (vIsQuad > 0.5) {
+          vec3 dPdu = (1.0 - vUv.y) * (vQuadP1 - vQuadP0) + vUv.y * (vQuadP2 - vQuadP3);
+          vec3 dPdv = (1.0 - vUv.x) * (vQuadP3 - vQuadP0) + vUv.x * (vQuadP2 - vQuadP1);
+          vec3 bNorm = cross(dPdu, dPdv);
+          if (dot(bNorm, bNorm) > 0.00001) {
+            normal = normalize(bNorm);
+            if (!gl_FrontFacing) normal = -normal;
+          }
+        }
+        `
+      );
+    };
 
     // Dark structural edge lines (for Edit Mode wireframe)
     this.edgeMaterial = new THREE.LineBasicMaterial({
