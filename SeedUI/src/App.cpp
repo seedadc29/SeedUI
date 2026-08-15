@@ -296,6 +296,15 @@ namespace seedui
                 start.w = element.transformacao.value("largura", 160.0f);
                 start.h = element.transformacao.value("altura", 32.0f);
                 start.rot = Geo::ElementRotation(element);
+                // Guarda os pontos ORIGINAIS do caminho (para o RescalePath
+                // re-mapear a partir do estado original, sem cascata).
+                if (element.tipo == "caminho" &&
+                    element.transformacao.contains("pontos") &&
+                    element.transformacao["pontos"].is_array())
+                {
+                    start.pontosOriginais = element.transformacao["pontos"];
+                    start.temPontos = true;
+                }
                 out.push_back(start);
             }
             const bool powerClip = element.propriedades.is_object() &&
@@ -1477,7 +1486,12 @@ namespace seedui
         if (pts.empty()) return;
         float minX = 0.0f, minY = 0.0f, maxX = 0.0f, maxY = 0.0f;
         if (!Geo::PathBounds(path, minX, minY, maxX, maxY)) return;
-        const bool shift = minX < 0.0f || minY < 0.0f;
+        // SEMPRE normaliza os pontos para a origem (0,0): se o menor ponto
+        // ficou > 0 (ex.: nós movidos para a direita/baixo na edição), a
+        // caixa de seleção (x,y,largura,altura) desalinha do desenho — e no
+        // resize o desalinhamento é amplificado (o objeto "se distancia das
+        // alças" e deforma). Deslocar x,y junto preserva a geometria absoluta.
+        const bool shift = fabsf(minX) > 0.001f || fabsf(minY) > 0.001f;
         if (shift)
         {
             path.transformacao["x"] =
@@ -1504,6 +1518,15 @@ namespace seedui
         mPenMouseProjectX = px;
         mPenMouseProjectY = py;
         mPenHoverSegmentIndex = -1;
+
+        // Segurança: se não há arrasto em andamento (mouse solto), zera o
+        // estado residual (ex.: troca de ferramenta no meio do arrasto).
+        if (mPenNodeDragIndex >= 0 && !ImGui::IsMouseDown(ImGuiMouseButton_Left))
+        {
+            mPenNodeDragIndex = -1;
+            mPenNodeDragPart = 0;
+            mPenNodeDragMoved = false;
+        }
 
         if (!mPenDrawing)
         {
@@ -1664,38 +1687,189 @@ namespace seedui
                     }
                 }
             }
-            // EXCLUIR PONTO: clicar em um NÓ existente com a caneta remove
-            // o ponto da forma (mantém o caminho com 2+ pontos).
-            if (mPenAutoAddDelete && canvasHovered && inside &&
-                ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            // Edição de NÓS com a CANETA: clicar num nó/alça e arrastar move
+            // o ponto (16=nó, 17=alça de saída, 18=alça de entrada); clique
+            // simples sem movimento mantém o comportamento de EXCLUIR o
+            // ponto (com mPenAutoAddDelete e caminho com 2+ pontos).
             {
                 Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
                 Element* sel = Project::ResolverId(mode, mSelectedElementId);
                 if (sel && sel->tipo == "caminho" && !sel->bloqueado &&
                     sel->transformacao.contains("pontos") &&
-                    sel->transformacao["pontos"].is_array() &&
-                    sel->transformacao["pontos"].size() > 2)
+                    sel->transformacao["pontos"].is_array())
                 {
                     auto& spts = sel->transformacao["pontos"];
                     const float sbx = sel->transformacao.value("x", 0.0f);
                     const float sby = sel->transformacao.value("y", 0.0f);
-                    const float nodeTol = 7.0f / std::max(0.25f, mCanvasZoom);
-                    const float nodeTolSq = nodeTol * nodeTol;
-                    for (int i = 0; i < (int)spts.size(); ++i)
+
+                    // INÍCIO: clique sobre um nó/alça registra o arrasto.
+                    if (mPenNodeDragIndex < 0 && canvasHovered && inside &&
+                        ImGui::IsMouseClicked(ImGuiMouseButton_Left))
                     {
-                        const float nx = sbx + spts[i].value("x", 0.0f);
-                        const float ny = sby + spts[i].value("y", 0.0f);
-                        const float dx = px - nx, dy = py - ny;
-                        if (dx * dx + dy * dy <= nodeTolSq)
+                        const float nodeTol = 13.0f / std::max(0.25f, mCanvasZoom);
+                        const float nodeTolSq = nodeTol * nodeTol;
+                        for (int i = 0; i < (int)spts.size(); ++i)
                         {
-                            spts.erase(spts.begin() + i);
+                            const float nx = sbx + spts[i].value("x", 0.0f);
+                            const float ny = sby + spts[i].value("y", 0.0f);
+                            const bool broken = spts[i].value("quebrado", 0.0f) > 0.5f;
+                            // Alça de entrada
+                            const float ix = broken
+                                ? nx + spts[i].value("cx1", 0.0f)
+                                : nx - spts[i].value("cx2", 0.0f);
+                            const float iy = broken
+                                ? ny + spts[i].value("cy1", 0.0f)
+                                : ny - spts[i].value("cy2", 0.0f);
+                            const float idx = px - ix, idy = py - iy;
+                            if (idx * idx + idy * idy <= nodeTolSq)
+                            {
+                                mPenNodeDragIndex = i;
+                                mPenNodeDragPart = 2; // alça de entrada
+                                mPenNodeDragStartX = px;
+                                mPenNodeDragStartY = py;
+                                mPenNodeDragMoved = false;
+                                return;
+                            }
+                            // Alça de saída
+                            const float ox = nx + spts[i].value("cx2", 0.0f);
+                            const float oy = ny + spts[i].value("cy2", 0.0f);
+                            const float odx = px - ox, ody = py - oy;
+                            if (odx * odx + ody * ody <= nodeTolSq)
+                            {
+                                mPenNodeDragIndex = i;
+                                mPenNodeDragPart = 1; // alça de saída
+                                mPenNodeDragStartX = px;
+                                mPenNodeDragStartY = py;
+                                mPenNodeDragMoved = false;
+                                return;
+                            }
+                            // Nó central
+                            const float ndx = px - nx, ndy = py - ny;
+                            if (ndx * ndx + ndy * ndy <= nodeTolSq)
+                            {
+                                mPenNodeDragIndex = i;
+                                mPenNodeDragPart = 0; // nó
+                                mPenNodeDragStartX = px;
+                                mPenNodeDragStartY = py;
+                                mPenNodeDragMoved = false;
+                                mPathEditIndex = i;
+                                // Clique puro no mesmo frame (solta imediata):
+                                // exclui o ponto como antes.
+                                if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+                                {
+                                    mPenNodeDragIndex = -1;
+                                    mPenNodeDragPart = 0;
+                                    mPenNodeDragMoved = false;
+                                    if (mPenAutoAddDelete && spts.size() > 2)
+                                    {
+                                        spts.erase(spts.begin() + i);
+                                        RecalcularCaixaCaminho(*sel);
+                                        mProjectDirty = true;
+                                        CapturarHistorico();
+                                        mStatusMsg = "Ponto removido da forma";
+                                        mStatusMsgUntil = GetTime() + 4.0;
+                                    }
+                                }
+                                return;
+                            }
+                        }
+                    }
+
+                    // EM ANDAMENTO: move o nó/alça conforme o mouse (limiar
+                    // de ~4px de tela para diferenciar clique de arrasto). O
+                    // limiar é marcado mesmo fora do canvas, para o usuário
+                    // poder arrastar para fora e soltar sem excluir o ponto.
+                    if (mPenNodeDragIndex >= 0 &&
+                        ImGui::IsMouseDown(ImGuiMouseButton_Left))
+                    {
+                        if (!mPenNodeDragMoved)
+                        {
+                            float unusedX = 0.0f, unusedY = 0.0f, viewScale = 1.0f;
+                            CanvasProjectToScreen(&mProject, 0.0f, 0.0f,
+                                unusedX, unusedY, viewScale,
+                                mCanvasZoom, mCanvasPanX, mCanvasPanY);
+                            const float movePxX = (px - mPenNodeDragStartX) * viewScale;
+                            const float movePxY = (py - mPenNodeDragStartY) * viewScale;
+                            if (movePxX * movePxX + movePxY * movePxY >= 16.0f)
+                                mPenNodeDragMoved = true;
+                        }
+                        if (mPenNodeDragMoved)
+                        {
+                            const int index = mPenNodeDragIndex;
+                            if (index >= 0 && index < (int)spts.size())
+                            {
+                                if (mPenNodeDragPart == 0)
+                                {
+                                    spts[index]["x"] = px - sbx;
+                                    spts[index]["y"] = py - sby;
+                                    RecalcularCaixaCaminho(*sel);
+                                }
+                                else if (mPenNodeDragPart == 2)
+                                {
+                                    const float nx = sbx + spts[index].value("x", 0.0f);
+                                    const float ny = sby + spts[index].value("y", 0.0f);
+                                    const bool broken = spts[index].value("quebrado", 0.0f) > 0.5f;
+                                    const float dx = px - nx, dy = py - ny;
+                                    if (broken)
+                                    {
+                                        spts[index]["cx1"] = dx;
+                                        spts[index]["cy1"] = dy;
+                                        spts[index]["curva"] = 1.0f;
+                                    }
+                                    else
+                                    {
+                                        spts[index]["cx2"] = -dx;
+                                        spts[index]["cy2"] = -dy;
+                                        spts[index]["curva"] = 1.0f;
+                                    }
+                                }
+                                else
+                                {
+                                    const float nx = sbx + spts[index].value("x", 0.0f);
+                                    const float ny = sby + spts[index].value("y", 0.0f);
+                                    spts[index]["cx2"] = px - nx;
+                                    spts[index]["cy2"] = py - ny;
+                                    spts[index]["curva"] = 1.0f;
+                                }
+                                mProjectDirty = true;
+                            }
+                        }
+                        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
+                        return;
+                    }
+
+                    // SOLTAR: clique simples (sem movimento) exclui o ponto;
+                    // arrasto já foi aplicado acima. A exclusão só vale para
+                    // clique no NÓ (part 0) — clicar numa alça nunca exclui.
+                    // Usa "não pressionado" em vez de IsMouseReleased para
+                    // cobrir solta rápida no mesmo frame e fora do canvas.
+                    if (mPenNodeDragIndex >= 0 &&
+                        !ImGui::IsMouseDown(ImGuiMouseButton_Left))
+                    {
+                        const int index = mPenNodeDragIndex;
+                        const int part = mPenNodeDragPart;
+                        const bool moved = mPenNodeDragMoved;
+                        mPenNodeDragIndex = -1;
+                        mPenNodeDragPart = 0;
+                        mPenNodeDragMoved = false;
+                        if (!moved && part == 0 && mPenAutoAddDelete &&
+                            spts.size() > 2 &&
+                            index >= 0 && index < (int)spts.size())
+                        {
+                            spts.erase(spts.begin() + index);
                             RecalcularCaixaCaminho(*sel);
                             mProjectDirty = true;
                             CapturarHistorico();
                             mStatusMsg = "Ponto removido da forma";
                             mStatusMsgUntil = GetTime() + 4.0;
-                            return;
                         }
+                        else if (moved)
+                        {
+                            CapturarHistorico();
+                            mStatusMsg = "Nó reposicionado";
+                            mStatusMsgUntil = GetTime() + 3.0;
+                        }
+                        return;
                     }
                 }
             }
@@ -3804,68 +3978,11 @@ namespace seedui
                 if (rdx * rdx + rdy * rdy <= rotTol * rotTol) return 14;
             }
 
-            if (element.tipo == "caminho" &&
-                element.transformacao.contains("pontos") &&
-                element.transformacao["pontos"].is_array())
-            {
-                // Nós e alças de curva editáveis: 16 = nó, 17 = alça de
-                // SAÍDA (segmento i→i+1), 18 = alça de ENTRADA (i-1→i).
-                // Tolerância ampla e ergonômica (~13px em tela) com prioridade absoluta.
-                const auto& pts = element.transformacao["pontos"];
-                const float nodeTol = 13.0f / std::max(0.25f, viewScale);
-                const float nodeTolSq = nodeTol * nodeTol;
-                for (int i = 0; i < (int)pts.size(); ++i)
-                {
-                    const float nx = ex + pts[i].value("x", 0.0f);
-                    const float ny = ey + pts[i].value("y", 0.0f);
-                    const bool broken = pts[i].value("quebrado", 0.0f) > 0.5f;
-                    // Alça de entrada
-                    const float ix = broken
-                        ? nx + pts[i].value("cx1", 0.0f)
-                        : nx - pts[i].value("cx2", 0.0f);
-                    const float iy = broken
-                        ? ny + pts[i].value("cy1", 0.0f)
-                        : ny - pts[i].value("cy2", 0.0f);
-                    const float idx = x - ix, idy = y - iy;
-                    if (idx * idx + idy * idy <= nodeTolSq)
-                    {
-                        mPathEditIndex = i;
-                        return 18;
-                    }
-                    // Alça de saída
-                    const float hx = nx + pts[i].value("cx2", 0.0f);
-                    const float hy = ny + pts[i].value("cy2", 0.0f);
-                    const float hdx = x - hx, hdy = y - hy;
-                    if (hdx * hdx + hdy * hdy <= nodeTolSq)
-                    {
-                        mPathEditIndex = i;
-                        return 17;
-                    }
-                    // Nó central
-                    const float ndx = x - nx, ndy = y - ny;
-                    if (ndx * ndx + ndy * ndy <= nodeTolSq)
-                    {
-                        mPathEditIndex = i;
-                        return 16;
-                    }
-                }
-
-                // Se clicou sobre o contorno da curva (tolerância generosa de 10px):
-                const float curveTol = 10.0f / std::max(0.25f, viewScale);
-                int segIdx = -1; float segT = 0.0f, projX = 0.0f, projY = 0.0f;
-                if (Geo::FindSegmentOnPath(element, x - ex, y - ey, curveTol, segIdx, segT, projX, projY))
-                {
-                    mPathEditIndex = (segT > 0.5f) ? ((segIdx + 1) % (int)pts.size()) : segIdx;
-                    return 16;
-                }
-
-                const bool hasFill = element.estilos.is_object() &&
-                                     element.estilos.contains("cor_fundo") &&
-                                     element.transformacao.value("fechado", 0.0f) > 0.5f;
-                if (hasFill && x >= ex && x <= ex + ew && y >= ey && y <= ey + eh)
-                    return 1;
-                return 0;
-            }
+            // Caminho (caneta): com a ferramenta de SELEÇÃO/transformação o
+            // caminho se comporta como um objeto ÚNICO — tem alças de resize
+            // (2-9), rotação (14) e pivô (15) como os demais elementos, e o
+            // clique dentro da caixa move a forma INTEIRA (modo 1). A edição
+            // de NÓS (arrastar pontos/alças) fica para a CANETA (HandlePenTool).
 
             // Transforma o ponto (x, y) para o espaço local não rotacionado do elemento
             float localX = x;
@@ -3898,7 +4015,8 @@ namespace seedui
             }
 
             const bool supportsCorners = element.tipo != "elipse" &&
-                                         element.tipo != "poligono";
+                                         element.tipo != "poligono" &&
+                                         element.tipo != "caminho";
             const float minMarkerInset = 14.0f / std::max(0.25f, viewScale);
             const float maxMarkerInset = std::max(6.0f / std::max(0.25f, viewScale),
                 std::min(ew, eh) * 0.5f - 6.0f / std::max(0.25f, viewScale));
@@ -4344,6 +4462,17 @@ namespace seedui
                     mCanvasDragH = hit->transformacao.value("altura", 32.0f);
                     mCanvasDragRotation = Geo::ElementRotation(*hit);
                     Geo::ElementPivot(*hit, mCanvasDragPivotX, mCanvasDragPivotY);
+                    // Guarda os pontos ORIGINAIS do caminho (resize
+                    // individual) — o RescalePath re-mapeia a partir deles.
+                    mCanvasPathOrigValid = false;
+                    mCanvasPathOrigPts = nlohmann::json::array();
+                    if (hit->tipo == "caminho" &&
+                        hit->transformacao.contains("pontos") &&
+                        hit->transformacao["pontos"].is_array())
+                    {
+                        mCanvasPathOrigPts = hit->transformacao["pontos"];
+                        mCanvasPathOrigValid = true;
+                    }
                 }
                 for (int corner = 0; corner < 4; ++corner)
                     mCanvasCornerRadiusStarts[corner] =
@@ -4687,6 +4816,16 @@ namespace seedui
                         mCanvasDragH = clone->transformacao.value("altura", 32.0f);
                         mCanvasDragRotation = Geo::ElementRotation(*clone);
                         Geo::ElementPivot(*clone, mCanvasDragPivotX, mCanvasDragPivotY);
+                        // Pontos originais do caminho clonado (resize).
+                        mCanvasPathOrigValid = false;
+                        mCanvasPathOrigPts = nlohmann::json::array();
+                        if (clone->tipo == "caminho" &&
+                            clone->transformacao.contains("pontos") &&
+                            clone->transformacao["pontos"].is_array())
+                        {
+                            mCanvasPathOrigPts = clone->transformacao["pontos"];
+                            mCanvasPathOrigValid = true;
+                        }
                         mCanvasGroupStarts.clear();
                         for (const std::string& id : cloneIds)
                         {
@@ -5022,6 +5161,70 @@ namespace seedui
                         { "y", nt + (py - ot) * sy }
                     };
                 };
+                // Redimensiona os PONTOS do caminho (caneta) junto com a
+                // caixa. Os pontos são LOCAIS (relativos à origem x,y do
+                // elemento). Ao arrastar a alça ESQUERDA/SUPERIOR, a origem
+                // (x,y) muda — os pontos precisam ser re-mapeados em relação
+                // à ARESTA FIXA (a oposta à alça arrastada), senão a forma
+                // "descola" da caixa. anchorAbsX/Y = posição absoluta da
+                // âncora (aresta/pivô que não se move).
+                // Re-mapeia os pontos do caminho (caneta) junto com a caixa.
+                // IMPORTANTE: re-mapeia a partir dos pontos ORIGINAIS
+                // (capturados no início do arrasto) — re-mapear a partir do
+                // estado atual a cada frame aplicaria a escala EM CASCATA
+                // (objeto cresce além da caixa, se distancia das alças e
+                // deforma). Os pontos são LOCAIS (relativos à origem x,y); ao
+                // arrastar a alça ESQUERDA/SUPERIOR a origem muda, então os
+                // pontos são re-mapeados em relação à ARESTA FIXA (a oposta à
+                // alça arrastada) ou ao pivô (espelhado). escalaPura=true
+                // (resize em GRUPO): o elemento já foi reposicionado (x,y) e
+                // os pontos apenas escalam a partir da nova origem.
+                auto RescalePath = [](Element* el,
+                                      const nlohmann::json& origPts,
+                                      float ol, float ot,
+                                      float ow, float oh,
+                                      float nl, float nt, float nw, float nh,
+                                      float anchorAbsX, float anchorAbsY,
+                                      bool escalaPura)
+                {
+                    if (!el || !el->transformacao.is_object() ||
+                        el->tipo != "caminho" ||
+                        !el->transformacao.contains("pontos") ||
+                        !el->transformacao["pontos"].is_array())
+                        return;
+                    const float sx = (ow > 0.01f) ? (nw / ow) : 1.0f;
+                    const float sy = (oh > 0.01f) ? (nh / oh) : 1.0f;
+                    const float axLocal = anchorAbsX - ol; // âncora local X
+                    const float ayLocal = anchorAbsY - ot; // âncora local Y
+                    auto& pts = el->transformacao["pontos"];
+                    pts.clear();
+                    pts = origPts;
+                    for (auto& p : pts)
+                    {
+                        if (!p.is_object()) continue;
+                        if (p.contains("x"))
+                        {
+                            const float px = p.value("x", 0.0f);
+                            p["x"] = escalaPura ? px * sx
+                                                 : (anchorAbsX - nl) +
+                                                   (px - axLocal) * sx;
+                        }
+                        if (p.contains("y"))
+                        {
+                            const float py = p.value("y", 0.0f);
+                            p["y"] = escalaPura ? py * sy
+                                                 : (anchorAbsY - nt) +
+                                                   (py - ayLocal) * sy;
+                        }
+                        // Alças são deslocamentos RELATIVOS ao ponto
+                        // (ax + cx2), então apenas escalam.
+                        if (p.contains("cx1")) p["cx1"] = p.value("cx1", 0.0f) * sx;
+                        if (p.contains("cy1")) p["cy1"] = p.value("cy1", 0.0f) * sy;
+                        if (p.contains("cx2")) p["cx2"] = p.value("cx2", 0.0f) * sx;
+                        if (p.contains("cy2")) p["cy2"] = p.value("cy2", 0.0f) * sy;
+                    }
+                };
+
                 const bool proportional = ImGui::GetIO().KeyShift &&
                                           ImGui::GetIO().KeyAlt &&
                                           mCanvasDragMode >= 6 &&
@@ -5221,15 +5424,20 @@ namespace seedui
                     {
                         Element* element = Project::ResolverId(mode, start.id);
                         if (!element) continue;
-                        element->transformacao["x"] =
-                            finalGLeft + (start.x - groupLeft) * scaleX;
-                        element->transformacao["y"] =
-                            finalGTop + (start.y - groupTop) * scaleY;
-                        element->transformacao["largura"] =
-                            std::max(1.0f, start.w * scaleX);
-                        element->transformacao["altura"] =
-                            std::max(1.0f, start.h * scaleY);
+                        const float nx = finalGLeft + (start.x - groupLeft) * scaleX;
+                        const float ny = finalGTop + (start.y - groupTop) * scaleY;
+                        const float nw = std::max(1.0f, start.w * scaleX);
+                        const float nh = std::max(1.0f, start.h * scaleY);
+                        element->transformacao["x"] = nx;
+                        element->transformacao["y"] = ny;
+                        element->transformacao["largura"] = nw;
+                        element->transformacao["altura"] = nh;
                         ClampElementCornerRadii(*element);
+                        // Caminhos dentro do conjunto também escalam os pontos
+                        // (escala pura a partir da nova origem do elemento).
+                        RescalePath(element, start.pontosOriginais,
+                                    start.x, start.y, start.w, start.h,
+                                    nx, ny, nw, nh, nx, ny, true);
                     }
                 }
                 else if (proportional)
@@ -5262,6 +5470,11 @@ namespace seedui
                     RescalePivot(selected, mCanvasDragX, mCanvasDragY,
                                  mCanvasDragW, mCanvasDragH,
                                  finalLeft, finalTop, finalW, finalH);
+                    RescalePath(selected, mCanvasPathOrigPts,
+                                mCanvasDragX, mCanvasDragY,
+                                mCanvasDragW, mCanvasDragH,
+                                finalLeft, finalTop, finalW, finalH,
+                                anchorX, anchorY, false);
                 }
                 else
                 {
@@ -5280,6 +5493,27 @@ namespace seedui
                     RescalePivot(selected, mCanvasDragX, mCanvasDragY,
                                  mCanvasDragW, mCanvasDragH,
                                  finalLeft, finalTop, finalW, finalH);
+                    // Âncora = aresta fixa (oposta à alça arrastada) ou o
+                    // pivô no resize espelhado (Shift isolado).
+                    float pathAnchorX = mCanvasDragX;
+                    float pathAnchorY = mCanvasDragY;
+                    if (mirrored)
+                    {
+                        pathAnchorX = mCanvasDragPivotX;
+                        pathAnchorY = mCanvasDragPivotY;
+                    }
+                    else
+                    {
+                        if (resizeLeft)
+                            pathAnchorX = mCanvasDragX + mCanvasDragW;
+                        if (resizeTop)
+                            pathAnchorY = mCanvasDragY + mCanvasDragH;
+                    }
+                    RescalePath(selected, mCanvasPathOrigPts,
+                                mCanvasDragX, mCanvasDragY,
+                                mCanvasDragW, mCanvasDragH,
+                                finalLeft, finalTop, finalW, finalH,
+                                pathAnchorX, pathAnchorY, false);
                 }
             }
 
@@ -6155,7 +6389,8 @@ namespace seedui
                            mCanvasZoom, mCanvasPanX, mCanvasPanY, UnitToPixels(),
                            mPowerClipEditFrameId.c_str(),
                            mPowerClipDirectFrameId.c_str(),
-                           mAnchorElementId.c_str());
+                           mAnchorElementId.c_str(),
+                           mCurrentTool == Tool::Pen);
 
                 // Navegação fixa do portal: independe do zoom/pan e aparece
                 // quando um filho foi acessado por Ctrl+clique ou quando o

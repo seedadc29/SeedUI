@@ -535,7 +535,12 @@ Se você é uma IA (ou desenvolvedor) trabalhando em um projeto SeedUI:
   repete o mesmo deslocamento para o conjunto, inclusive herdado do clone
   por arrasto com o botão direito)**, **espelhar H/V**, **medir distância/ângulo**,
   **sombra**, **contorno tracejado**, **elemento Linha**, **polígono/estrela
-  configurável**, **caneta Bezier** com edição de nós, **modo wireframe**,
+  configurável**, **caneta Bezier** com edição de nós (com a caneta ativa,
+  clique+arraste num nó/alça move o ponto; com a ferramenta de Seleção, o
+  caminho é movido INTEIRO como um objeto — com alças de tamanho, rotação
+  e pivô como os demais elementos (o resize escala os pontos junto;
+  os nós só aparecem na caneta),
+  **modo wireframe**,
   **gradientes** (linear/radial), **Selecionar tudo (Ctrl+A)**, **exportar
   SVG** (Arquivo → Exportar SVG…) e aba **Camadas** no painel direito.
 - **Futuro (opcional)**: integração com a engine — carregar os projetos

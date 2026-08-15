@@ -833,7 +833,8 @@ namespace seedui
                     float unidadeEmPixels,
                     const char* powerClipEmEdicaoId,
                     const char* powerClipSelecaoDiretaId,
-                    const char* elementoAncoraId)
+                    const char* elementoAncoraId,
+                    bool canetaAtiva)
     {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         const ImVec2 min = ImGui::GetWindowPos();
@@ -1207,8 +1208,10 @@ namespace seedui
 
                 // Caminho (caneta): sem contorno laranja de demarcação — o
                 // caminho é editado pelos nós, como no Illustrator/CorelDRAW.
-                // Somente ferramentas de transformação mostram a caixa.
-                const bool isPath = selected->tipo == "caminho";
+                // Com a CANETA ativa os nós aparecem; com a ferramenta de
+                // Seleção/transformação o caminho é tratado como um objeto
+                // único (contorno de seleção normal, movido por inteiro).
+                const bool isPath = selected->tipo == "caminho" && canetaAtiva;
 
                 // Ponto de pivô no espaço do documento
                 float px = 0.0f, py = 0.0f;
@@ -1278,8 +1281,8 @@ namespace seedui
                 // Caminho (caneta): desenha os NÓS editáveis (sem contorno
                 // laranja e sem alças de tamanho — o caminho é editado pelos
                 // pontos, como no Illustrator/CorelDRAW). O contorno externo
-                // já foi pulado acima via isPath.
-                if (selected->tipo == "caminho" &&
+                // já foi pulado acima via isPath. Só com a CANETA ativa.
+                if (selected->tipo == "caminho" && canetaAtiva &&
                     selected->transformacao.contains("pontos") &&
                     selected->transformacao["pontos"].is_array())
                 {
@@ -1347,6 +1350,9 @@ namespace seedui
                 }
                 if (selected->tipo == "grupo")
                     continue;
+                // Caminho com a ferramenta de SELEÇÃO: trata-se de um objeto
+                // ÚNICO — desenha as alças de tamanho e rotação como os
+                // demais elementos (o resize escala os pontos junto).
 
                 const ImU32 handleFill = IM_COL32(245, 245, 245, 255);
                 const float hs = 4.0f;
@@ -1405,36 +1411,40 @@ namespace seedui
                     continue;
                 }
 
-                // Cada circulo controla somente a quina onde aparece.
-                const CornerRadii projectRadii = GetCornerRadii(*selected, w, h);
-                const float minMarkerInset = 14.0f;
-                const float maxMarkerInset = std::max(6.0f,
-                    std::min(w * viewScale * 0.5f, h * viewScale * 0.5f) - 6.0f);
-                auto markerInset = [&](float radius)
+                // Cada circulo controla somente a quina onde aparece. O
+                // caminho não usa raios de quina (o hit-test ignora 10-13).
+                if (selected->tipo != "caminho")
                 {
-                    return std::min(maxMarkerInset,
-                                    std::max(minMarkerInset, radius * viewScale));
-                };
-                const float tl = markerInset(projectRadii.topLeft);
-                const float tr = markerInset(projectRadii.topRight);
-                const float br = markerInset(projectRadii.bottomRight);
-                const float bl = markerInset(projectRadii.bottomLeft);
-                const ImVec2 cornerPoints[] = {
-                    ImVec2(ptTL.x + tl, ptTL.y + tl),
-                    ImVec2(ptTR.x - tr, ptTR.y + tr),
-                    ImVec2(ptBR.x - br, ptBR.y - br),
-                    ImVec2(ptBL.x + bl, ptBL.y - bl),
-                };
-                const ImU32 cornerFill = IM_COL32(30, 30, 30, 255);
-                const ImU32 selectedCornerFill = IM_COL32(245, 158, 11, 255);
-                for (int index = 0; index < 4; ++index)
-                {
-                    const bool cornerSelected = (quinasSelecionadas & (1u << index)) != 0;
-                    dl->AddCircleFilled(cornerPoints[index], 5.0f,
-                                        cornerSelected ? selectedCornerFill : cornerFill, 16);
-                    dl->AddCircle(cornerPoints[index], 5.0f,
-                                  cornerSelected ? IM_COL32(255, 255, 255, 255) : selection,
-                                  16, cornerSelected ? 2.0f : 1.5f);
+                    const CornerRadii projectRadii = GetCornerRadii(*selected, w, h);
+                    const float minMarkerInset = 14.0f;
+                    const float maxMarkerInset = std::max(6.0f,
+                        std::min(w * viewScale * 0.5f, h * viewScale * 0.5f) - 6.0f);
+                    auto markerInset = [&](float radius)
+                    {
+                        return std::min(maxMarkerInset,
+                                        std::max(minMarkerInset, radius * viewScale));
+                    };
+                    const float tl = markerInset(projectRadii.topLeft);
+                    const float tr = markerInset(projectRadii.topRight);
+                    const float br = markerInset(projectRadii.bottomRight);
+                    const float bl = markerInset(projectRadii.bottomLeft);
+                    const ImVec2 cornerPoints[] = {
+                        ImVec2(ptTL.x + tl, ptTL.y + tl),
+                        ImVec2(ptTR.x - tr, ptTR.y + tr),
+                        ImVec2(ptBR.x - br, ptBR.y - br),
+                        ImVec2(ptBL.x + bl, ptBL.y - bl),
+                    };
+                    const ImU32 cornerFill = IM_COL32(30, 30, 30, 255);
+                    const ImU32 selectedCornerFill = IM_COL32(245, 158, 11, 255);
+                    for (int index = 0; index < 4; ++index)
+                    {
+                        const bool cornerSelected = (quinasSelecionadas & (1u << index)) != 0;
+                        dl->AddCircleFilled(cornerPoints[index], 5.0f,
+                                            cornerSelected ? selectedCornerFill : cornerFill, 16);
+                        dl->AddCircle(cornerPoints[index], 5.0f,
+                                      cornerSelected ? IM_COL32(255, 255, 255, 255) : selection,
+                                      16, cornerSelected ? 2.0f : 1.5f);
+                    }
                 }
 
                 // Alça de rotação: fica acima da borda superior do elemento,

@@ -20,7 +20,8 @@ namespace seedui
                     float unidadeEmPixels = 1.0f,
                     const char* powerClipEmEdicaoId = nullptr,
                     const char* powerClipSelecaoDiretaId = nullptr,
-                    const char* elementoAncoraId = nullptr);
+                    const char* elementoAncoraId = nullptr,
+                    bool canetaAtiva = false);
 
     // Converte coordenadas da janela para coordenadas da tela base do projeto.
     bool CanvasScreenToProject(const Project* projeto, float screenX, float screenY,

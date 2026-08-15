@@ -215,9 +215,21 @@ namespace seedui
             std::string id;
             float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
             float rot = 0.0f; // rotação no início do arraste (rotação em conjunto)
+            // Pontos ORIGINAIS do caminho no início do arraste (resize de
+            // caminhos). Necessário porque o RescalePath re-mapeia a partir
+            // do estado ORIGINAL — re-mapear a partir do estado atual a cada
+            // frame aplicaria a escala em cascata (objeto cresce além da
+            // caixa, se distancia das alças e deforma).
+            nlohmann::json pontosOriginais;
+            bool temPontos = false;
         };
         std::string mSelectedElementId;
         std::vector<std::string> mSelectedElementIds;
+        // Pontos ORIGINAIS do caminho em edição de resize INDIVIDUAL (não
+        // grupo). O RescalePath re-mapeia a partir deles a cada frame —
+        // evita a escala em cascata (objeto cresce além da caixa e deforma).
+        nlohmann::json mCanvasPathOrigPts;
+        bool mCanvasPathOrigValid = false;
         std::string mAnchorElementId; // âncora de alinhamento (duplo clique)
         std::vector<CanvasTransformStart> mCanvasGroupStarts;
         TransformMode mTransformMode = TransformMode::None;
@@ -313,6 +325,13 @@ namespace seedui
         bool mPenPreview = true;
         bool mPenAutoAddDelete = true;
         float mPenConstrainAngle = 15.0f;
+        // Arrasto de NÓS/alças existentes com a CANETA (a ferramenta de
+        // Seleção move o caminho INTEIRO; a edição de pontos é da caneta).
+        // mPenNodeDragPart: 0 = nó, 1 = alça de saída, 2 = alça de entrada.
+        int mPenNodeDragIndex = -1;
+        int mPenNodeDragPart = 0;
+        float mPenNodeDragStartX = 0.0f, mPenNodeDragStartY = 0.0f;
+        bool mPenNodeDragMoved = false;
         std::string mPowerClipEditFrameId;
         // Moldura do filho escolhido por Ctrl+clique fora do ambiente interno.
         // Mantém o recorte ativo e permite voltar/entrar pelo botão no canvas.
