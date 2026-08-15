@@ -78,65 +78,53 @@ export class Engine {
     this.controls.screenSpacePanning = true;
     this.controls.target.set(0, 0, 0);
 
+    // Standard Three.js Action Mapping:
+    // Left Button = Rotate (0)
+    // Middle Button = Dolly/Zoom (1)
+    // Right Button = Pan (2)
+    this.controls.mouseButtons = {
+      LEFT: THREE.MOUSE.ROTATE,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.PAN
+    };
+
     // Emulate 3 Button Mouse (default enabled like Blender Emulate 3-Button)
     this.emulate3Button = localStorage.getItem('stove3d_emulate_3_button') !== 'false';
-    this.updateNavControls();
 
-    // CRITICAL: Intercept on POINTERDOWN with CAPTURE phase BEFORE OrbitControls runs
-    const updateModifiers = (e) => {
-      const isAlt = e.altKey || (e.key && e.key === 'Alt');
-      const isShift = e.shiftKey || (e.key && e.key === 'Shift');
-      const isCtrl = e.ctrlKey || (e.key && e.key === 'Control');
-
-      if (this.emulate3Button && isAlt) {
-        if (isCtrl) {
-          this.controls.mouseButtons.LEFT = THREE.MOUSE.DOLLY;
-        } else if (isShift) {
-          this.controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
+    // Gate OrbitControls activation:
+    // - With Alt: Left click triggers Rotate, Shift+Alt triggers Pan, Ctrl+Alt triggers Zoom
+    // - Without Alt: Left click is reserved for Selection
+    // - Middle button: Always navigates
+    const onPointerDownGate = (e) => {
+      if (e.button === 0) { // Left Mouse Button
+        if (this.emulate3Button && e.altKey) {
+          this.controls.enabled = true;
         } else {
-          this.controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
+          this.controls.enabled = false;
         }
-      } else if (e.button === 1) {
-        if (isCtrl) {
-          this.controls.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY;
-        } else if (isShift) {
-          this.controls.mouseButtons.MIDDLE = THREE.MOUSE.PAN;
-        } else {
-          this.controls.mouseButtons.MIDDLE = THREE.MOUSE.ROTATE;
-        }
-      } else if (e.button === 0 && !isAlt) {
-        this.controls.mouseButtons.LEFT = THREE.MOUSE.NONE;
+      } else if (e.button === 1) { // Middle Mouse Button
+        this.controls.enabled = true;
       }
     };
 
-    this.canvas.addEventListener('pointerdown', updateModifiers, { capture: true });
-    this.canvas.addEventListener('mousedown', updateModifiers, { capture: true });
+    const onPointerUpGate = () => {
+      this.controls.enabled = true;
+    };
 
-    // Dynamic modifier updates while Alt is held
-    window.addEventListener('keydown', (e) => {
-      updateModifiers(e);
-    });
-
-    window.addEventListener('keyup', (e) => {
-      if (e.key === 'Alt' || !e.altKey) {
-        this.controls.mouseButtons.LEFT = THREE.MOUSE.NONE;
-      } else if (e.altKey) {
-        updateModifiers(e);
-      }
-    });
+    this.canvas.addEventListener('pointerdown', onPointerDownGate, { capture: true });
+    window.addEventListener('pointerup', onPointerUpGate, { capture: true });
   }
 
   setEmulate3Button(enabled) {
     this.emulate3Button = enabled;
     localStorage.setItem('stove3d_emulate_3_button', enabled ? 'true' : 'false');
-    this.updateNavControls();
   }
 
   updateNavControls() {
     this.controls.mouseButtons = {
-      LEFT: this.emulate3Button ? THREE.MOUSE.ROTATE : THREE.MOUSE.NONE,
-      MIDDLE: THREE.MOUSE.ROTATE,
-      RIGHT: THREE.MOUSE.NONE
+      LEFT: THREE.MOUSE.ROTATE,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.PAN
     };
   }
 
