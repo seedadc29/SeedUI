@@ -51,11 +51,12 @@
           </div>
         </div>
 
-        <!-- Performance Stats -->
+        <!-- Performance Stats & Diagnostics -->
         <div class="header-right">
           <div class="stat-badge" id="stat-fps">60 FPS</div>
           <div class="stat-badge" id="stat-verts">8 Verts</div>
           <div class="stat-badge" id="stat-faces">6 Faces</div>
+          <button class="diag-header-btn" id="btn-open-diagnostics" title="Abrir Painel de Diagnóstico & Telemetria">🩺 Diagnóstico</button>
           <button class="icon-toggle-btn active" id="btn-lowspec" title="Modo Otimizado para Vídeo Integrado">⚡ Eco-GPU</button>
           <button class="icon-toggle-btn" id="btn-fullscreen" title="Tela Cheia">⛶</button>
         </div>
@@ -396,6 +397,53 @@
             <span class="item-icon">🍩</span>
             <span>Torus</span>
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Diagnostics & Telemetry Modal -->
+    <div class="diagnostics-modal hidden" id="diagnostics-modal">
+      <div class="diagnostics-modal-backdrop"></div>
+      <div class="diagnostics-modal-window">
+        <div class="diagnostics-modal-header">
+          <div class="header-title-box">
+            <span class="modal-icon">🩺</span>
+            <h3>Painel de Diagnóstico & Telemetria em Tempo Real</h3>
+          </div>
+          <div class="header-actions">
+            <button class="diag-action-btn" id="btn-refresh-diagnostics">🔄 Atualizar</button>
+            <button class="diag-action-btn" id="btn-close-diagnostics">✕ Fechar</button>
+          </div>
+        </div>
+
+        <div class="diagnostics-modal-body">
+          <!-- 1-Click Copy Banner -->
+          <div class="diag-banner">
+            <div class="banner-text">
+              <strong>📋 Relatório Pronto para o Chat:</strong>
+              <span>Clique no botão abaixo para copiar o estado completo de variáveis, seleção e eventos para colar no chat.</span>
+            </div>
+            <button class="diag-copy-btn" id="btn-copy-diagnostics">📋 Copiar Diagnóstico Completo</button>
+          </div>
+
+          <!-- State Overview Cards -->
+          <div id="diag-state-content">
+            <!-- Dynamically populated -->
+          </div>
+
+          <!-- Raw Markdown / JSON Preview -->
+          <div class="diag-raw-box">
+            <label>Texto Formatado para Copiar:</label>
+            <textarea id="diagnostics-text-output" readonly spellcheck="false"></textarea>
+          </div>
+
+          <!-- Live Event Logs -->
+          <div class="diag-logs-container">
+            <label>Histórico de Eventos Recentes:</label>
+            <div class="diag-logs-list" id="diag-logs-content">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
         </div>
       </div>
     </div>

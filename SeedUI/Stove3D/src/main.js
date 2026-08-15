@@ -5,6 +5,7 @@ import { HistoryManager } from './core/HistoryManager.js';
 import { MeshEditor } from './mesh/MeshEditor.js';
 import { PaintManager } from './paint/PaintManager.js';
 import { ExportManager } from './io/ExportManager.js';
+import { DiagnosticsManager } from './core/DiagnosticsManager.js';
 import { UIManager } from './ui/UI.js';
 
 window.addEventListener('DOMContentLoaded', () => {
@@ -18,6 +19,8 @@ window.addEventListener('DOMContentLoaded', () => {
   const paintManager = new PaintManager(engine, sceneManager, historyManager);
   const exportManager = new ExportManager(sceneManager);
   const ui = new UIManager(engine, sceneManager, transformManager, meshEditor, historyManager, paintManager, exportManager);
+  const diagnostics = new DiagnosticsManager(engine, sceneManager, transformManager, meshEditor, ui);
+  ui.diagnostics = diagnostics;
 
   // Expose to window for easy debugging/inspection
   window.stove3d = {
@@ -28,8 +31,9 @@ window.addEventListener('DOMContentLoaded', () => {
     meshEditor,
     paintManager,
     exportManager,
+    diagnostics,
     ui
   };
 
-  console.log('✅ Stove 3D Studio - Topologia, Pintura 3D, Exportador e Undo/Redo Ativos!');
+  console.log('✅ Stove 3D Studio - Diagnóstico, Topologia, Pintura 3D e Undo/Redo Ativos!');
 });
