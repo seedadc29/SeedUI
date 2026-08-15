@@ -242,8 +242,11 @@ export class BlenderUI {
     });
 
     document.getElementById('chk-n-grid')?.addEventListener('change', (e) => {
-      if (this.engine.gridHelper) this.engine.gridHelper.visible = e.target.checked;
-      if (this.engine.axesHelper) this.engine.axesHelper.visible = e.target.checked;
+      const vis = e.target.checked;
+      if (this.engine.gridHelper) this.engine.gridHelper.visible = vis;
+      if (this.engine.xAxisLine) this.engine.xAxisLine.visible = vis;
+      if (this.engine.yAxisLine) this.engine.yAxisLine.visible = vis;
+      if (this.engine.axesHelper) this.engine.axesHelper.visible = vis;
     });
 
     document.getElementById('chk-n-shadows')?.addEventListener('change', (e) => {

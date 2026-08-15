@@ -324,15 +324,42 @@ export class Engine {
   }
 
   initHelpers() {
-    // Ground Grid on XY Plane (Blender: Z is Up, grid lies on XY plane)
-    this.grid = new THREE.GridHelper(24, 24, 0x484856, 0x363640);
+    // 1. Blender 4.x Subtle Ground Grid on XY Plane (Z is Up)
+    const gridSize = 32;
+    const gridDivisions = 32;
+    this.grid = new THREE.GridHelper(gridSize, gridDivisions, 0x363640, 0x2c2c34);
     this.grid.rotation.x = Math.PI / 2;
     this.grid.position.z = -0.001;
+    this.gridHelper = this.grid;
     this.scene.add(this.grid);
 
-    // Origin Axes (Blender: X=Red=Right, Y=Green=Depth, Z=Blue=Up)
-    this.axes = new THREE.AxesHelper(1.5);
-    this.axes.position.z = 0.001;
+    // 2. Blender Principal Central Axis Lines (Red for X, Green for Y running across the floor)
+    const axisExtent = gridSize / 2;
+
+    // Red X-Axis Center Line
+    const xGeom = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(-axisExtent, 0, 0.001),
+      new THREE.Vector3(axisExtent, 0, 0.001)
+    ]);
+    const xMat = new THREE.LineBasicMaterial({ color: 0xcc3d3d, linewidth: 2, depthTest: true });
+    this.xAxisLine = new THREE.Line(xGeom, xMat);
+    this.xAxisLine.name = 'blender_x_axis';
+    this.scene.add(this.xAxisLine);
+
+    // Green Y-Axis Center Line
+    const yGeom = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0, -axisExtent, 0.001),
+      new THREE.Vector3(0, axisExtent, 0.001)
+    ]);
+    const yMat = new THREE.LineBasicMaterial({ color: 0x46a846, linewidth: 2, depthTest: true });
+    this.yAxisLine = new THREE.Line(yGeom, yMat);
+    this.yAxisLine.name = 'blender_y_axis';
+    this.scene.add(this.yAxisLine);
+
+    // 3. Subtle Origin Axes (1.2m)
+    this.axes = new THREE.AxesHelper(1.2);
+    this.axes.position.z = 0.002;
+    this.axesHelper = this.axes;
     this.scene.add(this.axes);
   }
 
