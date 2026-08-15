@@ -286,6 +286,11 @@ export class BlenderUI {
     this.isNPanelOpen = !this.isNPanelOpen;
     rightSidebar.classList.toggle('hidden', !this.isNPanelOpen);
     if (handle) handle.innerHTML = this.isNPanelOpen ? '<span>‹</span>' : '<span>›</span>';
+
+    // Force canvas resize to fill 100% of the screen
+    this.engine.onResize();
+    requestAnimationFrame(() => this.engine.onResize());
+    setTimeout(() => this.engine.onResize(), 50);
   }
 
   // 6. Interactive Drag-to-Scrub Inputs (Exact Blender Ergonomics)

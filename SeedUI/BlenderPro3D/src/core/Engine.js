@@ -338,6 +338,13 @@ export class Engine {
 
   bindEvents() {
     window.addEventListener('resize', () => this.onResize());
+
+    if (window.ResizeObserver && this.container) {
+      this.resizeObserver = new ResizeObserver(() => {
+        this.onResize();
+      });
+      this.resizeObserver.observe(this.container);
+    }
   }
 
   onResize() {
