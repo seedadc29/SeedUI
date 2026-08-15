@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Blender 4.1 Pro — 3D Modeling Suite</title>
+  <link rel="stylesheet" href="./src/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body class="blender-body">
+  <div class="blender-app" id="blender-app">
+    <!-- 1. Topmost Menu Bar (Blender 4.1 Flat Dark Header) -->
+    <header class="blender-topbar">
+      <div class="topbar-left">
+        <div class="blender-brand">
+          <span class="blender-icon">🟠</span>
+          <span class="blender-title">Blender Pro</span>
+        </div>
+        <div class="top-menu-dropdowns">
+          <div class="top-menu-item">Arquivo</div>
+          <div class="top-menu-item">Editar</div>
+          <div class="top-menu-item">Render</div>
+          <div class="top-menu-item">Janela</div>
+          <div class="top-menu-item">Ajuda</div>
+        </div>
+      </div>
+
+      <nav class="workspace-tabs">
+        <button class="ws-tab active" data-ws="layout">Layout</button>
+        <button class="ws-tab" data-ws="modeling">Modelagem</button>
+        <button class="ws-tab" data-ws="sculpting">Escultura</button>
+        <button class="ws-tab" data-ws="shading">Shading</button>
+        <button class="ws-tab" data-ws="rendering">Render</button>
+      </nav>
+
+      <div class="topbar-right">
+        <span class="scene-stats-chip" id="top-scene-stats">Verts: 8 • Faces: 6</span>
+        <button class="topbar-btn" id="btn-open-pbr-render" title="Abrir Renderizador PBR (F12)">⚡ Render PBR</button>
+      </div>
+    </header>
+
+    <!-- 2. Main 3D Workspace Area -->
+    <div class="blender-workspace">
+      <!-- 2.1 Left Vertical Tool Shelf (T-Panel) -->
+      <aside class="blender-toolshelf" id="toolshelf">
+        <button class="shelf-tool-btn active" id="tool-select" data-tool="select" title="Seleção de Caixa (W)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l7 18 3-7 7-3L3 3z"/></svg>
+        </button>
+        <button class="shelf-tool-btn" id="tool-cursor" data-tool="cursor" title="Cursor 3D (Shift+S)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="3" x2="12" y2="7"/><line x1="12" y1="17" x2="12" y2="21"/><line x1="3" y1="12" x2="7" y2="12"/><line x1="17" y1="12" x2="21" y2="12"/></svg>
+        </button>
+        <div class="shelf-divider"></div>
+        <button class="shelf-tool-btn" id="tool-move" data-tool="move" title="Mover (G)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/></svg>
+        </button>
+        <button class="shelf-tool-btn" id="tool-rotate" data-tool="rotate" title="Rotacionar (R)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+        </button>
+        <button class="shelf-tool-btn" id="tool-scale" data-tool="scale" title="Escalar (S)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+        </button>
+        <button class="shelf-tool-btn" id="tool-transform" data-tool="transform" title="Transformação Combinada">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="7"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+        </button>
+        <div class="shelf-divider"></div>
+        <!-- Edit Mode Specific Tools -->
+        <button class="shelf-tool-btn edit-only hidden" id="tool-extrude" data-tool="extrude" title="Extrusão de Faces (E)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        </button>
+        <button class="shelf-tool-btn edit-only hidden" id="tool-inset" data-tool="inset" title="Inset de Faces (I)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>
+        </button>
+        <button class="shelf-tool-btn edit-only hidden" id="tool-bevel" data-tool="bevel" title="Chanfro / Bevel (Ctrl+B)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M3 21l6-18h6l6 18"/></svg>
+        </button>
+        <button class="shelf-tool-btn edit-only hidden" id="tool-loopcut" data-tool="loopcut" title="Loop Cut & Slide (Ctrl+R)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+        </button>
+      </aside>
+
+      <!-- 2.2 Central 3D Viewport Area -->
+      <main class="blender-viewport-container" id="viewport-container">
+        <!-- Viewport Header (Blender 4.1 Exact Menus & Shading Spheres) -->
+        <div class="viewport-header">
+          <div class="vp-header-left">
+            <!-- Mode Switcher Dropdown -->
+            <div class="mode-select-wrapper">
+              <button class="blender-mode-dropdown-btn" id="btn-mode-dropdown">
+                <span class="mode-dot">●</span>
+                <span id="current-mode-label">Modo Objeto</span>
+                <span class="dropdown-arrow">▾</span>
+              </button>
+              <div class="blender-mode-menu hidden" id="mode-dropdown-menu">
+                <div class="mode-menu-option active" data-mode="object">
+                  <span>Modo Objeto</span>
+                  <span class="key-tag">Tab</span>
+                </div>
+                <div class="mode-menu-option" data-mode="edit">
+                  <span>Modo Edição</span>
+                  <span class="key-tag">Tab</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Submode Selectors (Vertex / Edge / Face) -->
+            <div class="submode-button-group hidden" id="submode-selectors">
+              <button class="submode-btn active" data-submode="vertex" title="Seleção por Vértice (1)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="5"/></svg>
+              </button>
+              <button class="submode-btn" data-submode="edge" title="Seleção por Aresta (2)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="4" y1="20" x2="20" y2="4"/></svg>
+              </button>
+              <button class="submode-btn" data-submode="face" title="Seleção por Face (3)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="1"/></svg>
+              </button>
+            </div>
+
+            <div class="vp-menu-item" id="vp-menu-view">Visualizar</div>
+            <div class="vp-menu-item" id="vp-menu-select">Selecionar</div>
+            <div class="vp-menu-item" id="vp-menu-add">Adicionar</div>
+          </div>
+
+          <div class="vp-header-right">
+            <!-- Proportional Editing Toggle (O) -->
+            <button class="prop-edit-btn" id="btn-prop-edit" title="Edição Proporcional (O)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/></svg>
+            </button>
+
+            <div class="vp-header-separator"></div>
+
+            <!-- Blender Iconic Shading Mode Spheres -->
+            <div class="shading-spheres-group">
+              <button class="shading-sphere-btn" id="shade-wireframe" data-shading="wireframe" title="Wireframe (Shift+Z)">○</button>
+              <button class="shading-sphere-btn active" id="shade-solid" data-shading="solid" title="Sólido (Z)">◉</button>
+              <button class="shading-sphere-btn" id="shade-material" data-shading="material" title="Prévia de Material">◕</button>
+              <button class="shading-sphere-btn" id="shade-rendered" data-shading="rendered" title="Renderizado">⬤</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3D Canvas -->
+        <canvas id="viewport-canvas"></canvas>
+
+        <!-- Blender Camera View Safe Frame (16:9 Passepartout) -->
+        <div class="camera-frame-overlay hidden" id="camera-frame-overlay">
+          <div class="camera-safe-frame">
+            <div class="camera-frame-hud">
+              <span class="hud-tag">📷 Vista da Câmera</span>
+              <span class="hud-status">🔒 Câmera na Vista Ativa (Mova para Enquadrar)</span>
+              <span class="hud-hint">Pressione 0 para Sair</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Camera Compass Gizmo (Bottom Right) -->
+        <div class="viewport-gizmo-bar">
+          <button class="vp-gizmo-btn" id="btn-cam-z" title="Vista Superior (Numpad 7)">Z</button>
+          <button class="vp-gizmo-btn" id="btn-cam-y" title="Vista Frontal (Numpad 1)">Y</button>
+          <button class="vp-gizmo-btn" id="btn-cam-x" title="Vista Lateral (Numpad 3)">X</button>
+          <button class="vp-gizmo-btn" id="btn-cam-view" title="Vista da Câmera (Numpad 0)">📷</button>
+          <button class="vp-gizmo-btn" id="btn-cam-persp" title="Perspectiva / Ortográfica (Numpad 5)">Persp</button>
+          <button class="vp-gizmo-btn" id="btn-cam-focus" title="Focar Seleção (Numpad .)">⌖</button>
+        </div>
+
+        <!-- Blender N-Panel Handle Tab (Right edge) -->
+        <button class="n-panel-handle" id="btn-toggle-npanel" title="Painel Lateral (N)">
+          <span>‹</span>
+        </button>
+
+        <!-- Blender Operator Adjust Popup (Bottom-Left) -->
+        <div class="blender-operator-box hidden" id="operator-box">
+          <div class="operator-box-header" id="operator-box-header">
+            <span id="operator-box-title">▼ Adicionar Cubo</span>
+          </div>
+          <div class="operator-box-body" id="operator-box-body">
+            <!-- Dynamically injected operator fields -->
+          </div>
+        </div>
+      </main>
+
+      <!-- 2.3 Right Panels (Outliner + N-Panel) -->
+      <aside class="blender-right-sidebar" id="right-sidebar">
+        <!-- Outliner (Scene Collection Tree) -->
+        <div class="blender-outliner-panel">
+          <div class="outliner-header">
+            <div class="outliner-title">
+              <span>📁 Scene Collection</span>
+            </div>
+            <div class="outliner-actions">
+              <button class="outliner-add-btn" id="btn-add-object" title="Adicionar Objeto (Shift+A)">+ Add</button>
+            </div>
+          </div>
+          <div class="outliner-tree" id="outliner-tree">
+            <!-- Tree items dynamically injected -->
+          </div>
+        </div>
+
+        <!-- Authentic Blender N-Panel (Tabs on Right Edge) -->
+        <div class="blender-n-panel-container">
+          <!-- Main Content Area of N-Panel -->
+          <div class="n-panel-content">
+            <!-- Header of Active Tab -->
+            <div class="n-panel-header">
+              <span class="n-header-title" id="n-panel-title">Transform</span>
+            </div>
+
+            <div class="n-panel-body">
+              <!-- TAB 1: ITEM (Transform Scrubbers) -->
+              <div class="n-tab-pane" id="n-pane-item">
+                <div class="blender-accordion">
+                  <div class="accordion-head">
+                    <span class="accordion-arrow">▼</span>
+                    <span>Transform</span>
+                  </div>
+                  <div class="accordion-body">
+                    <!-- Location -->
+                    <div class="transform-scrubber-group">
+                      <label class="scrubber-category-label">Location:</label>
+                      <div class="scrubber-row">
+                        <span class="axis-badge badge-x">X</span>
+                        <div class="scrubber-field" data-axis="pos-x">
+                          <input type="number" step="0.1" class="scrubber-input" id="num-pos-x" value="0.000">
+                          <span class="scrubber-unit">m</span>
+                        </div>
+                      </div>
+                      <div class="scrubber-row">
+                        <span class="axis-badge badge-y">Y</span>
+                        <div class="scrubber-field" data-axis="pos-y">
+                          <input type="number" step="0.1" class="scrubber-input" id="num-pos-y" value="0.000">
+                          <span class="scrubber-unit">m</span>
+                        </div>
+                      </div>
+                      <div class="scrubber-row">
+                        <span class="axis-badge badge-z">Z</span>
+                        <div class="scrubber-field" data-axis="pos-z">
+                          <input type="number" step="0.1" class="scrubber-input" id="num-pos-z" value="0.000">
+                          <span class="scrubber-unit">m</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Rotation -->
+                    <div class="transform-scrubber-group">
+                      <label class="scrubber-category-label">Rotation:</label>
+                      <div class="scrubber-row">
+                        <span class="axis-badge badge-x">X</span>
+                        <div class="scrubber-field" data-axis="rot-x">
+                          <input type="number" step="5" class="scrubber-input" id="num-rot-x" value="0.0">
+                          <span class="scrubber-unit">°</span>
+                        </div>
+                      </div>
+                      <div class="scrubber-row">
+                        <span class="axis-badge badge-y">Y</span>
+                        <div class="scrubber-field" data-axis="rot-y">
+                          <input type="number" step="5" class="scrubber-input" id="num-rot-y" value="0.0">
+                          <span class="scrubber-unit">°</span>
+                        </div>
+                      </div>
+                      <div class="scrubber-row">
+                        <span class="axis-badge badge-z">Z</span>
+                        <div class="scrubber-field" data-axis="rot-z">
+                          <input type="number" step="5" class="scrubber-input" id="num-rot-z" value="0.0">
+                          <span class="scrubber-unit">°</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Scale -->
+                    <div class="transform-scrubber-group">
+                      <label class="scrubber-category-label">Scale:</label>
+                      <div class="scrubber-row">
+                        <span class="axis-badge badge-x">X</span>
+                        <div class="scrubber-field" data-axis="scl-x">
+                          <input type="number" step="0.1" class="scrubber-input" id="num-scl-x" value="1.000">
+                        </div>
+                      </div>
+                      <div class="scrubber-row">
+                        <span class="axis-badge badge-y">Y</span>
+                        <div class="scrubber-field" data-axis="scl-y">
+                          <input type="number" step="0.1" class="scrubber-input" id="num-scl-y" value="1.000">
+                        </div>
+                      </div>
+                      <div class="scrubber-row">
+                        <span class="axis-badge badge-z">Z</span>
+                        <div class="scrubber-field" data-axis="scl-z">
+                          <input type="number" step="0.1" class="scrubber-input" id="num-scl-z" value="1.000">
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- TAB 2: TOOL -->
+              <div class="n-tab-pane hidden" id="n-pane-tool">
+                <div class="blender-accordion">
+                  <div class="accordion-head">
+                    <span class="accordion-arrow">▼</span>
+                    <span>Active Tool</span>
+                  </div>
+                  <div class="accordion-body">
+                    <div class="blender-form-row">
+                      <label>Transform Space:</label>
+                      <select class="blender-select" id="sel-transform-space">
+                        <option value="world">Global</option>
+                        <option value="local">Local</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- TAB 3: VIEW -->
+              <div class="n-tab-pane hidden" id="n-pane-view">
+                <div class="blender-accordion">
+                  <div class="accordion-head">
+                    <span class="accordion-arrow">▼</span>
+                    <span>View Lock</span>
+                  </div>
+                  <div class="accordion-body">
+                    <div class="blender-checkbox-row">
+                      <input type="checkbox" id="chk-n-cam-lock" class="blender-chk" checked>
+                      <label for="chk-n-cam-lock">Lock Camera to View</label>
+                    </div>
+                    <div class="blender-checkbox-row">
+                      <input type="checkbox" id="chk-n-grid" class="blender-chk" checked>
+                      <label for="chk-n-grid">Floor Grid</label>
+                    </div>
+                    <div class="blender-checkbox-row">
+                      <input type="checkbox" id="chk-n-shadows" class="blender-chk" checked>
+                      <label for="chk-n-shadows">Dynamic Shadows</label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Vertical Tabs on Right Edge (Item, Tool, View) -->
+          <div class="n-panel-tab-strip">
+            <button class="n-strip-tab active" data-tab="item">Item</button>
+            <button class="n-strip-tab" data-tab="tool">Tool</button>
+            <button class="n-strip-tab" data-tab="view">View</button>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- 3. Bottom Status Bar (Blender 4.1 Exact) -->
+    <footer class="blender-statusbar">
+      <div class="statusbar-left" id="status-key-hints">
+        <span class="key-hint"><kbd>Tab</kbd> Modo Edição</span>
+        <span class="key-hint"><kbd>Shift+A</kbd> Adicionar</span>
+        <span class="key-hint"><kbd>G</kbd> Mover</span>
+        <span class="key-hint"><kbd>R</kbd> Rotacionar</span>
+        <span class="key-hint"><kbd>S</kbd> Escalar</span>
+        <span class="key-hint"><kbd>Numpad 0</kbd> Câmera</span>
+        <span class="key-hint"><kbd>N</kbd> Painel Lateral</span>
+      </div>
+      <div class="statusbar-right">
+        <span class="statusbar-info" id="status-selection-info">Cube | Verts: 8 | Faces: 6</span>
+      </div>
+    </footer>
+
+    <!-- 4. Floating Shift+A Context Menu -->
+    <div class="blender-popup-menu hidden" id="shift-a-popup">
+      <div class="popup-menu-header">Add</div>
+      <div class="popup-menu-item has-sub" id="menu-mesh-sub">
+        <span>🧊 Mesh</span>
+        <span>▶</span>
+        <div class="popup-sub-menu">
+          <div class="sub-item" data-prim="cube">Cube</div>
+          <div class="sub-item" data-prim="uvsphere">UV Sphere</div>
+          <div class="sub-item" data-prim="cylinder">Cylinder</div>
+          <div class="sub-item" data-prim="cone">Cone</div>
+          <div class="sub-item" data-prim="plane">Plane</div>
+          <div class="sub-item" data-prim="torus">Torus</div>
+          <div class="sub-item" data-prim="icosphere">Icosphere</div>
+        </div>
+      </div>
+      <div class="popup-menu-item" data-prim="camera">
+        <span>📷 Camera</span>
+      </div>
+      <div class="popup-menu-item" data-prim="light">
+        <span>💡 Light</span>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

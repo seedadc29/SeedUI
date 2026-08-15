@@ -1,0 +1,1081 @@
+/* ==========================================================================
+   Blender 4.1 Pro — Authentic Pure Dark UI Theme
+   ========================================================================== */
+
+:root {
+  --b-bg-darkest: #161616;
+  --b-bg-dark: #222222;
+  --b-bg-panel: #282828;
+  --b-bg-viewport: #2e2e2e;
+  --b-bg-input: #171717;
+  --b-bg-input-hover: #1e1e1e;
+  --b-bg-active: #3e3e3e;
+
+  --b-border: #383838;
+  --b-border-subtle: #2d2d2d;
+  --b-border-focus: #555555;
+
+  --b-accent-orange: #ea7600;
+  --b-accent-blue: #4772b3;
+  --b-accent-blue-hover: #5683c9;
+
+  --b-text-main: #d4d4d4;
+  --b-text-muted: #8c8c8c;
+  --b-text-dim: #606060;
+
+  --b-axis-x: #c73838;
+  --b-axis-y: #3da83d;
+  --b-axis-z: #367ac7;
+
+  --font-main: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+body.blender-body {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--b-bg-darkest);
+  color: var(--b-text-main);
+  font-family: var(--font-main);
+  font-size: 11px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+}
+
+.blender-app {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* ==========================================================================
+   1. Topbar Header (28px height, flat dark)
+   ========================================================================== */
+.blender-topbar {
+  height: 28px;
+  background: var(--b-bg-darkest);
+  border-bottom: 1px solid var(--b-border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  flex-shrink: 0;
+  z-index: 20;
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.blender-brand {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 11px;
+  color: #ffffff;
+}
+
+.top-menu-dropdowns {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.top-menu-item {
+  padding: 3px 6px;
+  border-radius: 3px;
+  color: var(--b-text-main);
+  cursor: pointer;
+  font-size: 11px;
+  transition: background 0.1s;
+}
+
+.top-menu-item:hover {
+  background: var(--b-bg-panel);
+  color: #ffffff;
+}
+
+.workspace-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.ws-tab {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--b-text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: all 0.1s;
+}
+
+.ws-tab:hover {
+  color: var(--b-text-main);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.ws-tab.active {
+  background: var(--b-accent-blue);
+  color: #ffffff;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.scene-stats-chip {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--b-text-muted);
+  background: var(--b-bg-dark);
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid var(--b-border-subtle);
+}
+
+.topbar-btn {
+  background: var(--b-bg-panel);
+  border: 1px solid var(--b-border);
+  border-radius: 4px;
+  color: var(--b-text-main);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.topbar-btn:hover {
+  background: var(--b-accent-blue);
+  color: #ffffff;
+  border-color: var(--b-accent-blue);
+}
+
+/* ==========================================================================
+   2. Main Workspace Layout
+   ========================================================================== */
+.blender-workspace {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+/* 2.1 Left Toolshelf (T-Panel) */
+.blender-toolshelf {
+  width: 38px;
+  background: var(--b-bg-dark);
+  border-right: 1px solid var(--b-border-subtle);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 0;
+  gap: 4px;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.shelf-tool-btn {
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--b-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.1s;
+}
+
+.shelf-tool-btn:hover {
+  background: var(--b-bg-panel);
+  color: #ffffff;
+}
+
+.shelf-tool-btn.active {
+  background: var(--b-accent-blue);
+  color: #ffffff;
+}
+
+.shelf-divider {
+  width: 20px;
+  height: 1px;
+  background: var(--b-border-subtle);
+  margin: 4px 0;
+}
+
+/* 2.2 Viewport Container */
+.blender-viewport-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  background: var(--b-bg-viewport);
+}
+
+/* Viewport Header (Blender 4.1 Mode dropdown & Shading) */
+.viewport-header {
+  height: 26px;
+  background: rgba(34, 34, 34, 0.85);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--b-border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 6px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+}
+
+.vp-header-left {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mode-select-wrapper {
+  position: relative;
+}
+
+.blender-mode-dropdown-btn {
+  height: 20px;
+  background: var(--b-bg-panel);
+  border: 1px solid var(--b-border);
+  border-radius: 3px;
+  color: var(--b-text-main);
+  font-size: 11px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  cursor: pointer;
+}
+
+.blender-mode-dropdown-btn:hover {
+  background: var(--b-bg-active);
+  color: #ffffff;
+}
+
+.mode-dot {
+  color: var(--b-accent-orange);
+  font-size: 8px;
+}
+
+.dropdown-arrow {
+  font-size: 9px;
+  color: var(--b-text-muted);
+}
+
+.blender-mode-menu {
+  position: absolute;
+  top: 24px;
+  left: 0;
+  background: var(--b-bg-dark);
+  border: 1px solid var(--b-border);
+  border-radius: 4px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
+  min-width: 140px;
+  z-index: 30;
+  padding: 4px 0;
+}
+
+.mode-menu-option {
+  padding: 4px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  color: var(--b-text-main);
+}
+
+.mode-menu-option:hover {
+  background: var(--b-accent-blue);
+  color: #ffffff;
+}
+
+.mode-menu-option.active {
+  color: var(--b-accent-orange);
+  font-weight: 600;
+}
+
+.key-tag {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--b-text-muted);
+}
+
+.submode-button-group {
+  display: flex;
+  background: var(--b-bg-darkest);
+  border: 1px solid var(--b-border-subtle);
+  border-radius: 3px;
+  padding: 1px;
+  gap: 1px;
+  margin-left: 2px;
+}
+
+.submode-btn {
+  width: 20px;
+  height: 18px;
+  background: transparent;
+  border: none;
+  border-radius: 2px;
+  color: var(--b-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.submode-btn:hover {
+  color: #ffffff;
+}
+
+.submode-btn.active {
+  background: var(--b-accent-blue);
+  color: #ffffff;
+}
+
+.vp-menu-item {
+  padding: 2px 6px;
+  color: var(--b-text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.vp-menu-item:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.vp-header-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.prop-edit-btn {
+  width: 22px;
+  height: 20px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--b-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.prop-edit-btn:hover {
+  color: #ffffff;
+}
+
+.prop-edit-btn.active {
+  background: var(--b-accent-blue);
+  color: #ffffff;
+  border-color: var(--b-accent-blue);
+}
+
+.vp-header-separator {
+  width: 1px;
+  height: 14px;
+  background: var(--b-border-subtle);
+  margin: 0 2px;
+}
+
+/* Blender Shading Spheres */
+.shading-spheres-group {
+  display: flex;
+  background: var(--b-bg-darkest);
+  border: 1px solid var(--b-border-subtle);
+  border-radius: 12px;
+  padding: 1px;
+  gap: 2px;
+}
+
+.shading-sphere-btn {
+  width: 20px;
+  height: 18px;
+  background: transparent;
+  border: none;
+  border-radius: 10px;
+  color: var(--b-text-muted);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.shading-sphere-btn:hover {
+  color: #ffffff;
+}
+
+.shading-sphere-btn.active {
+  background: var(--b-accent-blue);
+  color: #ffffff;
+}
+
+/* Canvas 3D */
+#viewport-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  outline: none;
+}
+
+/* Viewport Camera Orientation Gizmo Bar */
+.viewport-gizmo-bar {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  display: flex;
+  background: rgba(22, 22, 22, 0.75);
+  border: 1px solid var(--b-border-subtle);
+  border-radius: 4px;
+  padding: 2px;
+  gap: 2px;
+  z-index: 10;
+}
+
+.vp-gizmo-btn {
+  width: 26px;
+  height: 22px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--b-text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.1s;
+}
+
+.vp-gizmo-btn:hover {
+  background: var(--b-bg-panel);
+  color: #ffffff;
+}
+
+.vp-gizmo-btn.active {
+  background: var(--b-accent-blue);
+  color: #ffffff;
+}
+
+/* N-Panel Handle */
+.n-panel-handle {
+  position: absolute;
+  top: 36px;
+  right: 0;
+  width: 16px;
+  height: 38px;
+  background: var(--b-bg-dark);
+  border: 1px solid var(--b-border-subtle);
+  border-right: none;
+  border-radius: 4px 0 0 4px;
+  color: var(--b-text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  z-index: 10;
+}
+
+.n-panel-handle:hover {
+  color: #ffffff;
+  background: var(--b-bg-panel);
+}
+
+/* Blender Operator Popup (Bottom-Left) */
+.blender-operator-box {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  background: var(--b-bg-dark);
+  border: 1px solid var(--b-border);
+  border-radius: 4px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  width: 220px;
+  z-index: 15;
+  overflow: hidden;
+}
+
+.operator-box-header {
+  height: 24px;
+  background: var(--b-bg-panel);
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  font-size: 11px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--b-border-subtle);
+}
+
+.operator-box-body {
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.op-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.op-row label {
+  color: var(--b-text-muted);
+  font-size: 10px;
+}
+
+.op-input {
+  width: 70px;
+  height: 18px;
+  background: var(--b-bg-input);
+  border: 1px solid var(--b-border);
+  border-radius: 3px;
+  color: #ffffff;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 0 4px;
+  text-align: right;
+}
+
+/* ==========================================================================
+   2.3 Right Sidebar (Outliner + N-Panel)
+   ========================================================================== */
+.blender-right-sidebar {
+  width: 280px;
+  background: var(--b-bg-dark);
+  border-left: 1px solid var(--b-border-subtle);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+/* Outliner */
+.blender-outliner-panel {
+  height: 180px;
+  border-bottom: 1px solid var(--b-border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.outliner-header {
+  height: 24px;
+  background: var(--b-bg-panel);
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--b-border-subtle);
+}
+
+.outliner-title {
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--b-text-main);
+}
+
+.outliner-add-btn {
+  background: var(--b-bg-input);
+  border: 1px solid var(--b-border);
+  border-radius: 3px;
+  color: var(--b-text-main);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  cursor: pointer;
+}
+
+.outliner-add-btn:hover {
+  background: var(--b-accent-blue);
+  color: #ffffff;
+}
+
+.outliner-tree {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.outliner-item {
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  color: var(--b-text-main);
+  transition: background 0.08s;
+}
+
+.outliner-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.outliner-item.active {
+  background: var(--b-accent-orange);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.outliner-item-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.outliner-item-icon {
+  font-size: 11px;
+}
+
+.outliner-eye {
+  color: var(--b-text-muted);
+  cursor: pointer;
+}
+
+/* N-Panel Container */
+.blender-n-panel-container {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.n-panel-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--b-bg-dark);
+}
+
+.n-panel-header {
+  height: 24px;
+  background: var(--b-bg-panel);
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--b-border-subtle);
+}
+
+.n-header-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--b-text-main);
+}
+
+.n-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Vertical Tab Strip on Rightmost Edge */
+.n-panel-tab-strip {
+  width: 24px;
+  background: var(--b-bg-darkest);
+  border-left: 1px solid var(--b-border-subtle);
+  display: flex;
+  flex-direction: column;
+  padding-top: 4px;
+  flex-shrink: 0;
+}
+
+.n-strip-tab {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  background: transparent;
+  border: 1px solid transparent;
+  border-right: none;
+  color: var(--b-text-muted);
+  font-size: 10px;
+  font-weight: 500;
+  padding: 8px 3px;
+  cursor: pointer;
+  transition: all 0.1s;
+  border-radius: 0 3px 3px 0;
+}
+
+.n-strip-tab:hover {
+  color: var(--b-text-main);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.n-strip-tab.active {
+  background: var(--b-bg-dark);
+  color: #ffffff;
+  border-color: var(--b-border-subtle);
+  font-weight: 700;
+}
+
+/* Accordions */
+.blender-accordion {
+  border: 1px solid var(--b-border-subtle);
+  border-radius: 4px;
+  background: var(--b-bg-panel);
+  overflow: hidden;
+}
+
+.accordion-head {
+  height: 22px;
+  padding: 0 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  font-size: 10px;
+  color: var(--b-text-main);
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.accordion-arrow {
+  font-size: 8px;
+  color: var(--b-text-muted);
+}
+
+.accordion-body {
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Transform Scrubbers (Exact Blender Layout) */
+.transform-scrubber-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.scrubber-category-label {
+  font-size: 10px;
+  color: var(--b-text-muted);
+  margin-bottom: 1px;
+}
+
+.scrubber-row {
+  display: flex;
+  height: 20px;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid var(--b-border);
+  background: var(--b-bg-input);
+  transition: border-color 0.1s;
+}
+
+.scrubber-row:hover {
+  border-color: var(--b-border-focus);
+}
+
+.axis-badge {
+  width: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.badge-x { background: var(--b-axis-x); }
+.badge-y { background: var(--b-axis-y); }
+.badge-z { background: var(--b-axis-z); }
+
+.scrubber-field {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+  cursor: ew-resize;
+  position: relative;
+}
+
+.scrubber-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #ffffff;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-align: right;
+  padding-right: 2px;
+  cursor: ew-resize;
+}
+
+.scrubber-input:focus {
+  cursor: text;
+}
+
+.scrubber-unit {
+  color: var(--b-text-dim);
+  font-size: 9px;
+  margin-left: 2px;
+}
+
+/* Checkboxes and Selects */
+.blender-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--b-text-main);
+  cursor: pointer;
+}
+
+.blender-chk {
+  accent-color: var(--b-accent-blue);
+  cursor: pointer;
+}
+
+.blender-form-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.blender-form-row label {
+  color: var(--b-text-muted);
+  font-size: 10px;
+}
+
+.blender-select {
+  height: 20px;
+  background: var(--b-bg-input);
+  border: 1px solid var(--b-border);
+  border-radius: 3px;
+  color: #ffffff;
+  font-size: 10px;
+  padding: 0 4px;
+  outline: none;
+}
+
+/* ==========================================================================
+   3. Status Bar (22px bottom)
+   ========================================================================== */
+.blender-statusbar {
+  height: 22px;
+  background: var(--b-bg-darkest);
+  border-top: 1px solid var(--b-border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  flex-shrink: 0;
+  z-index: 20;
+}
+
+.statusbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.key-hint {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--b-text-muted);
+  font-size: 10px;
+}
+
+.key-hint kbd {
+  background: var(--b-bg-panel);
+  border: 1px solid var(--b-border);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--b-text-main);
+}
+
+.statusbar-info {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--b-text-muted);
+}
+
+/* ==========================================================================
+   4. Blender Floating Context Popup (Shift+A)
+   ========================================================================== */
+.blender-popup-menu {
+  position: absolute;
+  background: var(--b-bg-dark);
+  border: 1px solid var(--b-border);
+  border-radius: 4px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6);
+  min-width: 150px;
+  z-index: 50;
+  padding: 4px 0;
+}
+
+.popup-menu-header {
+  padding: 4px 10px;
+  font-weight: 700;
+  font-size: 10px;
+  color: var(--b-text-muted);
+  border-bottom: 1px solid var(--b-border-subtle);
+  margin-bottom: 2px;
+  text-transform: uppercase;
+}
+
+.popup-menu-item {
+  padding: 4px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  color: var(--b-text-main);
+  position: relative;
+}
+
+.popup-menu-item:hover {
+  background: var(--b-accent-blue);
+  color: #ffffff;
+}
+
+.popup-sub-menu {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 100%;
+  background: var(--b-bg-dark);
+  border: 1px solid var(--b-border);
+  border-radius: 4px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6);
+  min-width: 130px;
+  padding: 4px 0;
+}
+
+.popup-menu-item:hover .popup-sub-menu {
+  display: block;
+}
+
+.sub-item {
+  padding: 4px 12px;
+  color: var(--b-text-main);
+  cursor: pointer;
+}
+
+.sub-item:hover {
+  background: var(--b-accent-blue);
+  color: #ffffff;
+}
+
+/* Camera Frame Overlay */
+.camera-frame-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 15;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.camera-frame-overlay.hidden {
+  display: none !important;
+}
+
+.camera-safe-frame {
+  width: 82%;
+  height: 82%;
+  max-width: 1280px;
+  aspect-ratio: 16 / 9;
+  border: 2px dashed rgba(234, 118, 0, 0.85);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45), 0 0 25px rgba(0, 0, 0, 0.8);
+  position: relative;
+  border-radius: 4px;
+}
+
+.camera-frame-hud {
+  position: absolute;
+  top: -30px;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.hud-tag {
+  background: var(--b-accent-orange);
+  color: #ffffff;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 700;
+}
+
+.hud-status {
+  background: rgba(22, 22, 22, 0.9);
+  color: #ffffff;
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid var(--b-border);
+}
+
+.hud-hint {
+  background: rgba(0, 0, 0, 0.7);
+  color: var(--b-text-muted);
+  padding: 2px 6px;
+  border-radius: 3px;
+}

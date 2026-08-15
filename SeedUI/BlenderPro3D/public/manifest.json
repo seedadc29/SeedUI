@@ -1,0 +1,17 @@
+{
+  "name": "Seed 3D Studio",
+  "short_name": "Seed3D",
+  "description": "Mini-Editor 3D com Topologia Quad BMesh, Modelagem, Pintura 3D e Diagnóstico em Tempo Real",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1a20",
+  "theme_color": "#ff9800",
+  "orientation": "landscape",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}
