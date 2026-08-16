@@ -186,6 +186,17 @@ export class OrbitalGraph {
       }
     ];
 
+    // Auto-clean any duplicate planet names on the same sun
+    this.suns.forEach(sun => {
+      const seen = new Set();
+      sun.planets = sun.planets.filter(p => {
+        const key = p.name.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    });
+
     this.initCanvas();
     this.initEvents();
     this.animate();
@@ -680,12 +691,11 @@ export class OrbitalGraph {
           this.selectedEntity = newPlanet;
         }
       } else {
+        // Adding a Mechanic Planet (Andar, Pular, Correr, Fisica, Colisao, Animacao)
         let orbitR = data.name.toLowerCase().includes('animacao') ? 165 : 115;
         if (!targetSun.orbits.some(o => Math.abs(o.radius - orbitR) < 15)) {
           targetSun.orbits.push({ radius: orbitR, dash: [3, 4] });
         }
-
-        const angle = (targetSun.planets.length * 1.35) % (Math.PI * 2);
 
         let moons = [];
         if (data.moons) {
@@ -704,23 +714,37 @@ export class OrbitalGraph {
           } catch(e) {}
         }
 
-        const newPlanet = {
-          id: `planet-${Date.now()}-${data.name}`,
-          name: data.name,
-          type: 'planet',
-          orbitRadius: orbitR,
-          angle,
-          speed: 0.3,
-          radius: 20,
-          color: '#2b2368',
-          textColor: '#ffffff',
-          subOrbitRadius: moons.length > 0 ? 32 : 0,
-          moons,
-          sunId: targetSun.id
-        };
+        // DEDUPLICATION: Check if this mechanic already exists on targetSun
+        const existingPlanet = targetSun.planets.find(p => p.name.toLowerCase() === data.name.toLowerCase());
 
-        targetSun.planets.push(newPlanet);
-        this.selectedEntity = newPlanet;
+        if (existingPlanet) {
+          // Update existing planet's moons & select it
+          if (moons.length > 0) {
+            existingPlanet.moons = moons;
+          }
+          this.selectedEntity = existingPlanet;
+          this.triggerEnergyBeam(targetSun.name, targetSun.name, '#32ade6');
+        } else {
+          // Distribute new planet angle evenly
+          const angle = (targetSun.planets.length * 1.35) % (Math.PI * 2);
+          const newPlanet = {
+            id: `planet-${Date.now()}-${data.name}`,
+            name: data.name,
+            type: 'planet',
+            orbitRadius: orbitR,
+            angle,
+            speed: 0.3,
+            radius: 20,
+            color: '#2b2368',
+            textColor: '#ffffff',
+            subOrbitRadius: moons.length > 0 ? 32 : 0,
+            moons,
+            sunId: targetSun.id
+          };
+
+          targetSun.planets.push(newPlanet);
+          this.selectedEntity = newPlanet;
+        }
       }
     }
 
