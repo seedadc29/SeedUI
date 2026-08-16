@@ -206,55 +206,74 @@ export class OrbitalGraph {
   }
 
   initEvents() {
+    let isPointerDown = false;
+    let downScreenPos = { x: 0, y: 0 };
+    let downMousePos = { x: 0, y: 0 };
+    let potentialDrag = null;
+    let startSunPos = { x: 0, y: 0 };
+    let activePointerId = null;
+
     // Pointerdown on Canvas
     this.canvas.addEventListener('pointerdown', (e) => {
-      const mouse = this.getCanvasPos(e);
-      const hit = this.hitTest(mouse.x, mouse.y);
+      if (e.button !== 0 && e.button !== 1) return;
+
+      isPointerDown = true;
+      activePointerId = e.pointerId;
+      downScreenPos = { x: e.clientX, y: e.clientY };
+      downMousePos = this.getCanvasPos(e);
+      this.lastMouse = { x: e.clientX, y: e.clientY };
+
+      try {
+        this.canvas.setPointerCapture(e.pointerId);
+      } catch (err) {}
+
+      const hit = this.hitTest(downMousePos.x, downMousePos.y);
 
       if (hit) {
-        this.selectedEntity = hit;
-        this.draggedEntity = {
-          type: hit.type,
-          entity: hit,
-          startX: hit.x || 0,
-          startY: hit.y || 0,
-          mouseStart: mouse
-        };
-        if (this.onSelectionChange) this.onSelectionChange(hit);
+        potentialDrag = hit;
+        if (hit.type === 'sun') {
+          startSunPos = { x: hit.x, y: hit.y };
+        }
       } else {
+        potentialDrag = null;
         this.isPanning = true;
-        this.canvas.parentElement.classList.add('is-panning');
-        this.selectedEntity = null;
-        if (this.onSelectionChange) this.onSelectionChange(null);
+        this.canvas.parentElement?.classList.add('is-panning');
       }
-      this.lastMouse = { x: e.clientX, y: e.clientY };
     });
 
-    window.addEventListener('pointermove', (e) => {
-      try {
-        const mouse = this.getCanvasPos(e);
+    // Pointermove on Canvas & Window
+    const handleMove = (e) => {
+      const mouse = this.getCanvasPos(e);
 
-        if (this.isPanning) {
-          this.panX += e.clientX - this.lastMouse.x;
-          this.panY += e.clientY - this.lastMouse.y;
-        } else if (this.draggedEntity) {
-          if (this.draggedEntity.type === 'sun') {
-            const sun = this.draggedEntity.entity;
-            sun.x = this.draggedEntity.startX + (mouse.x - this.draggedEntity.mouseStart.x);
-            sun.y = this.draggedEntity.startY + (mouse.y - this.draggedEntity.mouseStart.y);
-          } else if (this.draggedEntity.type === 'planet') {
-            const planet = this.draggedEntity.entity;
+      if (!isPointerDown) {
+        this.hoveredEntity = this.hitTest(mouse.x, mouse.y);
+        this.lastMouse = { x: e.clientX, y: e.clientY };
+        return;
+      }
+
+      const dist = Math.hypot(e.clientX - downScreenPos.x, e.clientY - downScreenPos.y);
+
+      if (potentialDrag) {
+        if (dist > 3) {
+          this.draggedEntity = potentialDrag;
+
+          if (potentialDrag.type === 'sun') {
+            potentialDrag.x = startSunPos.x + (mouse.x - downMousePos.x);
+            potentialDrag.y = startSunPos.y + (mouse.y - downMousePos.y);
+          } else if (potentialDrag.type === 'planet') {
+            const planet = potentialDrag;
             const sun = planet.parentSun || this.getPlanetParentSun(planet);
             if (sun && sun.orbits && sun.orbits.length > 0) {
               const dx = mouse.x - sun.x;
               const dy = mouse.y - sun.y;
               planet.angle = Math.atan2(dy, dx);
-              const dist = Math.hypot(dx, dy);
+              const orbitDist = Math.hypot(dx, dy);
+
               let closestOrbit = sun.orbits[0].radius;
               let minDiff = Infinity;
-              sun.orbits.forEach(o => {
+              sun.orbits.forEach((o) => {
                 if (o && o.radius) {
-                  const diff = Math.abs(o.radius - dist);
+                  const diff = Math.abs(o.radius - orbitDist);
                   if (diff < minDiff) {
                     minDiff = diff;
                     closestOrbit = o.radius;
@@ -264,31 +283,64 @@ export class OrbitalGraph {
               planet.orbitRadius = closestOrbit;
             }
           }
-        } else {
-          this.hoveredEntity = this.hitTest(mouse.x, mouse.y);
         }
-      } catch (err) {
-        console.error('Error in orbital pointermove:', err);
-      } finally {
-        this.lastMouse = { x: e.clientX, y: e.clientY };
+      } else if (this.isPanning) {
+        this.panX += e.clientX - this.lastMouse.x;
+        this.panY += e.clientY - this.lastMouse.y;
       }
-    });
 
-    const endDrag = () => {
-      if (this.draggedEntity && this.historyManager) {
-        this.historyManager.pushState(this.suns);
+      this.lastMouse = { x: e.clientX, y: e.clientY };
+    };
+
+    this.canvas.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointermove', handleMove);
+
+    // Pointerup / Release - Guaranteed cleanup
+    const handleUp = (e) => {
+      if (!isPointerDown) return;
+
+      if (activePointerId !== null) {
+        try {
+          this.canvas.releasePointerCapture(activePointerId);
+        } catch (err) {}
+      }
+
+      if (!this.draggedEntity && potentialDrag) {
+        // It was a click! Select entity
+        this.selectedEntity = potentialDrag;
+        if (this.onSelectionChange) {
+          this.onSelectionChange(potentialDrag);
+        }
+      } else if (!this.draggedEntity && !potentialDrag) {
+        // Click on empty canvas
+        this.selectedEntity = null;
+        if (this.onSelectionChange) {
+          this.onSelectionChange(null);
+        }
+      }
+
+      if (this.draggedEntity) {
+        if (this.historyManager) {
+          this.historyManager.pushState(this.suns);
+        }
         this.notifyGraphChange();
       }
-      this.isPanning = false;
+
+      // Reset all drag & pan states
+      isPointerDown = false;
+      potentialDrag = null;
       this.draggedEntity = null;
+      this.isPanning = false;
+      activePointerId = null;
       this.canvas.parentElement?.classList.remove('is-panning');
     };
 
-    window.addEventListener('pointerup', endDrag);
-    window.addEventListener('pointercancel', endDrag);
-    window.addEventListener('mouseup', endDrag);
-    window.addEventListener('blur', endDrag);
-    this.canvas.addEventListener('pointerup', endDrag);
+    this.canvas.addEventListener('pointerup', handleUp);
+    this.canvas.addEventListener('pointercancel', handleUp);
+    window.addEventListener('pointerup', handleUp);
+    window.addEventListener('pointercancel', handleUp);
+    window.addEventListener('mouseup', handleUp);
+    window.addEventListener('blur', handleUp);
 
     // Zoom on wheel
     this.canvas.addEventListener('wheel', (e) => {

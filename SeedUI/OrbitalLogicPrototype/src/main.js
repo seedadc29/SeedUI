@@ -19,38 +19,52 @@ document.addEventListener('DOMContentLoaded', () => {
   const paletteUI = new PaletteUI(orbitalGraph, scene3D, historyManager);
 
   // 5. Cross-Selection Synchronization (3D <-> Orbital Graph)
+  let isSyncing = false;
+
   scene3D.onEntitySelected = (sunId) => {
-    if (!sunId) {
-      orbitalGraph.selectedEntity = null;
-      paletteUI.renderInspector(null);
-    } else {
-      const sun = orbitalGraph.suns.find(s => s.id === sunId);
-      if (sun) {
-        orbitalGraph.selectedEntity = sun;
-        paletteUI.renderInspector(sun);
+    if (isSyncing) return;
+    isSyncing = true;
+    try {
+      if (!sunId) {
+        orbitalGraph.selectedEntity = null;
+        paletteUI.renderInspector(null);
+      } else {
+        const sun = orbitalGraph.suns.find(s => s.id === sunId);
+        if (sun) {
+          orbitalGraph.selectedEntity = sun;
+          paletteUI.renderInspector(sun);
+        }
       }
+    } finally {
+      isSyncing = false;
     }
   };
 
   const origSelectionChange = orbitalGraph.onSelectionChange;
   orbitalGraph.onSelectionChange = (entity) => {
     if (origSelectionChange) origSelectionChange(entity);
-    if (entity) {
-      let targetSunId = null;
-      if (entity.type === 'sun') {
-        targetSunId = entity.id;
-      } else if (entity.parentSun) {
-        targetSunId = entity.parentSun.id;
-      } else {
-        const parent = orbitalGraph.getPlanetParentSun(entity);
-        if (parent) targetSunId = parent.id;
-      }
+    if (isSyncing) return;
+    isSyncing = true;
+    try {
+      if (entity) {
+        let targetSunId = null;
+        if (entity.type === 'sun') {
+          targetSunId = entity.id;
+        } else if (entity.parentSun) {
+          targetSunId = entity.parentSun.id;
+        } else {
+          const parent = orbitalGraph.getPlanetParentSun(entity);
+          if (parent) targetSunId = parent.id;
+        }
 
-      if (targetSunId) {
-        scene3D.selectEntityBySunId(targetSunId);
+        if (targetSunId) {
+          scene3D.selectEntityBySunId(targetSunId);
+        }
+      } else {
+        scene3D.selectEntity(null);
       }
-    } else {
-      scene3D.selectEntity(null);
+    } finally {
+      isSyncing = false;
     }
   };
 
