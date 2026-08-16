@@ -1730,3 +1730,46 @@ body.is-dragging-icon .shading-btn {
   transform: scale(1.1) !important;
   transition: all 0.2s ease-out !important;
 }
+
+/* Trash Revert Drop Zone in Catalog */
+.icon-trash-revert-zone {
+  border: 1px dashed var(--b-border);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--b-text-muted);
+  font-size: 10px;
+  padding: 6px 10px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s ease-in-out;
+}
+
+.icon-trash-revert-zone.trash-active {
+  border-color: #ef4444;
+  background: rgba(239, 68, 68, 0.2);
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.6);
+  transform: scale(1.02);
+}
+
+/* While Icon Browser is open, custom icons can be dragged out */
+body.icon-browser-active .custom-icon-applied {
+  cursor: grab !important;
+}
+
+body.icon-browser-active .custom-icon-applied:active {
+  cursor: grabbing !important;
+}
+
+.is-dragging-out {
+  opacity: 0.35 !important;
+  outline: 2px dashed #ef4444 !important;
+  transform: scale(0.92) !important;
+}
+
+body.is-removing-icon {
+  cursor: no-drop !important;
+}

@@ -2,16 +2,18 @@
  * IconBrowser - Interactive Visual Tabler Icon Picker & Drag-and-Drop Customizer for BlenderPro3D
  * 
  * Features:
- * 1. Drag & Drop Icons directly onto ANY button (Toolshelf, Header, Navigation Gizmo, Windows)!
- * 2. Buttons glow and light up dynamically when hovering with a dragged icon.
- * 3. 1-Click copy of HTML icon tag.
- * 4. Instant search across 100+ curated 3D & UI icons.
- * 5. Full localStorage persistence of customized button icons + Reset button.
+ * 1. Clean Icon REPLACEMENT: Replaces the existing button icon directly without adding alongside.
+ * 2. Drag to Remove: When the Icon Catalog is open, clicking & dragging a custom icon OUT of a button
+ *    (onto the viewport, into the trash dropzone, or anywhere outside) removes the custom icon and
+ *    instantly restores the original default icon!
+ * 3. Glow & Lighting Feedback: Buttons light up with glowing neon border when hovering with a dragged icon.
+ * 4. Full localStorage persistence of customized button icons + 1-Click Reset button.
  */
 export class IconBrowser {
   constructor() {
     this.storageKey = 'blender_pro_custom_button_icons';
     this.customIcons = this.loadCustomIcons();
+    this.isOpen = false;
 
     this.icons = [
       // 3D & Geometry
@@ -133,7 +135,7 @@ export class IconBrowser {
       btnIcons.className = 'topbar-btn';
       btnIcons.id = 'btn-open-icon-browser';
       btnIcons.innerHTML = '<i class="ti ti-icons"></i> Ícones Tabler';
-      btnIcons.title = 'Pesquisar e arrastar ícones Tabler para qualquer botão da interface';
+      btnIcons.title = 'Pesquisar e arrastar ícones para substituir os botões da tela';
       topbarRight.prepend(btnIcons);
 
       btnIcons.addEventListener('click', () => this.open());
@@ -144,25 +146,35 @@ export class IconBrowser {
     modal.className = 'blender-modal-overlay hidden';
     modal.id = 'tabler-icon-browser-modal';
     modal.innerHTML = `
-      <div class="blender-modal-dialog" id="icon-browser-dialog" style="width: 600px; height: 500px;">
+      <div class="blender-modal-dialog" id="icon-browser-dialog" style="width: 620px; height: 520px;">
         <div class="modal-dialog-header" id="icon-browser-drag-header">
           <div class="modal-dialog-title">
-            <span><i class="ti ti-icons"></i> Catálogo & Customizador de Ícones (Drag & Drop)</span>
+            <span><i class="ti ti-icons"></i> Catálogo & Editor de Ícones (Drag & Drop)</span>
           </div>
           <button class="modal-close-btn" id="btn-close-icon-browser">✕</button>
         </div>
 
         <div class="modal-dialog-body" style="flex-direction: column; padding: 12px; gap: 8px;">
-          <!-- Interactive Guide Hint -->
-          <div style="background: rgba(71, 114, 179, 0.15); border: 1px solid var(--b-accent-blue); border-radius: 4px; padding: 6px 10px; font-size: 10.5px; color: #ffffff; display: flex; align-items: center; justify-content: space-between;">
-            <span>✨ <strong>Arraste qualquer ícone</strong> e solte em cima de um botão da tela para trocá-lo instantaneamente!</span>
-            <button class="mgmt-btn" id="btn-reset-icons-all" style="font-size: 9px; padding: 2px 6px;">Restaurar Padrão</button>
+          <!-- Dual-Action Interactive Guide Hint -->
+          <div style="background: rgba(71, 114, 179, 0.12); border: 1px solid var(--b-accent-blue); border-radius: 4px; padding: 8px 10px; font-size: 10px; color: #ffffff; display: flex; flex-direction: column; gap: 4px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span>🎯 <strong>Trocar Ícone:</strong> Arraste do catálogo e solte em cima do botão desejado.</span>
+              <button class="mgmt-btn" id="btn-reset-icons-all" style="font-size: 9px; padding: 2px 8px; background: rgba(234, 118, 0, 0.3); border: 1px solid var(--b-accent-orange);">Restaurar Tudo</button>
+            </div>
+            <div style="color: var(--b-text-muted);">
+              ↩️ <strong>Remover / Voltar ao Padrão:</strong> Clique no botão que você modificou e arraste-o para fora (solte aqui ou na tela) para remover o ícone e restaurar o original!
+            </div>
+          </div>
+
+          <!-- Trash / Drop Zone to Revert -->
+          <div id="icon-trash-dropzone" class="icon-trash-revert-zone">
+            <i class="ti ti-arrow-back-up"></i> Solte aqui ou fora do botão para remover a troca e restaurar o ícone original
           </div>
 
           <!-- Search & Filter Header -->
           <div style="display: flex; gap: 8px; align-items: center;">
             <div style="position: relative; flex: 1;">
-              <input type="text" id="input-icon-search" class="blender-text-input" placeholder="🔍 Buscar ícone (ex: box, camera, rotate, cut, pin)..." style="width: 100%; height: 26px; padding-left: 8px;">
+              <input type="text" id="input-icon-search" class="blender-text-input" placeholder="🔍 Buscar ícone (ex: box, camera, rotate, cut, pin, sun)..." style="width: 100%; height: 26px; padding-left: 8px;">
             </div>
             <span id="icon-count-label" style="font-size: 10px; color: var(--b-text-muted); font-family: var(--font-mono);"></span>
           </div>
@@ -177,9 +189,9 @@ export class IconBrowser {
             <button class="icon-cat-btn" data-cat="Ações & Arquivo">Arquivo</button>
           </div>
 
-          <!-- Copied Notification Toast -->
-          <div id="icon-copied-toast" class="hidden" style="background: var(--b-accent-orange); color: #fff; padding: 4px 10px; border-radius: 3px; font-size: 10px; font-weight: 700; text-align: center;">
-            ✓ Código do ícone copiado!
+          <!-- Toast Alert -->
+          <div id="icon-copied-toast" class="hidden" style="background: var(--b-accent-orange); color: #fff; padding: 5px 12px; border-radius: 3px; font-size: 10px; font-weight: 700; text-align: center; transition: all 0.2s;">
+            ✓ Notificação
           </div>
 
           <!-- Icons Grid -->
@@ -229,6 +241,42 @@ export class IconBrowser {
         this.activeCategory = btn.dataset.cat;
         this.render();
       });
+    });
+
+    // Trash Dropzone inside Dialog
+    const trashZone = document.getElementById('icon-trash-dropzone');
+    if (trashZone) {
+      trashZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        trashZone.classList.add('trash-active');
+      });
+      trashZone.addEventListener('dragleave', () => {
+        trashZone.classList.remove('trash-active');
+      });
+      trashZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        trashZone.classList.remove('trash-active');
+        const buttonKey = e.dataTransfer.getData('text/remove-button-icon');
+        if (buttonKey) {
+          this.removeButtonIcon(buttonKey);
+        }
+      });
+    }
+
+    // Global dragover & drop on document body to allow dragging away from button to remove
+    document.body.addEventListener('dragover', (e) => {
+      const isRemoving = e.dataTransfer.types.includes('text/remove-button-icon');
+      if (isRemoving) {
+        e.preventDefault();
+      }
+    });
+
+    document.body.addEventListener('drop', (e) => {
+      const buttonKey = e.dataTransfer.getData('text/remove-button-icon');
+      if (buttonKey && !e.target.closest('.icon-drop-target-active')) {
+        e.preventDefault();
+        this.removeButtonIcon(buttonKey);
+      }
     });
   }
 
@@ -281,60 +329,108 @@ export class IconBrowser {
   initDropZones() {
     const getValidButtons = () => {
       return document.querySelectorAll(
-        '.tool-btn, .topbar-btn, .win-ctrl-btn, .nav-circle-btn, .shading-btn, .outliner-add-btn, .submode-btn, .viewport-mode-btn'
+        '.shelf-tool-btn, .tool-btn, .topbar-btn, .win-ctrl-btn, .nav-circle-btn, .shading-sphere-btn, .submode-btn, .prop-edit-btn, .outliner-add-btn, .n-panel-tab-btn, .blender-mode-dropdown-btn'
       );
     };
 
     const attachDropListeners = () => {
       getValidButtons().forEach((btn) => {
+        // Cache original default HTML once
+        if (!btn.dataset.defaultHtml) {
+          btn.dataset.defaultHtml = btn.innerHTML;
+        }
+
         if (btn.dataset.hasIconDrop) return;
         btn.dataset.hasIconDrop = 'true';
 
-        // Drag Over -> Light up / Glow
+        const buttonKey = this.getButtonKey(btn);
+
+        // DRAG OVER (Incoming new icon from catalog): Light up brightly!
         btn.addEventListener('dragover', (e) => {
-          e.preventDefault();
-          e.dataTransfer.dropEffect = 'copy';
-          btn.classList.add('icon-drop-target-active');
+          if (e.dataTransfer.types.includes('text/plain')) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+            btn.classList.add('icon-drop-target-active');
+          }
         });
 
         btn.addEventListener('dragenter', (e) => {
-          e.preventDefault();
-          btn.classList.add('icon-drop-target-active');
+          if (e.dataTransfer.types.includes('text/plain')) {
+            e.preventDefault();
+            btn.classList.add('icon-drop-target-active');
+          }
         });
 
         btn.addEventListener('dragleave', () => {
           btn.classList.remove('icon-drop-target-active');
         });
 
-        // Drop -> Apply New Icon and Save
+        // DROP: Replace existing icon cleanly!
         btn.addEventListener('drop', (e) => {
-          e.preventDefault();
           btn.classList.remove('icon-drop-target-active');
           const iconName = e.dataTransfer.getData('text/plain');
           if (!iconName) return;
 
-          const buttonKey = btn.id || btn.className.split(' ').find(c => c.startsWith('tool-') || c.startsWith('btn-')) || btn.innerText.trim();
+          e.preventDefault();
+          e.stopPropagation();
           this.setButtonIcon(btn, iconName, buttonKey);
+        });
+
+        // DRAG OUT (Drag existing custom icon AWAY from button to remove & restore original)
+        btn.addEventListener('dragstart', (e) => {
+          if (this.isOpen || btn.dataset.hasCustomIcon === 'true') {
+            e.dataTransfer.setData('text/remove-button-icon', buttonKey);
+            e.dataTransfer.effectAllowed = 'move';
+            btn.classList.add('is-dragging-out');
+            document.body.classList.add('is-removing-icon');
+          }
+        });
+
+        btn.addEventListener('dragend', () => {
+          btn.classList.remove('is-dragging-out');
+          document.body.classList.remove('is-removing-icon');
         });
       });
     };
 
     attachDropListeners();
-    // Re-attach whenever DOM updates
     const observer = new MutationObserver(() => attachDropListeners());
     observer.observe(document.body, { childList: true, subtree: true });
   }
 
+  getButtonKey(btn) {
+    return btn.id || btn.dataset.tool || btn.dataset.submode || btn.dataset.shading || btn.className.split(' ').find(c => c.startsWith('tool-') || c.startsWith('nav-') || c.startsWith('btn-')) || btn.innerText.trim();
+  }
+
+  findButton(buttonKey) {
+    let btn = document.getElementById(buttonKey);
+    if (!btn) btn = document.querySelector(`[data-tool="${buttonKey}"]`);
+    if (!btn) btn = document.querySelector(`[data-submode="${buttonKey}"]`);
+    if (!btn) btn = document.querySelector(`[data-shading="${buttonKey}"]`);
+    if (!btn) btn = document.querySelector(`.${buttonKey}`);
+    return btn;
+  }
+
   setButtonIcon(btn, iconName, buttonKey) {
-    // Replace SVG, <i>, or text icon inside button
-    const existingIcon = btn.querySelector('i, svg, span.icon, span.nav-icon');
-    if (existingIcon) {
-      existingIcon.outerHTML = `<i class="ti ti-${iconName}"></i>`;
-    } else {
-      // If button has text or is empty
-      const text = btn.innerText.trim();
-      btn.innerHTML = `<i class="ti ti-${iconName}"></i> ${text ? `<span>${text}</span>` : ''}`;
+    if (!btn.dataset.defaultHtml) {
+      btn.dataset.defaultHtml = btn.innerHTML;
     }
+
+    // Determine if button has text or is icon-only
+    const hasText = btn.textContent.trim().length > 0 && !btn.classList.contains('shelf-tool-btn') && !btn.classList.contains('nav-circle-btn') && !btn.classList.contains('shading-sphere-btn') && !btn.classList.contains('win-ctrl-btn') && !btn.classList.contains('submode-btn') && !btn.classList.contains('prop-edit-btn');
+
+    if (hasText) {
+      // Preserve label text, replace icon prefix cleanly
+      const labelText = btn.textContent.replace(/^[^\w\s\u00C0-\u00FF]+/, '').trim();
+      btn.innerHTML = `<i class="ti ti-${iconName}"></i> <span>${labelText}</span>`;
+    } else {
+      // 100% pure icon replacement (no leftover SVGs or duplicate characters)
+      btn.innerHTML = `<i class="ti ti-${iconName}"></i>`;
+    }
+
+    btn.dataset.hasCustomIcon = 'true';
+    btn.setAttribute('draggable', 'true');
+    btn.classList.add('custom-icon-applied');
 
     // Success burst flash
     btn.classList.add('icon-drop-success');
@@ -346,24 +442,51 @@ export class IconBrowser {
       this.saveCustomIcons();
     }
 
-    this.showToast(`Ícone ti-${iconName} aplicado com sucesso!`);
+    this.showToast(`Ícone substituído por ti-${iconName}!`);
+  }
+
+  removeButtonIcon(buttonKey) {
+    if (!buttonKey || !this.customIcons[buttonKey]) return;
+
+    delete this.customIcons[buttonKey];
+    this.saveCustomIcons();
+
+    const btn = this.findButton(buttonKey);
+    if (btn && btn.dataset.defaultHtml) {
+      btn.innerHTML = btn.dataset.defaultHtml;
+      delete btn.dataset.hasCustomIcon;
+      btn.removeAttribute('draggable');
+      btn.classList.remove('custom-icon-applied');
+
+      // Feedback animation
+      btn.classList.add('icon-drop-success');
+      setTimeout(() => btn.classList.remove('icon-drop-success'), 500);
+    }
+
+    this.showToast('Ícone removido! Ícone original restaurado com sucesso.');
   }
 
   applyCustomIcons() {
     Object.keys(this.customIcons).forEach((buttonKey) => {
       const iconName = this.customIcons[buttonKey];
-      let btn = document.getElementById(buttonKey);
-      if (!btn) {
-        btn = document.querySelector(`.${buttonKey}`);
-      }
+      const btn = this.findButton(buttonKey);
       if (btn) {
-        const existingIcon = btn.querySelector('i, svg, span.icon, span.nav-icon');
-        if (existingIcon) {
-          existingIcon.outerHTML = `<i class="ti ti-${iconName}"></i>`;
-        } else {
-          const text = btn.innerText.trim();
-          btn.innerHTML = `<i class="ti ti-${iconName}"></i> ${text ? `<span>${text}</span>` : ''}`;
+        if (!btn.dataset.defaultHtml) {
+          btn.dataset.defaultHtml = btn.innerHTML;
         }
+
+        const hasText = btn.textContent.trim().length > 0 && !btn.classList.contains('shelf-tool-btn') && !btn.classList.contains('nav-circle-btn') && !btn.classList.contains('shading-sphere-btn') && !btn.classList.contains('win-ctrl-btn') && !btn.classList.contains('submode-btn') && !btn.classList.contains('prop-edit-btn');
+
+        if (hasText) {
+          const labelText = btn.textContent.replace(/^[^\w\s\u00C0-\u00FF]+/, '').trim();
+          btn.innerHTML = `<i class="ti ti-${iconName}"></i> <span>${labelText}</span>`;
+        } else {
+          btn.innerHTML = `<i class="ti ti-${iconName}"></i>`;
+        }
+
+        btn.dataset.hasCustomIcon = 'true';
+        btn.setAttribute('draggable', 'true');
+        btn.classList.add('custom-icon-applied');
       }
     });
   }
@@ -373,7 +496,7 @@ export class IconBrowser {
     if (toast) {
       toast.textContent = `✓ ${msg}`;
       toast.classList.remove('hidden');
-      setTimeout(() => toast.classList.add('hidden'), 2200);
+      setTimeout(() => toast.classList.add('hidden'), 2400);
     }
   }
 
@@ -409,12 +532,16 @@ export class IconBrowser {
   }
 
   open() {
+    this.isOpen = true;
     const modal = document.getElementById('tabler-icon-browser-modal');
     if (modal) modal.classList.remove('hidden');
+    document.body.classList.add('icon-browser-active');
   }
 
   close() {
+    this.isOpen = false;
     const modal = document.getElementById('tabler-icon-browser-modal');
     if (modal) modal.classList.add('hidden');
+    document.body.classList.remove('icon-browser-active');
   }
 }
