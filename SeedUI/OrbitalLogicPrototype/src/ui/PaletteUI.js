@@ -145,34 +145,37 @@ export class PaletteUI {
     } else if (entity.type === 'planet') {
       html += `
         <div class="inspector-row">
-          <span class="inspector-label">Função / Mecânica:</span>
+          <span class="inspector-label">Mecânica Ativa:</span>
           <span style="color:#a288ff;font-weight:700;">${entity.name}</span>
         </div>
-        <div class="inspector-row">
-          <span class="inspector-label">Velocidade Orbital:</span>
-          <input type="number" step="0.1" class="inspector-input" value="${entity.speed}" id="inp-planet-speed" />
-        </div>
-        <div class="inspector-row">
-          <span class="inspector-label">Raio da Órbita:</span>
-          <input type="number" class="inspector-input" value="${entity.orbitRadius}" id="inp-planet-orbit" />
-        </div>
-        <div class="inspector-row">
-          <span class="inspector-label">Luas Acopladas:</span>
-          <span style="color:#ffffff;font-weight:700;">${entity.moons ? entity.moons.length : 0}</span>
-        </div>
-        <button class="btn-delete-node" id="btn-del-selected-node"><i class="ti ti-trash"></i> Excluir Planeta</button>
+      `;
+
+      // Render all 3D mechanical parameters (Moons) directly inside the planet inspector
+      if (entity.moons && entity.moons.length > 0) {
+        entity.moons.forEach((moon, idx) => {
+          html += `
+            <div class="inspector-row">
+              <span class="inspector-label">${moon.name}:</span>
+              <input type="number" step="0.1" class="inspector-input inp-planet-moon-param" data-index="${idx}" value="${moon.val}" />
+            </div>
+          `;
+        });
+      }
+
+      html += `
+        <button class="btn-delete-node" id="btn-del-selected-node"><i class="ti ti-trash"></i> Excluir Mecânica</button>
       `;
     } else if (entity.type === 'moon') {
       html += `
         <div class="inspector-row">
-          <span class="inspector-label">Parâmetro / Lua:</span>
-          <span style="color:${entity.color};font-weight:700;">${entity.name}</span>
+          <span class="inspector-label">Parâmetro 3D:</span>
+          <span style="color:${entity.color || '#ffffff'};font-weight:700;">${entity.name}</span>
         </div>
         <div class="inspector-row">
-          <span class="inspector-label">Valor Ativo:</span>
-          <input type="text" class="inspector-input" value="${entity.val}" id="inp-moon-val" />
+          <span class="inspector-label">Valor (3D):</span>
+          <input type="number" step="0.1" class="inspector-input" value="${entity.val}" id="inp-moon-val" />
         </div>
-        <button class="btn-delete-node" id="btn-del-selected-node"><i class="ti ti-trash"></i> Excluir Lua</button>
+        <button class="btn-delete-node" id="btn-del-selected-node"><i class="ti ti-trash"></i> Excluir Parâmetro</button>
       `;
     }
 
@@ -187,24 +190,28 @@ export class PaletteUI {
       });
     }
 
-    const inpPlanetSpeed = document.getElementById('inp-planet-speed');
-    if (inpPlanetSpeed) {
-      inpPlanetSpeed.addEventListener('input', (e) => {
-        entity.speed = parseFloat(e.target.value) || 0.1;
+    const inpSunRadius = document.getElementById('inp-sun-radius');
+    if (inpSunRadius) {
+      inpSunRadius.addEventListener('input', (e) => {
+        entity.radius = parseFloat(e.target.value) || 36;
       });
     }
 
-    const inpPlanetOrbit = document.getElementById('inp-planet-orbit');
-    if (inpPlanetOrbit) {
-      inpPlanetOrbit.addEventListener('input', (e) => {
-        entity.orbitRadius = parseFloat(e.target.value) || 60;
+    // Direct 3D Parameter edits on Planet
+    document.querySelectorAll('.inp-planet-moon-param').forEach(input => {
+      input.addEventListener('input', (e) => {
+        const idx = parseInt(e.target.dataset.index, 10);
+        if (entity.moons && entity.moons[idx]) {
+          entity.moons[idx].val = parseFloat(e.target.value) || 0;
+          this.scene3D.syncWithOrbitalSuns(this.orbitalGraph.suns);
+        }
       });
-    }
+    });
 
     const inpMoonVal = document.getElementById('inp-moon-val');
     if (inpMoonVal) {
       inpMoonVal.addEventListener('input', (e) => {
-        entity.val = e.target.value;
+        entity.val = parseFloat(e.target.value) || 0;
         this.scene3D.syncWithOrbitalSuns(this.orbitalGraph.suns);
       });
     }
