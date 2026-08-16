@@ -256,6 +256,11 @@ namespace seedui
         float mCanvasDragRotation = 0.0f;
         float mCanvasDragPivotX = 0.0f;
         float mCanvasDragPivotY = 0.0f;
+        // Objeto girado sem centro_rotacao: o pivô (centro) foi MATERIALIZADO
+        // no início do resize para ficar FIXO durante o arrasto (senão o
+        // render gira em torno do centro da caixa, que muda a cada frame, e
+        // a âncora desliza). Restaurado para o modo "centro da caixa" no fim.
+        bool mCanvasDragMaterializedPivot = false;
         // Delta aplicado no FRAME ANTERIOR do arrasto — a previsão de
         // espaçamento o usa para detectar quando o cursor "pulou" por cima
         // de um alvo (arrasto rápido) e ainda assim engatar no alvo exato.

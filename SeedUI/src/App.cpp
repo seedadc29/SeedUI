@@ -4152,25 +4152,45 @@ namespace seedui
             return x >= rx && x <= rx + rw && y >= ry && y <= ry + rh ? 1 : 0;
         };
 
-        auto applyCursor = [](int dragMode)
+        // Cursor de resize SENSÍVEL À ROTAÇÃO: a direção local da alça
+        // (0° = lateral direita/esquerda, 90° = topo/base, 45°/135° =
+        // diagonais das quinas) é girada pelo ângulo do objeto e "encaixada"
+        // no cursor de 45° mais próximo (os glifos do sistema só existem em
+        // 0°/90°/45°/135°). Com rotação 0 o comportamento é idêntico ao
+        // anterior — a diferença aparece quando o objeto está girado: o
+        // cursor acompanha a orientação real da alça na tela.
+        auto applyCursor = [](int dragMode, float rotationDeg = 0.0f)
         {
-            if (dragMode == 2 || dragMode == 3) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
-            else if (dragMode == 4 || dragMode == 5) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
-            else if (dragMode == 6 || dragMode == 9) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNWSE);
-            else if (dragMode == 7 || dragMode == 8) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNESW);
-            else if (dragMode == 10 || dragMode == 12) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNWSE);
-            else if (dragMode == 11 || dragMode == 13) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNESW);
-            else if (dragMode == 14) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
-            else if (dragMode == 15) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
-            else if (dragMode == 16 || dragMode == 17)
+            auto dir45 = [rotationDeg](float localDeg)
+            {
+                float a = fmodf(localDeg + rotationDeg, 360.0f);
+                if (a < 0.0f) a += 360.0f;
+                const int seg = ((int)floorf((a + 22.5f) / 45.0f)) % 8;
+                switch (seg)
+                {
+                    case 0: case 4: return ImGuiMouseCursor_ResizeEW;   // 0°/180°
+                    case 2: case 6: return ImGuiMouseCursor_ResizeNS;   // 90°/270°
+                    case 1: case 5: return ImGuiMouseCursor_ResizeNWSE; // 45°/225°
+                    default:        return ImGuiMouseCursor_ResizeNESW; // 135°/315°
+                }
+            };
+            if (dragMode == 2 || dragMode == 3) ImGui::SetMouseCursor(dir45(0.0f));
+            else if (dragMode == 4 || dragMode == 5) ImGui::SetMouseCursor(dir45(90.0f));
+            else if (dragMode == 6 || dragMode == 9) ImGui::SetMouseCursor(dir45(45.0f));
+            else if (dragMode == 7 || dragMode == 8) ImGui::SetMouseCursor(dir45(135.0f));
+            else if (dragMode == 10 || dragMode == 12) ImGui::SetMouseCursor(dir45(45.0f));
+            else if (dragMode == 11 || dragMode == 13) ImGui::SetMouseCursor(dir45(135.0f));
+            else if (dragMode == 14 || dragMode == 15 || dragMode == 16 ||
+                     dragMode == 17 || dragMode == 1)
                 ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
-            else if (dragMode == 1) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
         };
 
         if (canvasHovered && mouseOnFrame && mCanvasDragMode == 0 && !mCanvasMarquee)
         {
             if (Element* selected = Project::ResolverId(mode, mSelectedElementId))
-                if (!selected->bloqueado) applyCursor(dragModeAt(*selected, mouseX, mouseY));
+                if (!selected->bloqueado)
+                    applyCursor(dragModeAt(*selected, mouseX, mouseY),
+                                Geo::ElementRotation(*selected));
         }
 
         // CTRL + ALT + clique em um NÓ do caminho: DESCONECTA o contorno —
@@ -4485,6 +4505,7 @@ namespace seedui
             mShiftGuidesLabels.clear();
             mCloneForked = false;
             mCanvasDragPastThreshold = false;
+            mCanvasDragMaterializedPivot = false;
             if (hit && keepHitForDrag && !hit->bloqueado)
             {
                 if (multiSel && currentHandle >= 2)
@@ -4517,6 +4538,26 @@ namespace seedui
                     mCanvasDragH = hit->transformacao.value("altura", 32.0f);
                     mCanvasDragRotation = Geo::ElementRotation(*hit);
                     Geo::ElementPivot(*hit, mCanvasDragPivotX, mCanvasDragPivotY);
+                    // Objeto ROTACIONADO sem pivô explícito: materializa o
+                    // pivô (centro atual) em centro_rotacao no início do
+                    // RESIZE. O render usa ElementPivot — que cai no CENTRO
+                    // da caixa quando não há centro_rotacao e muda a cada
+                    // frame do resize, fazendo a âncora (canto oposto à
+                    // alça) deslizar no mundo e o objeto "andar"/deformar.
+                    // Com o pivô materializado ele fica FIXO no arrasto
+                    // inteiro (a matemática do resize já assume isso) e o
+                    // redimensionamento fica ancorado.
+                    if (mCanvasDragMode >= 2 && mCanvasDragMode <= 9 &&
+                        mCanvasDragRotation != 0.0f &&
+                        hit->transformacao.is_object() &&
+                        !hit->transformacao.contains("centro_rotacao"))
+                    {
+                        hit->transformacao["centro_rotacao"] = {
+                            { "x", mCanvasDragPivotX },
+                            { "y", mCanvasDragPivotY }
+                        };
+                        mCanvasDragMaterializedPivot = true;
+                    }
                     // Guarda os pontos ORIGINAIS do caminho (resize
                     // individual) — o RescalePath re-mapeia a partir deles.
                     mCanvasPathOrigValid = false;
@@ -4549,7 +4590,7 @@ namespace seedui
                     if (groupResize && mCanvasGroupStarts.empty())
                         CollectTransformStarts(*hit, mCanvasGroupStarts);
                 }
-                applyCursor(mCanvasDragMode);
+                applyCursor(mCanvasDragMode, mCanvasDragRotation);
             }
         }
 
@@ -4871,6 +4912,20 @@ namespace seedui
                         mCanvasDragH = clone->transformacao.value("altura", 32.0f);
                         mCanvasDragRotation = Geo::ElementRotation(*clone);
                         Geo::ElementPivot(*clone, mCanvasDragPivotX, mCanvasDragPivotY);
+                        // Mesma materialização do pivô do resize: clone de um
+                        // objeto girado (sem centro_rotacao) redimensionado
+                        // na sequência precisa do pivô fixo no arrasto.
+                        if (mCanvasDragMode >= 2 && mCanvasDragMode <= 9 &&
+                            mCanvasDragRotation != 0.0f &&
+                            clone->transformacao.is_object() &&
+                            !clone->transformacao.contains("centro_rotacao"))
+                        {
+                            clone->transformacao["centro_rotacao"] = {
+                                { "x", mCanvasDragPivotX },
+                                { "y", mCanvasDragPivotY }
+                            };
+                            mCanvasDragMaterializedPivot = true;
+                        }
                         // Pontos originais do caminho clonado (resize).
                         mCanvasPathOrigValid = false;
                         mCanvasPathOrigPts = nlohmann::json::array();
@@ -5556,9 +5611,14 @@ namespace seedui
                     selected->transformacao["largura"] = finalW;
                     selected->transformacao["altura"] = finalH;
                     ClampElementCornerRadii(*selected);
-                    RescalePivot(selected, mCanvasDragX, mCanvasDragY,
-                                 mCanvasDragW, mCanvasDragH,
-                                 finalLeft, finalTop, finalW, finalH);
+                    // Pivô MATERIALIZADO (objeto girado sem centro_rotacao):
+                    // fica FIXO durante o resize — a âncora (canto oposto à
+                    // alça) não pode deslizar. Pivô explícito do usuário
+                    // continua proporcional (acompanha a posição relativa).
+                    if (!mCanvasDragMaterializedPivot)
+                        RescalePivot(selected, mCanvasDragX, mCanvasDragY,
+                                     mCanvasDragW, mCanvasDragH,
+                                     finalLeft, finalTop, finalW, finalH);
                     RescalePath(selected, mCanvasPathOrigPts,
                                 mCanvasDragX, mCanvasDragY,
                                 mCanvasDragW, mCanvasDragH,
@@ -5579,9 +5639,14 @@ namespace seedui
                     selected->transformacao["largura"] = finalW;
                     selected->transformacao["altura"] = finalH;
                     ClampElementCornerRadii(*selected);
-                    RescalePivot(selected, mCanvasDragX, mCanvasDragY,
-                                 mCanvasDragW, mCanvasDragH,
-                                 finalLeft, finalTop, finalW, finalH);
+                    // Pivô MATERIALIZADO (objeto girado sem centro_rotacao):
+                    // fica FIXO durante o resize — a âncora (canto oposto à
+                    // alça) não pode deslizar. Pivô explícito do usuário
+                    // continua proporcional (acompanha a posição relativa).
+                    if (!mCanvasDragMaterializedPivot)
+                        RescalePivot(selected, mCanvasDragX, mCanvasDragY,
+                                     mCanvasDragW, mCanvasDragH,
+                                     finalLeft, finalTop, finalW, finalH);
                     // Âncora = aresta fixa (oposta à alça arrastada) ou o
                     // pivô no resize espelhado (Shift isolado).
                     float pathAnchorX = mCanvasDragX;
@@ -5608,7 +5673,7 @@ namespace seedui
 
             mCanvasDragChanged = dragEngaged;
             if (dragEngaged) mProjectDirty = true;
-            applyCursor(mCanvasDragMode);
+            applyCursor(mCanvasDragMode, mCanvasDragRotation);
 
             // Preview de espaçamento (estilo CorelDRAW): pequenos traços nos
             // cantos das laterais de cada objeto da fileira + valor de cada
@@ -5752,6 +5817,30 @@ namespace seedui
                 mStatusMsgUntil = GetTime() + 4.0;
                 TraceLog(LOG_INFO, "M05 selecao: transformacao alterada (%s)",
                          mSelectedElementId.c_str());
+            }
+            // Objeto girado sem pivô explícito: devolve o pivô ao modo
+            // "centro da caixa" sem deslocar a forma — reposiciona a caixa
+            // para ter o centro exatamente no pivô fixo usado no arrasto (a
+            // geometria renderizada não muda: a rotação continua em torno do
+            // mesmo ponto) e remove o centro_rotacao materializado.
+            if (mCanvasDragMaterializedPivot)
+            {
+                if (Element* el = Project::ResolverId(mode, mSelectedElementId))
+                {
+                    if (el->transformacao.is_object() &&
+                        el->transformacao.contains("centro_rotacao") &&
+                        el->transformacao["centro_rotacao"].is_object())
+                    {
+                        const float pw = el->transformacao["centro_rotacao"].value("x", 0.0f);
+                        const float ph = el->transformacao["centro_rotacao"].value("y", 0.0f);
+                        const float cw = el->transformacao.value("largura", 160.0f);
+                        const float ch = el->transformacao.value("altura", 32.0f);
+                        el->transformacao["x"] = pw - cw * 0.5f;
+                        el->transformacao["y"] = ph - ch * 0.5f;
+                        el->transformacao.erase("centro_rotacao");
+                    }
+                }
+                mCanvasDragMaterializedPivot = false;
             }
             // Após transformações, a caixa dos GRUPOS deve voltar a envolver
             // os filhos (mover/redimensionar/rotacionar um grupo altera os

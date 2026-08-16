@@ -1299,29 +1299,46 @@ namespace seedui
                     const ImU32 smoothNodeCol = IM_COL32(50, 130, 255, 255); // borda nó suave
                     const ImU32 cuspNodeCol = IM_COL32(255, 120, 30, 255); // borda nó cúspide
 
+                    // Caminho ROTACIONADO: os pontos são LOCAIS (relativos a
+                    // x,y), mas o hit-test (dragModeAt) converte o mouse para
+                    // o espaço local girando por -rotRad em torno do pivô —
+                    // então os nós e alças precisam ser desenhados na MESMA
+                    // transformação (rotacionados em torno do pivô), senão os
+                    // nós ficam flutuando fora da forma girada e o cursor
+                    // "erra" as alças.
+                    const float rotNodeRad = Geo::DegToRad(
+                        Geo::ElementRotation(*selected));
+                    auto toPathScreen = [&](float& docX, float& docY)
+                    {
+                        if (rotNodeRad != 0.0f)
+                            Geo::RotatePoint(docX, docY, px, py, rotNodeRad);
+                        return ImVec2(origin.x + docX * viewScale,
+                                      origin.y + docY * viewScale);
+                    };
+
                     for (int i = 0; i < (int)pts.size(); ++i)
                     {
-                        const float nx = bx + pts[i].value("x", 0.0f);
-                        const float ny = by + pts[i].value("y", 0.0f);
-                        const float sx = origin.x + nx * viewScale;
-                        const float sy = origin.y + ny * viewScale;
                         const bool broken = pts[i].value("quebrado", 0.0f) > 0.5f;
 
-                        // Alça de SAÍDA (controla o segmento i → i+1).
-                        const float ox = nx + pts[i].value("cx2", 0.0f);
-                        const float oy = ny + pts[i].value("cy2", 0.0f);
-                        const float sox = origin.x + ox * viewScale;
-                        const float soy = origin.y + oy * viewScale;
-
-                        // Alça de ENTRADA (controla o segmento i-1 → i).
-                        const float ix = broken
+                        // Posições em espaço de projeto (não rotacionado):
+                        // nó + alças são deslocamentos locais do ponto.
+                        float nx = bx + pts[i].value("x", 0.0f);
+                        float ny = by + pts[i].value("y", 0.0f);
+                        float ox = nx + pts[i].value("cx2", 0.0f);
+                        float oy = ny + pts[i].value("cy2", 0.0f);
+                        float ix = broken
                             ? nx + pts[i].value("cx1", 0.0f)
                             : nx - pts[i].value("cx2", 0.0f);
-                        const float iy = broken
+                        float iy = broken
                             ? ny + pts[i].value("cy1", 0.0f)
                             : ny - pts[i].value("cy2", 0.0f);
-                        const float six = origin.x + ix * viewScale;
-                        const float siy = origin.y + iy * viewScale;
+
+                        const ImVec2 sN = toPathScreen(nx, ny);
+                        const ImVec2 sO = toPathScreen(ox, oy);
+                        const ImVec2 sI = toPathScreen(ix, iy);
+                        const float sx = sN.x, sy = sN.y;
+                        const float sox = sO.x, soy = sO.y;
+                        const float six = sI.x, siy = sI.y;
 
                         const bool outActive = pts[i].value("curva", 0.0f) > 0.5f &&
                             (fabsf(ox - nx) > 0.01f || fabsf(oy - ny) > 0.01f);
