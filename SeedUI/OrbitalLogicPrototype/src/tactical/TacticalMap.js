@@ -34,18 +34,18 @@ export class TacticalMap {
 
     // Blueprint Rooms / Zones (Rectangles, Circles, Triangles)
     this.rooms = [
-      { id: 'room-armory-1', shape: 'rect', name: 'Armory A', x: -9, z: -7, w: 6.5, h: 5, color: '#1a1d24' },
-      { id: 'room-armory-2', shape: 'rect', name: 'Armory B', x: -9, z: 2, w: 6.5, h: 5, color: '#1a1d24' },
-      { id: 'corridor-main', shape: 'rect', name: 'Corredor Central', x: -2.5, z: -2.5, w: 10, h: 5, color: '#15171d' },
-      { id: 'room-main-hall', shape: 'rect', name: 'Main Hall', x: 7.5, z: -6, w: 9, h: 12, color: '#1a1d24' }
+      { id: 'room-armory-1', shape: 'rect', name: 'Armory A', x: -10, z: -7, w: 6.0, h: 4.5, color: '#1a1d24' },
+      { id: 'room-armory-2', shape: 'rect', name: 'Armory B', x: -10, z: 2.5, w: 6.0, h: 4.5, color: '#1a1d24' },
+      { id: 'corridor-main', shape: 'rect', name: 'Corredor Central', x: -3.0, z: -2.0, w: 8.0, h: 4.0, color: '#15171d' },
+      { id: 'room-main-hall', shape: 'rect', name: 'Main Hall', x: 6.0, z: -5.5, w: 8.5, h: 11.0, color: '#1a1d24' }
     ];
 
     // Blueprint Routes (Dashed arrows showing navigation paths)
     this.routes = [
-      { from: { x: -6, z: 0 }, to: { x: 2.5, z: 0 } },
-      { from: { x: 2.5, z: 0 }, to: { x: 2.5, z: -4.5 } },
-      { from: { x: 2.5, z: 0 }, to: { x: 2.5, z: 4.5 } },
-      { from: { x: 2.5, z: 0 }, to: { x: 12, z: 0 } }
+      { from: { x: -7, z: 0 }, to: { x: 1.0, z: 0 } },
+      { from: { x: 1.0, z: 0 }, to: { x: 1.0, z: -4.5 } },
+      { from: { x: 1.0, z: 0 }, to: { x: 1.0, z: 4.5 } },
+      { from: { x: 1.0, z: 0 }, to: { x: 10, z: 0 } }
     ];
 
     this.initCanvas();
@@ -86,13 +86,27 @@ export class TacticalMap {
     });
 
     if (toolName === 'pan') {
-      this.selectedRoom = null;
+      this.selectRoom(null);
       this.activeDragHandle = null;
       this.isDraggingRoom = false;
       this.canvas.style.cursor = 'grab';
     } else {
       this.canvas.style.cursor = 'default';
     }
+  }
+
+  selectRoom(room) {
+    if (!room) {
+      this.selectedRoom = null;
+      if (this.onSelectRoom) this.onSelectRoom(null);
+      return;
+    }
+    // Bring selected room to front of rooms list
+    this.rooms = this.rooms.filter(r => r.id !== room.id);
+    this.rooms.push(room);
+    this.selectedRoom = room;
+    this.selectedEntity = null;
+    if (this.onSelectRoom) this.onSelectRoom(room);
   }
 
   initInlineEditor() {
@@ -153,7 +167,6 @@ export class TacticalMap {
     };
   }
 
-  // Instant Shape Creation at Center of View (or clicked coordinate)
   addShape(shapeType, worldX = null, worldZ = null) {
     if (worldX === null || worldZ === null) {
       const parent = this.canvas.parentElement;
@@ -201,12 +214,8 @@ export class TacticalMap {
       };
     }
 
-    this.rooms.push(newRoom);
-    this.selectedRoom = newRoom;
-    this.selectedEntity = null;
+    this.selectRoom(newRoom);
     this.setTool('select');
-
-    if (this.onSelectRoom) this.onSelectRoom(newRoom);
     return newRoom;
   }
 
@@ -225,24 +234,25 @@ export class TacticalMap {
 
       const mouse = this.getMapPos(e);
 
-      // Pan Tool or Middle Click -> Pan only
+      // 1. Pan Tool or Middle Click -> Pan only
       if (this.currentTool === 'pan' || e.button === 1 || e.spaceKey) {
         this.isPanning = true;
         this.canvas.parentElement?.classList.add('is-panning');
         return;
       }
 
-      // 1. Check Resize Handles on Selected Room (16px screen tolerance)
+      // 2. Check Resize Handles on Selected Room (18px tolerance)
       if (this.selectedRoom) {
         const handle = this.hitTestHandles(this.selectedRoom, mouse);
         if (handle) {
           this.activeDragHandle = handle;
           this.roomInitialState = { ...this.selectedRoom };
+          this.isPanning = false;
           return;
         }
       }
 
-      // 2. Check Blueprint Rooms (Direct Click on Room)
+      // 3. Check Blueprint Rooms (Direct Selection & Dragging)
       const hitRoom = this.hitTestRooms(mouse.x, mouse.y);
       if (hitRoom) {
         const now = Date.now();
@@ -252,28 +262,25 @@ export class TacticalMap {
         }
         lastClickTime = now;
 
-        this.selectedRoom = hitRoom;
-        this.selectedEntity = null;
+        this.selectRoom(hitRoom);
         this.isDraggingRoom = true;
+        this.isPanning = false;
         this.roomDragOffset = { x: mouse.x - hitRoom.x, z: mouse.z - hitRoom.z };
-        if (this.onSelectRoom) this.onSelectRoom(hitRoom);
         return;
       }
 
-      // 3. Check 3D Entities on Map
+      // 4. Check 3D Entities on Map
       const hitEntity = this.hitTestEntities(mouse.x, mouse.y);
       if (hitEntity) {
         this.selectedEntity = hitEntity;
-        this.selectedRoom = null;
+        this.selectRoom(null);
+        this.isPanning = false;
         if (this.onSelectEntity) this.onSelectEntity(hitEntity);
-        if (this.onSelectRoom) this.onSelectRoom(null);
         return;
       }
 
-      // Clicked on empty space -> Deselect & allow gentle pan if user drags
-      this.selectedRoom = null;
-      this.selectedEntity = null;
-      if (this.onSelectRoom) this.onSelectRoom(null);
+      // 5. Clicked on empty space -> Deselect & pan
+      this.selectRoom(null);
       this.isPanning = true;
       this.cancelInlineRename();
     });
@@ -303,7 +310,7 @@ export class TacticalMap {
       const moveDist = Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y);
       if (moveDist > 3) isDragging = true;
 
-      // 1. Dragging Resize Handles
+      // 1. Dragging Resize Handles (Stretching sides)
       if (this.activeDragHandle && this.selectedRoom && this.roomInitialState) {
         const room = this.selectedRoom;
         const init = this.roomInitialState;
@@ -338,7 +345,6 @@ export class TacticalMap {
             }
           }
         }
-        if (this.onSelectRoom) this.onSelectRoom(room);
       }
       // 2. Dragging Room Position on Grid
       else if (this.isDraggingRoom && this.selectedRoom) {
@@ -346,7 +352,6 @@ export class TacticalMap {
         const newZ = Math.round((mouse.z - this.roomDragOffset.z) * 2) / 2;
         this.selectedRoom.x = newX;
         this.selectedRoom.z = newZ;
-        if (this.onSelectRoom) this.onSelectRoom(this.selectedRoom);
       }
       // 3. Panning Viewport
       else if (this.isPanning) {
@@ -359,6 +364,11 @@ export class TacticalMap {
     });
 
     window.addEventListener('mouseup', () => {
+      if (this.isDraggingRoom || this.activeDragHandle) {
+        if (this.selectedRoom && this.onSelectRoom) {
+          this.onSelectRoom(this.selectedRoom);
+        }
+      }
       isMouseDown = false;
       isDragging = false;
       this.isPanning = false;
@@ -381,8 +391,7 @@ export class TacticalMap {
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (this.selectedRoom) {
           this.rooms = this.rooms.filter(r => r.id !== this.selectedRoom.id);
-          this.selectedRoom = null;
-          if (this.onSelectRoom) this.onSelectRoom(null);
+          this.selectRoom(null);
         }
       } else if (e.code === 'KeyV') this.setTool('select');
       else if (e.code === 'KeyH') this.setTool('pan');
@@ -413,15 +422,27 @@ export class TacticalMap {
     };
   }
 
+  isPointInsideRoom(r, worldX, worldZ) {
+    const pad = 0.4;
+    if (r.shape === 'circle') {
+      return Math.hypot(worldX - r.x, worldZ - r.z) <= (r.radius + pad);
+    } else {
+      return worldX >= r.x - pad && worldX <= r.x + r.w + pad && worldZ >= r.z - pad && worldZ <= r.z + r.h + pad;
+    }
+  }
+
   hitTestRooms(worldX, worldZ) {
+    // 1. Give active selected room highest priority!
+    if (this.selectedRoom && this.isPointInsideRoom(this.selectedRoom, worldX, worldZ)) {
+      return this.selectedRoom;
+    }
+
+    // 2. Test other rooms in reverse (top-most first)
     for (let i = this.rooms.length - 1; i >= 0; i--) {
       const r = this.rooms[i];
-      if (r.shape === 'circle') {
-        if (Math.hypot(worldX - r.x, worldZ - r.z) <= r.radius) return r;
-      } else if (r.shape === 'triangle') {
-        if (worldX >= r.x && worldX <= r.x + r.w && worldZ >= r.z && worldZ <= r.z + r.h) return r;
-      } else {
-        if (worldX >= r.x && worldX <= r.x + r.w && worldZ >= r.z && worldZ <= r.z + r.h) return r;
+      if (r === this.selectedRoom) continue;
+      if (this.isPointInsideRoom(r, worldX, worldZ)) {
+        return r;
       }
     }
     return null;
