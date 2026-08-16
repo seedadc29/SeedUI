@@ -173,9 +173,13 @@ document.addEventListener('DOMContentLoaded', () => {
     else if (e.code === 'KeyV' || e.code === 'KeyW') setTool('select');
   });
 
-  // 9. Tactical Map Tool Selector Buttons (Mover, Quadrado, Círculo, Triângulo, Pan)
+  // 9. Tactical Map Tool Selector Buttons (Selecionar, Mover, Quadrado, Círculo, Triângulo, Pan)
   document.getElementById('tool-tactical-select')?.addEventListener('click', () => {
     tacticalMap.setTool('select');
+  });
+
+  document.getElementById('tool-tactical-move')?.addEventListener('click', () => {
+    tacticalMap.setTool('move');
   });
 
   document.getElementById('tool-tactical-rect')?.addEventListener('click', () => {

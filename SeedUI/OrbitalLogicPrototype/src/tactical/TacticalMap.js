@@ -15,7 +15,7 @@ export class TacticalMap {
     this.isPanning = false;
     this.lastMouse = { x: 0, y: 0 };
 
-    // Active Tool: 'select' | 'pan'
+    // Active Tool: 'select' | 'move' | 'pan'
     this.currentTool = 'select';
 
     // Interactive selection & manipulation
@@ -25,7 +25,8 @@ export class TacticalMap {
     this.hoveredHandle = null;
     this.activeDragHandle = null;
     this.isDraggingRoom = false;
-    this.roomDragOffset = { x: 0, z: 0 };
+    this.startRoomPos = { x: 0, z: 0 };
+    this.startMousePos = { x: 0, z: 0 };
     this.roomInitialState = null;
     this.animTime = 0;
 
@@ -90,6 +91,8 @@ export class TacticalMap {
       this.activeDragHandle = null;
       this.isDraggingRoom = false;
       this.canvas.style.cursor = 'grab';
+    } else if (toolName === 'move') {
+      this.canvas.style.cursor = 'move';
     } else {
       this.canvas.style.cursor = 'default';
     }
@@ -241,8 +244,8 @@ export class TacticalMap {
         return;
       }
 
-      // 2. Priority 1: Check Resize Handles on currently Selected Room (20px tolerance)
-      if (this.selectedRoom) {
+      // 2. In Select mode: Check Resize Handles on currently Selected Room (20px tolerance)
+      if (this.currentTool === 'select' && this.selectedRoom) {
         const handle = this.hitTestHandles(this.selectedRoom, mouse);
         if (handle) {
           this.activeDragHandle = handle;
@@ -252,7 +255,7 @@ export class TacticalMap {
         }
       }
 
-      // 3. Priority 2: Check Blueprint Rooms (Smallest Area First to prevent parent overlap)
+      // 3. Check Blueprint Rooms (Smallest Area First)
       const hitRoom = this.hitTestRooms(mouse.x, mouse.y);
       if (hitRoom) {
         const now = Date.now();
@@ -265,11 +268,12 @@ export class TacticalMap {
         this.selectRoom(hitRoom);
         this.isDraggingRoom = true;
         this.isPanning = false;
-        this.roomDragOffset = { x: mouse.x - hitRoom.x, z: mouse.z - hitRoom.z };
+        this.startRoomPos = { x: hitRoom.x, z: hitRoom.z };
+        this.startMousePos = { x: mouse.x, z: mouse.z };
         return;
       }
 
-      // 4. Priority 3: Check 3D Entities on Map
+      // 4. Check 3D Entities on Map
       const hitEntity = this.hitTestEntities(mouse.x, mouse.y);
       if (hitEntity) {
         this.selectedEntity = hitEntity;
@@ -299,7 +303,10 @@ export class TacticalMap {
           }
           this.hoveredHandle = null;
           this.hoveredRoom = this.hitTestRooms(mouse.x, mouse.y);
-          this.canvas.style.cursor = this.hoveredRoom ? 'move' : 'default';
+          this.canvas.style.cursor = this.hoveredRoom ? 'pointer' : 'default';
+        } else if (this.currentTool === 'move') {
+          this.hoveredRoom = this.hitTestRooms(mouse.x, mouse.y);
+          this.canvas.style.cursor = 'move';
         } else if (this.currentTool === 'pan') {
           this.canvas.style.cursor = 'grab';
         }
@@ -310,7 +317,7 @@ export class TacticalMap {
       const moveDist = Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y);
       if (moveDist > 3) isDragging = true;
 
-      // 1. Dragging Resize Handles (Stretching sides)
+      // 1. Dragging Resize Handles (Stretching sides in Select mode)
       if (this.activeDragHandle && this.selectedRoom && this.roomInitialState) {
         const room = this.selectedRoom;
         const init = this.roomInitialState;
@@ -346,10 +353,12 @@ export class TacticalMap {
           }
         }
       }
-      // 2. Dragging Room Position on Grid
+      // 2. Dragging Room Position on Grid (Robust Delta Translation)
       else if (this.isDraggingRoom && this.selectedRoom) {
-        const newX = Math.round((mouse.x - this.roomDragOffset.x) * 2) / 2;
-        const newZ = Math.round((mouse.z - this.roomDragOffset.z) * 2) / 2;
+        const dx = mouse.x - this.startMousePos.x;
+        const dz = mouse.z - this.startMousePos.z;
+        const newX = Math.round((this.startRoomPos.x + dx) * 2) / 2;
+        const newZ = Math.round((this.startRoomPos.z + dz) * 2) / 2;
         this.selectedRoom.x = newX;
         this.selectedRoom.z = newZ;
       }
@@ -385,7 +394,7 @@ export class TacticalMap {
       this.zoom = Math.max(0.4, Math.min(2.5, this.zoom * zoomFactor));
     }, { passive: false });
 
-    // Keyboard Shortcuts (Delete room, tool hotkeys)
+    // Keyboard Shortcuts
     window.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
       if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -394,13 +403,16 @@ export class TacticalMap {
           this.selectRoom(null);
         }
       } else if (e.code === 'KeyV') this.setTool('select');
+      else if (e.code === 'KeyG' || e.code === 'KeyW') this.setTool('move');
       else if (e.code === 'KeyH') this.setTool('pan');
     });
   }
 
   updateCursor(handle) {
     if (!handle) {
-      this.canvas.style.cursor = this.currentTool === 'pan' ? 'grab' : (this.hoveredRoom ? 'move' : 'default');
+      if (this.currentTool === 'pan') this.canvas.style.cursor = 'grab';
+      else if (this.currentTool === 'move') this.canvas.style.cursor = 'move';
+      else this.canvas.style.cursor = this.hoveredRoom ? 'pointer' : 'default';
       return;
     }
     if (handle === 'n' || handle === 's') this.canvas.style.cursor = 'ns-resize';
@@ -427,7 +439,6 @@ export class TacticalMap {
     if (r.shape === 'circle') {
       return Math.hypot(worldX - r.x, worldZ - r.z) <= (r.radius + pad);
     } else if (r.shape === 'triangle') {
-      // Precise Barycentric Point-In-Triangle Check with padding
       const ax = r.x + r.w / 2, az = r.z;
       const bx = r.x + r.w,     bz = r.z + r.h;
       const cx = r.x,           cz = r.z + r.h;
@@ -470,7 +481,6 @@ export class TacticalMap {
     }
 
     // 3. Sort by SMALLEST AREA FIRST!
-    // This guarantees that a 5x5 zone inside an 80x80 corridor is ALWAYS selected first!
     if (hits.length > 0) {
       hits.sort((a, b) => a.area - b.area);
       return hits[0].room;
@@ -497,7 +507,7 @@ export class TacticalMap {
   }
 
   hitTestHandles(room, mouse) {
-    const hitTolerancePx = 20; // Generous 20 CSS pixels radius for effortless grabbing!
+    const hitTolerancePx = 20;
 
     const toScreen = (wx, wz) => ({
       x: this.panX + (wx * this.meterToPx) * this.zoom,
@@ -716,6 +726,9 @@ export class TacticalMap {
   drawRoomHandles(room) {
     this.ctx.save();
 
+    let cx = room.x * this.meterToPx;
+    let cz = room.z * this.meterToPx;
+
     if (room.shape === 'circle') {
       const rx = (room.x + room.radius) * this.meterToPx;
       const rz = room.z * this.meterToPx;
@@ -727,19 +740,70 @@ export class TacticalMap {
       const z1 = room.z * this.meterToPx;
       const z2 = (room.z + room.h) * this.meterToPx;
       const zm = (room.z + room.h / 2) * this.meterToPx;
+      cx = xm;
+      cz = zm;
 
-      // 4 Corners
-      this.drawHandleBox(x1, z1);
-      this.drawHandleBox(x2, z1);
-      this.drawHandleBox(x1, z2);
-      this.drawHandleBox(x2, z2);
+      if (this.currentTool === 'select') {
+        // 4 Corners
+        this.drawHandleBox(x1, z1);
+        this.drawHandleBox(x2, z1);
+        this.drawHandleBox(x1, z2);
+        this.drawHandleBox(x2, z2);
 
-      // 4 Edge Midpoints (for isolated side stretching)
-      this.drawHandleCircle(xm, z1);
-      this.drawHandleCircle(x2, zm);
-      this.drawHandleCircle(xm, z2);
-      this.drawHandleCircle(x1, zm);
+        // 4 Edge Midpoints (for isolated side stretching)
+        this.drawHandleCircle(xm, z1);
+        this.drawHandleCircle(x2, zm);
+        this.drawHandleCircle(xm, z2);
+        this.drawHandleCircle(x1, zm);
+      }
     }
+
+    // Move Gizmo if in Move mode
+    if (this.currentTool === 'move') {
+      this.drawMoveGizmo(cx, cz);
+    }
+
+    this.ctx.restore();
+  }
+
+  drawMoveGizmo(cx, cy) {
+    this.ctx.save();
+    this.ctx.strokeStyle = '#38bdf8';
+    this.ctx.fillStyle = '#38bdf8';
+    this.ctx.lineWidth = 2.5;
+
+    const size = 20;
+    // Cross lines
+    this.ctx.beginPath();
+    this.ctx.moveTo(cx - size, cy); this.ctx.lineTo(cx + size, cy);
+    this.ctx.moveTo(cx, cy - size); this.ctx.lineTo(cx, cy + size);
+    this.ctx.stroke();
+
+    // 4 Arrow Heads
+    const arrow = (x, y, angle) => {
+      this.ctx.save();
+      this.ctx.translate(x, y);
+      this.ctx.rotate(angle);
+      this.ctx.beginPath();
+      this.ctx.moveTo(0, 0);
+      this.ctx.lineTo(-6, -4);
+      this.ctx.lineTo(-6, 4);
+      this.ctx.closePath();
+      this.ctx.fill();
+      this.ctx.restore();
+    };
+
+    arrow(cx + size, cy, 0);
+    arrow(cx - size, cy, Math.PI);
+    arrow(cx, cy + size, Math.PI / 2);
+    arrow(cx, cy - size, -Math.PI / 2);
+
+    // Center handle disc
+    this.ctx.beginPath();
+    this.ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+    this.ctx.fillStyle = '#ffffff';
+    this.ctx.fill();
+    this.ctx.stroke();
 
     this.ctx.restore();
   }
