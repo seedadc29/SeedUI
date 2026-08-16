@@ -68,7 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  // 6. Toolshelf Buttons (Transform Gizmo Modes)
+  // 6. Toolshelf Buttons & Full Tool Switching
   const toolButtons = document.querySelectorAll('.seed-shelf-btn[data-tool]');
   const setTool = (toolName) => {
     toolButtons.forEach(btn => {
@@ -77,6 +77,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (toolName === 'translate' || toolName === 'rotate' || toolName === 'scale') {
       scene3D.setGizmoMode(toolName);
+      orbitalGraph.currentTool = 'select';
+    } else if (toolName === 'orbit') {
+      orbitalGraph.currentTool = 'orbit';
+    } else if (toolName === 'beam') {
+      orbitalGraph.currentTool = 'beam';
+    } else if (toolName === 'inspect') {
+      orbitalGraph.currentTool = 'select';
+      const inspectorBox = document.getElementById('node-inspector');
+      inspectorBox?.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      orbitalGraph.currentTool = 'select';
     }
   };
 
@@ -84,6 +95,9 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('tool-move')?.addEventListener('click', () => setTool('translate'));
   document.getElementById('tool-rotate')?.addEventListener('click', () => setTool('rotate'));
   document.getElementById('tool-scale')?.addEventListener('click', () => setTool('scale'));
+  document.getElementById('tool-orbit')?.addEventListener('click', () => setTool('orbit'));
+  document.getElementById('tool-beam')?.addEventListener('click', () => setTool('beam'));
+  document.getElementById('tool-inspect')?.addEventListener('click', () => setTool('inspect'));
 
   // Keyboard shortcut listener for active shelf button updates
   window.addEventListener('keydown', (e) => {
@@ -91,6 +105,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.code === 'KeyG') setTool('translate');
     else if (e.code === 'KeyR') setTool('rotate');
     else if (e.code === 'KeyS' && !e.ctrlKey) setTool('scale');
+    else if (e.code === 'KeyO') setTool('orbit');
+    else if (e.code === 'KeyL') setTool('beam');
+    else if (e.code === 'KeyI') setTool('inspect');
     else if (e.code === 'KeyV' || e.code === 'KeyW') setTool('select');
   });
 

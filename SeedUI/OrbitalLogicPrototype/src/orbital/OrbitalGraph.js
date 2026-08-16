@@ -16,8 +16,18 @@ export class OrbitalGraph {
     this.lastMouse = { x: 0, y: 0 };
     this.draggedEntity = null;
 
+    // Current Active Tool: 'select' | 'orbit' | 'beam' | 'inspect'
+    this.currentTool = 'select';
+
+    // Interactive Tool States
+    this.beamDragStartSun = null;
+    this.beamDragCurrentPos = null;
+    this.permanentBeams = []; // Array of { fromId, toId, color }
+    this.orbitCreationPreview = null; // { sun, radius }
+
     // Orbit Animation Toggle
     this.isOrbitAnimationActive = true;
+    this.animTime = 0;
 
     // Interactive selection
     this.selectedEntity = null;
@@ -224,6 +234,30 @@ export class OrbitalGraph {
 
       const hit = this.hitTest(downMousePos.x, downMousePos.y);
 
+      // TOOL: CREATE ORBIT (O)
+      if (this.currentTool === 'orbit') {
+        const closestSun = this.findClosestSun(downMousePos.x, downMousePos.y);
+        if (closestSun) {
+          const dist = Math.hypot(downMousePos.x - closestSun.x, downMousePos.y - closestSun.y);
+          this.orbitCreationPreview = {
+            sun: closestSun,
+            radius: Math.max(50, Math.round(dist))
+          };
+        }
+        return;
+      }
+
+      // TOOL: CONNECT GRAVITATIONAL BEAM (L)
+      if (this.currentTool === 'beam') {
+        const hitSun = hit && hit.type === 'sun' ? hit : this.findClosestSun(downMousePos.x, downMousePos.y);
+        if (hitSun) {
+          this.beamDragStartSun = hitSun;
+          this.beamDragCurrentPos = { ...downMousePos };
+        }
+        return;
+      }
+
+      // TOOL: SELECT & MOVE (DEFAULT)
       if (hit) {
         activeDragTarget = hit;
         if (hit.type === 'sun') {
@@ -248,6 +282,23 @@ export class OrbitalGraph {
 
       const moveDist = Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y);
 
+      // 1. TOOL: ORBIT CREATION DRAG
+      if (this.currentTool === 'orbit' && this.orbitCreationPreview) {
+        const sun = this.orbitCreationPreview.sun;
+        const dist = Math.hypot(mouse.x - sun.x, mouse.y - sun.y);
+        this.orbitCreationPreview.radius = Math.max(40, Math.round(dist));
+        this.lastMouse = { x: e.clientX, y: e.clientY };
+        return;
+      }
+
+      // 2. TOOL: BEAM CONNECT DRAG
+      if (this.currentTool === 'beam' && this.beamDragStartSun) {
+        this.beamDragCurrentPos = { ...mouse };
+        this.lastMouse = { x: e.clientX, y: e.clientY };
+        return;
+      }
+
+      // 3. TOOL: SELECT & MOVE DRAG
       if (activeDragTarget) {
         if (moveDist > 4) {
           isDragging = true;
@@ -289,17 +340,49 @@ export class OrbitalGraph {
     });
 
     // Mouse Up / Release
-    window.addEventListener('mouseup', () => {
+    window.addEventListener('mouseup', (e) => {
       if (!isMouseDown) return;
+      const mouse = this.getCanvasPos(e);
 
+      // 1. FINALIZE ORBIT CREATION
+      if (this.currentTool === 'orbit' && this.orbitCreationPreview) {
+        const sun = this.orbitCreationPreview.sun;
+        const radius = this.orbitCreationPreview.radius;
+        if (!sun.orbits.some(o => Math.abs(o.radius - radius) < 12)) {
+          if (this.historyManager) this.historyManager.pushState(this.suns);
+          sun.orbits.push({ radius, dash: [3, 4] });
+          this.notifyGraphChange();
+        }
+        this.orbitCreationPreview = null;
+      }
+
+      // 2. FINALIZE BEAM CONNECTION
+      if (this.currentTool === 'beam' && this.beamDragStartSun) {
+        const targetHit = this.hitTest(mouse.x, mouse.y);
+        const targetSun = targetHit && targetHit.type === 'sun' ? targetHit : this.findClosestSun(mouse.x, mouse.y);
+
+        if (targetSun && targetSun.id !== this.beamDragStartSun.id) {
+          if (this.historyManager) this.historyManager.pushState(this.suns);
+          this.permanentBeams.push({
+            fromId: this.beamDragStartSun.id,
+            toId: targetSun.id,
+            color: '#32ade6'
+          });
+          this.triggerEnergyBeam(this.beamDragStartSun.name, targetSun.name, '#32ade6');
+          this.notifyGraphChange();
+        }
+
+        this.beamDragStartSun = null;
+        this.beamDragCurrentPos = null;
+      }
+
+      // 3. FINALIZE SELECTION & MOVE
       if (!isDragging && activeDragTarget) {
-        // Selection Click
         this.selectedEntity = activeDragTarget;
         if (this.onSelectionChange) {
           this.onSelectionChange(activeDragTarget);
         }
-      } else if (!isDragging && !activeDragTarget) {
-        // Click on empty space
+      } else if (!isDragging && !activeDragTarget && this.currentTool === 'select') {
         this.selectedEntity = null;
         if (this.onSelectionChange) {
           this.onSelectionChange(null);
@@ -327,6 +410,8 @@ export class OrbitalGraph {
       activeDragTarget = null;
       this.draggedEntity = null;
       this.isPanning = false;
+      this.orbitCreationPreview = null;
+      this.beamDragStartSun = null;
       this.canvas.parentElement?.classList.remove('is-panning');
     });
 
@@ -348,6 +433,20 @@ export class OrbitalGraph {
     });
   }
 
+  findClosestSun(x, y) {
+    if (this.suns.length === 0) return null;
+    let closest = this.suns[0];
+    let minDist = Infinity;
+    this.suns.forEach(sun => {
+      const d = Math.hypot(sun.x - x, sun.y - y);
+      if (d < minDist) {
+        minDist = d;
+        closest = sun;
+      }
+    });
+    return closest;
+  }
+
   notifyGraphChange() {
     if (this.onGraphChange) {
       this.onGraphChange(this.suns);
@@ -363,6 +462,7 @@ export class OrbitalGraph {
 
     if (entity.type === 'sun') {
       this.suns = this.suns.filter(s => s.id !== entity.id);
+      this.permanentBeams = this.permanentBeams.filter(b => b.fromId !== entity.id && b.toId !== entity.id);
     } else if (entity.type === 'planet') {
       this.suns.forEach(sun => {
         sun.planets = sun.planets.filter(p => p.id !== entity.id && p.name !== entity.name);
@@ -471,7 +571,6 @@ export class OrbitalGraph {
       let spawnX = mousePos.x;
       let spawnY = mousePos.y;
 
-      // If clicked without dragging, place at non-overlapping offset
       if (spawnX === 0 && spawnY === 0) {
         const count = this.suns.length;
         spawnX = (count % 2 === 0 ? 1 : -1) * (150 + Math.floor(count / 2) * 130);
@@ -519,13 +618,11 @@ export class OrbitalGraph {
     else if (data.type === 'planet' || data.type === 'mesh') {
       let targetSun = null;
 
-      // Prefer currently selected Sun
       if (this.selectedEntity) {
         if (this.selectedEntity.type === 'sun') targetSun = this.selectedEntity;
         else if (this.selectedEntity.parentSun) targetSun = this.selectedEntity.parentSun;
       }
 
-      // If not selected, find closest Sun
       if (!targetSun && this.suns.length > 0) {
         let minDist = Infinity;
         this.suns.forEach(sun => {
@@ -537,7 +634,6 @@ export class OrbitalGraph {
         });
       }
 
-      // If no Suns exist, create default Objeto Sun
       if (!targetSun) {
         targetSun = {
           id: `sun-${Date.now()}`,
@@ -556,7 +652,6 @@ export class OrbitalGraph {
         this.suns.push(targetSun);
       }
 
-      // If adding a 3D Mesh shape (Cubo, Esfera, Cilindro, etc.), update the Sun's main shape!
       if (data.type === 'mesh') {
         const meshShapes = ['cubo', 'plano', 'cilindro', 'triangulo', 'esfera', 'cube', 'plane', 'cylinder', 'cone', 'sphere'];
         const existingMeshPlanet = targetSun.planets.find(p => meshShapes.some(s => p.name.toLowerCase().includes(s)));
@@ -582,7 +677,6 @@ export class OrbitalGraph {
           this.selectedEntity = newPlanet;
         }
       } else {
-        // Adding a Mechanic Planet (Andar, Pular, Correr, Fisica, Colisao, Animacao)
         let orbitR = data.name.toLowerCase().includes('animacao') ? 165 : 115;
         if (!targetSun.orbits.some(o => Math.abs(o.radius - orbitR) < 15)) {
           targetSun.orbits.push({ radius: orbitR, dash: [3, 4] });
@@ -632,6 +726,8 @@ export class OrbitalGraph {
   }
 
   update(delta) {
+    this.animTime += delta;
+
     if (this.isOrbitAnimationActive) {
       this.suns.forEach(sun => {
         sun.planets.forEach(planet => {
@@ -662,7 +758,35 @@ export class OrbitalGraph {
     this.ctx.translate(this.panX, this.panY);
     this.ctx.scale(this.zoom, this.zoom);
 
-    // 1. Draw Active Energy Beams
+    // 1. Draw Permanent Gravitational Beams (Connected Systems)
+    this.permanentBeams.forEach(beam => {
+      const sunA = this.suns.find(s => s.id === beam.fromId);
+      const sunB = this.suns.find(s => s.id === beam.toId);
+      if (sunA && sunB) {
+        this.ctx.save();
+        this.ctx.beginPath();
+        this.ctx.moveTo(sunA.x, sunA.y);
+        this.ctx.lineTo(sunB.x, sunB.y);
+        this.ctx.strokeStyle = 'rgba(50, 173, 230, 0.4)';
+        this.ctx.setLineDash([4, 6]);
+        this.ctx.lineWidth = 1.5;
+        this.ctx.stroke();
+
+        // Traveling energy photon
+        const progress = (this.animTime * 0.8) % 1.0;
+        const px = sunA.x + (sunB.x - sunA.x) * progress;
+        const py = sunA.y + (sunB.y - sunA.y) * progress;
+        this.ctx.beginPath();
+        this.ctx.arc(px, py, 4, 0, Math.PI * 2);
+        this.ctx.fillStyle = '#32ade6';
+        this.ctx.shadowColor = '#32ade6';
+        this.ctx.shadowBlur = 10;
+        this.ctx.fill();
+        this.ctx.restore();
+      }
+    });
+
+    // 2. Draw Active Transient Energy Beams
     this.activeBeams.forEach(beam => {
       this.ctx.save();
       this.ctx.beginPath();
@@ -676,9 +800,9 @@ export class OrbitalGraph {
       this.ctx.restore();
     });
 
-    // 2. Draw Solar Systems
+    // 3. Draw Solar Systems (Suns, Orbits, Planets, Moons)
     this.suns.forEach(sun => {
-      // 2.1 Draw Concentric Dashed Orbits
+      // 3.1 Concentric Dashed Orbits
       sun.orbits.forEach(orbit => {
         this.ctx.beginPath();
         this.ctx.arc(sun.x, sun.y, orbit.radius, 0, Math.PI * 2);
@@ -689,7 +813,21 @@ export class OrbitalGraph {
         this.ctx.setLineDash([]);
       });
 
-      // 2.2 Draw Orbiting Planets & Moons
+      // 3.2 Orbit Creation Preview
+      if (this.orbitCreationPreview && this.orbitCreationPreview.sun === sun) {
+        this.ctx.save();
+        this.ctx.beginPath();
+        this.ctx.arc(sun.x, sun.y, this.orbitCreationPreview.radius, 0, Math.PI * 2);
+        this.ctx.setLineDash([4, 4]);
+        this.ctx.strokeStyle = '#32ade6';
+        this.ctx.lineWidth = 2;
+        this.ctx.shadowColor = '#32ade6';
+        this.ctx.shadowBlur = 12;
+        this.ctx.stroke();
+        this.ctx.restore();
+      }
+
+      // 3.3 Orbiting Planets & Moons
       sun.planets.forEach(planet => {
         const pX = sun.x + Math.cos(planet.angle) * planet.orbitRadius;
         const pY = sun.y + Math.sin(planet.angle) * planet.orbitRadius;
@@ -743,7 +881,7 @@ export class OrbitalGraph {
         this.ctx.fillText(planet.name, pX, pY);
       });
 
-      // 2.3 Draw Central Sun Body
+      // 3.4 Central Sun Body
       this.ctx.beginPath();
       this.ctx.arc(sun.x, sun.y, sun.radius, 0, Math.PI * 2);
       this.ctx.fillStyle = sun.color;
@@ -767,6 +905,20 @@ export class OrbitalGraph {
       this.ctx.textBaseline = 'middle';
       this.ctx.fillText(labelText, sun.x, sun.y);
     });
+
+    // 4. Draw Live Beam Connection Drag
+    if (this.beamDragStartSun && this.beamDragCurrentPos) {
+      this.ctx.save();
+      this.ctx.beginPath();
+      this.ctx.moveTo(this.beamDragStartSun.x, this.beamDragStartSun.y);
+      this.ctx.lineTo(this.beamDragCurrentPos.x, this.beamDragCurrentPos.y);
+      this.ctx.strokeStyle = '#32ade6';
+      this.ctx.lineWidth = 2.5;
+      this.ctx.shadowColor = '#32ade6';
+      this.ctx.shadowBlur = 15;
+      this.ctx.stroke();
+      this.ctx.restore();
+    }
 
     this.ctx.restore();
   }
