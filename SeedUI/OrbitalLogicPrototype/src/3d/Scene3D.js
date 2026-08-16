@@ -171,8 +171,20 @@ export class Scene3D {
   selectEntity(entity) {
     this.selectedEntity = entity;
 
+    if (this.selectionBoxHelper) {
+      this.scene.remove(this.selectionBoxHelper);
+      this.selectionBoxHelper = null;
+    }
+
     if (entity && entity.mesh && entity.shape !== 'plane') {
       this.transformControls.attach(entity.mesh);
+
+      this.selectionBoxHelper = new THREE.BoxHelper(entity.mesh, 0xff7700);
+      this.selectionBoxHelper.material.linewidth = 2;
+      this.selectionBoxHelper.material.depthTest = false;
+      this.selectionBoxHelper.renderOrder = 999;
+      this.scene.add(this.selectionBoxHelper);
+
       if (this.onEntitySelected) {
         this.onEntitySelected(entity.sunId);
       }
@@ -701,6 +713,11 @@ export class Scene3D {
           }
         }
       });
+    }
+
+    // Update selection box outline
+    if (this.selectionBoxHelper && this.selectedEntity && this.selectedEntity.mesh) {
+      this.selectionBoxHelper.update();
     }
   }
 

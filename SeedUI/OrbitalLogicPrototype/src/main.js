@@ -36,10 +36,21 @@ document.addEventListener('DOMContentLoaded', () => {
   orbitalGraph.onSelectionChange = (entity) => {
     if (origSelectionChange) origSelectionChange(entity);
     if (entity) {
-      const targetSunId = entity.type === 'sun' ? entity.id : entity.parentSun?.id;
+      let targetSunId = null;
+      if (entity.type === 'sun') {
+        targetSunId = entity.id;
+      } else if (entity.parentSun) {
+        targetSunId = entity.parentSun.id;
+      } else {
+        const parent = orbitalGraph.getPlanetParentSun(entity);
+        if (parent) targetSunId = parent.id;
+      }
+
       if (targetSunId) {
         scene3D.selectEntityBySunId(targetSunId);
       }
+    } else {
+      scene3D.selectEntity(null);
     }
   };
 

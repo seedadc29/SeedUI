@@ -373,6 +373,7 @@ export class OrbitalGraph {
         const pX = sun.x + Math.cos(planet.angle) * planet.orbitRadius;
         const pY = sun.y + Math.sin(planet.angle) * planet.orbitRadius;
         if (Math.hypot(x - pX, y - pY) <= planet.radius + 4) {
+          planet.parentSun = sun;
           return planet;
         }
       }
