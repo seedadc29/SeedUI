@@ -1688,3 +1688,45 @@ body.blender-body {
   white-space: nowrap;
   text-align: center;
 }
+
+/* ==========================================================================
+   Drag and Drop Glow & Pulse Effects for Customizing Icons on Buttons
+   ========================================================================== */
+
+/* While dragging an icon across the interface */
+body.is-dragging-icon button,
+body.is-dragging-icon .tool-btn,
+body.is-dragging-icon .win-ctrl-btn,
+body.is-dragging-icon .nav-circle-btn,
+body.is-dragging-icon .shading-btn {
+  outline: 1px dashed rgba(234, 118, 0, 0.4) !important;
+}
+
+/* Active Drop Target Glow: Button Lights Up brightly! */
+.icon-drop-target-active {
+  outline: 2px solid #ea7600 !important;
+  box-shadow: 0 0 16px rgba(234, 118, 0, 0.85), inset 0 0 8px rgba(234, 118, 0, 0.4) !important;
+  background: rgba(234, 118, 0, 0.25) !important;
+  transform: scale(1.15) !important;
+  z-index: 999 !important;
+  transition: all 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
+  animation: glowPulse 0.8s infinite alternate !important;
+}
+
+@keyframes glowPulse {
+  0% {
+    box-shadow: 0 0 8px rgba(234, 118, 0, 0.6), inset 0 0 4px rgba(234, 118, 0, 0.3);
+  }
+  100% {
+    box-shadow: 0 0 20px rgba(234, 118, 0, 1.0), inset 0 0 10px rgba(234, 118, 0, 0.6);
+  }
+}
+
+/* Success Flash Burst when Icon is Dropped */
+.icon-drop-success {
+  outline: 2px solid #10b981 !important;
+  box-shadow: 0 0 24px rgba(16, 185, 129, 0.9) !important;
+  background: rgba(16, 185, 129, 0.3) !important;
+  transform: scale(1.1) !important;
+  transition: all 0.2s ease-out !important;
+}

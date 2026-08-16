@@ -1,14 +1,18 @@
 /**
- * IconBrowser - Interactive Visual Tabler Icon Picker & Explorer for BlenderPro3D
+ * IconBrowser - Interactive Visual Tabler Icon Picker & Drag-and-Drop Customizer for BlenderPro3D
  * 
  * Features:
- * 1. Instant search across hundreds of 3D, UI, modeling, and system icons
- * 2. Category filtering (3D & Formas, Ferramentas & Edição, Visão & Câmeras, Janelas & UI, Ações & Arquivo)
- * 3. 1-Click copy of HTML/Class name for easy usage
- * 4. Draggable, non-blocking floating window
+ * 1. Drag & Drop Icons directly onto ANY button (Toolshelf, Header, Navigation Gizmo, Windows)!
+ * 2. Buttons glow and light up dynamically when hovering with a dragged icon.
+ * 3. 1-Click copy of HTML icon tag.
+ * 4. Instant search across 100+ curated 3D & UI icons.
+ * 5. Full localStorage persistence of customized button icons + Reset button.
  */
 export class IconBrowser {
   constructor() {
+    this.storageKey = 'blender_pro_custom_button_icons';
+    this.customIcons = this.loadCustomIcons();
+
     this.icons = [
       // 3D & Geometry
       { name: 'box', cat: '3D & Formas', title: 'Cubo / Caixa' },
@@ -93,6 +97,32 @@ export class IconBrowser {
     this.activeCategory = 'Todos';
     this.searchQuery = '';
     this.initDialog();
+    this.initDropZones();
+    this.applyCustomIcons();
+  }
+
+  loadCustomIcons() {
+    try {
+      const saved = localStorage.getItem(this.storageKey);
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.warn('Could not load custom button icons', e);
+    }
+    return {};
+  }
+
+  saveCustomIcons() {
+    try {
+      localStorage.setItem(this.storageKey, JSON.stringify(this.customIcons));
+    } catch (e) {
+      console.warn('Could not save custom button icons', e);
+    }
+  }
+
+  resetAllCustomIcons() {
+    this.customIcons = {};
+    this.saveCustomIcons();
+    location.reload();
   }
 
   initDialog() {
@@ -102,8 +132,8 @@ export class IconBrowser {
       const btnIcons = document.createElement('button');
       btnIcons.className = 'topbar-btn';
       btnIcons.id = 'btn-open-icon-browser';
-      btnIcons.innerHTML = '<i class="ti ti-icons"></i> Catálogo de Ícones';
-      btnIcons.title = 'Pesquisar e explorar ícones Tabler para usar na interface';
+      btnIcons.innerHTML = '<i class="ti ti-icons"></i> Ícones Tabler';
+      btnIcons.title = 'Pesquisar e arrastar ícones Tabler para qualquer botão da interface';
       topbarRight.prepend(btnIcons);
 
       btnIcons.addEventListener('click', () => this.open());
@@ -114,15 +144,21 @@ export class IconBrowser {
     modal.className = 'blender-modal-overlay hidden';
     modal.id = 'tabler-icon-browser-modal';
     modal.innerHTML = `
-      <div class="blender-modal-dialog" id="icon-browser-dialog" style="width: 580px; height: 480px;">
+      <div class="blender-modal-dialog" id="icon-browser-dialog" style="width: 600px; height: 500px;">
         <div class="modal-dialog-header" id="icon-browser-drag-header">
           <div class="modal-dialog-title">
-            <span><i class="ti ti-icons"></i> Catálogo Visual Tabler Icons (5.200+ Ícones)</span>
+            <span><i class="ti ti-icons"></i> Catálogo & Customizador de Ícones (Drag & Drop)</span>
           </div>
           <button class="modal-close-btn" id="btn-close-icon-browser">✕</button>
         </div>
 
-        <div class="modal-dialog-body" style="flex-direction: column; padding: 10px; gap: 8px;">
+        <div class="modal-dialog-body" style="flex-direction: column; padding: 12px; gap: 8px;">
+          <!-- Interactive Guide Hint -->
+          <div style="background: rgba(71, 114, 179, 0.15); border: 1px solid var(--b-accent-blue); border-radius: 4px; padding: 6px 10px; font-size: 10.5px; color: #ffffff; display: flex; align-items: center; justify-content: space-between;">
+            <span>✨ <strong>Arraste qualquer ícone</strong> e solte em cima de um botão da tela para trocá-lo instantaneamente!</span>
+            <button class="mgmt-btn" id="btn-reset-icons-all" style="font-size: 9px; padding: 2px 6px;">Restaurar Padrão</button>
+          </div>
+
           <!-- Search & Filter Header -->
           <div style="display: flex; gap: 8px; align-items: center;">
             <div style="position: relative; flex: 1;">
@@ -143,7 +179,7 @@ export class IconBrowser {
 
           <!-- Copied Notification Toast -->
           <div id="icon-copied-toast" class="hidden" style="background: var(--b-accent-orange); color: #fff; padding: 4px 10px; border-radius: 3px; font-size: 10px; font-weight: 700; text-align: center;">
-            ✓ Código do ícone copiado para a área de transferência!
+            ✓ Código do ícone copiado!
           </div>
 
           <!-- Icons Grid -->
@@ -170,6 +206,12 @@ export class IconBrowser {
   bindEvents() {
     const modal = document.getElementById('tabler-icon-browser-modal');
     document.getElementById('btn-close-icon-browser')?.addEventListener('click', () => this.close());
+
+    document.getElementById('btn-reset-icons-all')?.addEventListener('click', () => {
+      if (confirm('Deseja restaurar todos os ícones originais da interface?')) {
+        this.resetAllCustomIcons();
+      }
+    });
 
     // Search Input
     const searchInput = document.getElementById('input-icon-search');
@@ -204,14 +246,25 @@ export class IconBrowser {
     if (countLabel) countLabel.textContent = `${filtered.length} ícones`;
 
     grid.innerHTML = filtered.map((icon) => `
-      <div class="icon-card-item" data-icon="${icon.name}" title="${icon.title} (Clique para copiar <i class='ti ti-${icon.name}'></i>)">
-        <i class="ti ti-${icon.name}" style="font-size: 20px; color: var(--b-text-main);"></i>
+      <div class="icon-card-item" draggable="true" data-icon="${icon.name}" title="${icon.title} (Arraste para um botão ou clique para copiar)">
+        <i class="ti ti-${icon.name}" style="font-size: 22px; color: var(--b-text-main);"></i>
         <span class="icon-card-name">${icon.name}</span>
       </div>
     `).join('');
 
-    // Click to copy
+    // Drag and Drop from Grid Cards
     grid.querySelectorAll('.icon-card-item').forEach((item) => {
+      item.addEventListener('dragstart', (e) => {
+        const iconName = item.dataset.icon;
+        e.dataTransfer.setData('text/plain', iconName);
+        e.dataTransfer.effectAllowed = 'copy';
+        document.body.classList.add('is-dragging-icon');
+      });
+
+      item.addEventListener('dragend', () => {
+        document.body.classList.remove('is-dragging-icon');
+      });
+
       item.addEventListener('click', () => {
         const iconName = item.dataset.icon;
         const htmlSnippet = `<i class="ti ti-${iconName}"></i>`;
@@ -224,12 +277,103 @@ export class IconBrowser {
     });
   }
 
+  // 2. Interactive Drop Zones on all Buttons
+  initDropZones() {
+    const getValidButtons = () => {
+      return document.querySelectorAll(
+        '.tool-btn, .topbar-btn, .win-ctrl-btn, .nav-circle-btn, .shading-btn, .outliner-add-btn, .submode-btn, .viewport-mode-btn'
+      );
+    };
+
+    const attachDropListeners = () => {
+      getValidButtons().forEach((btn) => {
+        if (btn.dataset.hasIconDrop) return;
+        btn.dataset.hasIconDrop = 'true';
+
+        // Drag Over -> Light up / Glow
+        btn.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+          btn.classList.add('icon-drop-target-active');
+        });
+
+        btn.addEventListener('dragenter', (e) => {
+          e.preventDefault();
+          btn.classList.add('icon-drop-target-active');
+        });
+
+        btn.addEventListener('dragleave', () => {
+          btn.classList.remove('icon-drop-target-active');
+        });
+
+        // Drop -> Apply New Icon and Save
+        btn.addEventListener('drop', (e) => {
+          e.preventDefault();
+          btn.classList.remove('icon-drop-target-active');
+          const iconName = e.dataTransfer.getData('text/plain');
+          if (!iconName) return;
+
+          const buttonKey = btn.id || btn.className.split(' ').find(c => c.startsWith('tool-') || c.startsWith('btn-')) || btn.innerText.trim();
+          this.setButtonIcon(btn, iconName, buttonKey);
+        });
+      });
+    };
+
+    attachDropListeners();
+    // Re-attach whenever DOM updates
+    const observer = new MutationObserver(() => attachDropListeners());
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
+
+  setButtonIcon(btn, iconName, buttonKey) {
+    // Replace SVG, <i>, or text icon inside button
+    const existingIcon = btn.querySelector('i, svg, span.icon, span.nav-icon');
+    if (existingIcon) {
+      existingIcon.outerHTML = `<i class="ti ti-${iconName}"></i>`;
+    } else {
+      // If button has text or is empty
+      const text = btn.innerText.trim();
+      btn.innerHTML = `<i class="ti ti-${iconName}"></i> ${text ? `<span>${text}</span>` : ''}`;
+    }
+
+    // Success burst flash
+    btn.classList.add('icon-drop-success');
+    setTimeout(() => btn.classList.remove('icon-drop-success'), 600);
+
+    // Save in localStorage
+    if (buttonKey) {
+      this.customIcons[buttonKey] = iconName;
+      this.saveCustomIcons();
+    }
+
+    this.showToast(`Ícone ti-${iconName} aplicado com sucesso!`);
+  }
+
+  applyCustomIcons() {
+    Object.keys(this.customIcons).forEach((buttonKey) => {
+      const iconName = this.customIcons[buttonKey];
+      let btn = document.getElementById(buttonKey);
+      if (!btn) {
+        btn = document.querySelector(`.${buttonKey}`);
+      }
+      if (btn) {
+        const existingIcon = btn.querySelector('i, svg, span.icon, span.nav-icon');
+        if (existingIcon) {
+          existingIcon.outerHTML = `<i class="ti ti-${iconName}"></i>`;
+        } else {
+          const text = btn.innerText.trim();
+          btn.innerHTML = `<i class="ti ti-${iconName}"></i> ${text ? `<span>${text}</span>` : ''}`;
+        }
+      }
+    });
+  }
+
   showToast(msg) {
     const toast = document.getElementById('icon-copied-toast');
     if (toast) {
       toast.textContent = `✓ ${msg}`;
       toast.classList.remove('hidden');
-      setTimeout(() => toast.classList.add('hidden'), 2000);
+      setTimeout(() => toast.classList.add('hidden'), 2200);
     }
   }
 
