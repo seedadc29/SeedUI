@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Seed Studio - Lógica Orbital (Protótipo Funcional)</title>
-  <script type="module" crossorigin src="/assets/index-C3oZprE-.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-CYnb2MDN.css">
+  <script type="module" crossorigin src="/assets/index-DZ0c4vTQ.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-BUPAPwAC.css">
 </head>
 <body class="seed-dark-theme">
   <div class="seed-app-root">
@@ -123,38 +123,62 @@
       <!-- Splitter Left (Drag to resize 3D vs Orbital) -->
       <div class="seed-splitter" id="splitter-left" title="Arrastar para ajustar largura"></div>
 
-      <!-- 2.3 Center Pane: Interactive Orbital Logic Graph -->
-      <section class="seed-pane seed-orbital-graph-pane" id="pane-orbital">
-        <div class="pane-header">
-          <div class="orbital-header-left">
-            <span class="pane-title"><i class="ti ti-atom-2"></i> Grafo de Lógica Orbital (Sistema Solar)</span>
-            <div class="orbital-stats-tags">
-              <span class="orbital-stat-chip" id="stat-suns">2 Sistemas</span>
-              <span class="orbital-stat-chip" id="stat-planets">4 Planetas</span>
-              <span class="orbital-stat-chip" id="stat-moons">6 Luas</span>
+      <!-- 2.3 Center Column: Split into Orbital Graph (Top) and Tactical Command Map (Bottom) -->
+      <div class="seed-center-column" id="pane-center-column">
+        <!-- 2.3.1 Top Section: Interactive Orbital Logic Graph -->
+        <section class="seed-pane seed-orbital-graph-pane" id="pane-orbital">
+          <div class="pane-header">
+            <div class="orbital-header-left">
+              <span class="pane-title"><i class="ti ti-atom-2"></i> Grafo de Lógica Orbital (Sistemas & Mecânicas)</span>
+              <div class="orbital-stats-tags">
+                <span class="orbital-stat-chip" id="stat-suns">2 Sistemas</span>
+                <span class="orbital-stat-chip" id="stat-planets">2 Planetas</span>
+              </div>
+            </div>
+            <div class="pane-header-actions">
+              <button class="orbital-control-btn active" id="btn-toggle-orbit-anim" title="Pausar / Retomar Rotação dos Planetas">
+                <i class="ti ti-rotate" id="icon-orbit-anim"></i>
+                <span id="label-orbit-anim">Girar Órbitas</span>
+              </button>
+              <button class="pane-action-btn" id="btn-max-orbital" title="Maximizar / Expandir Grafo Orbital">
+                <i class="ti ti-maximize" id="icon-max-orbital"></i>
+              </button>
             </div>
           </div>
-          <div class="pane-header-actions">
-            <!-- Toggle Planet Rotation Animation -->
-            <button class="orbital-control-btn active" id="btn-toggle-orbit-anim" title="Pausar / Retomar Rotação dos Planetas">
-              <i class="ti ti-rotate" id="icon-orbit-anim"></i>
-              <span id="label-orbit-anim">Girar Órbitas</span>
-            </button>
-            <button class="pane-action-btn" id="btn-max-orbital" title="Maximizar / Expandir Grafo Orbital">
-              <i class="ti ti-maximize" id="icon-max-orbital"></i>
-            </button>
+          <div class="orbital-canvas-wrapper" id="orbital-wrapper">
+            <canvas id="canvas-orbital"></canvas>
+            <div class="orbital-dropzone-hint" id="dropzone-hint">
+              <span>🪐 Arraste elementos do catálogo para montar mecânicas e sistemas!</span>
+            </div>
           </div>
-        </div>
-        <div class="orbital-canvas-wrapper" id="orbital-wrapper">
-          <canvas id="canvas-orbital"></canvas>
-          <!-- Floating Guide Dropzone Alert -->
-          <div class="orbital-dropzone-hint" id="dropzone-hint">
-            <span>🪐 Arraste elementos do painel direito para criar Sistemas, Planetas e Luas!</span>
-          </div>
-        </div>
-      </section>
+        </section>
 
-      <!-- Splitter Right (Drag to resize Orbital vs Catalog) -->
+        <!-- Horizontal Splitter (Drag to resize Orbital vs Tactical Map) -->
+        <div class="seed-splitter-horizontal" id="splitter-center-horizontal" title="Arrastar para ajustar altura entre Órbitas e Mapa"></div>
+
+        <!-- 2.3.2 Bottom Section: Level 2D Blueprint / Tactical Command Map -->
+        <section class="seed-pane seed-tactical-map-pane" id="pane-tactical">
+          <div class="pane-header">
+            <div class="tactical-header-left">
+              <span class="pane-title"><i class="ti ti-map-2"></i> Mapa Tático 2D / Planta de Rotas & Gatilhos</span>
+              <span class="pane-chip" id="chip-tactical-status"><i class="ti ti-satellite"></i> Radar Ao Vivo</span>
+            </div>
+            <div class="pane-header-actions">
+              <button class="pane-action-btn" id="btn-reset-tactical-zoom" title="Centralizar Mapa">
+                <i class="ti ti-crosshair"></i>
+              </button>
+              <button class="pane-action-btn" id="btn-max-tactical" title="Maximizar / Expandir Mapa Tático">
+                <i class="ti ti-maximize" id="icon-max-tactical"></i>
+              </button>
+            </div>
+          </div>
+          <div class="tactical-canvas-wrapper" id="tactical-wrapper">
+            <canvas id="canvas-tactical"></canvas>
+          </div>
+        </section>
+      </div>
+
+      <!-- Splitter Right (Drag to resize Center vs Catalog) -->
       <div class="seed-splitter" id="splitter-right" title="Arrastar para ajustar largura"></div>
 
       <!-- 2.4 Right Pane: Catalog Accordion & Inspector -->

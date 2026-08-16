@@ -1,5 +1,6 @@
 import { Scene3D } from './3d/Scene3D.js';
 import { OrbitalGraph } from './orbital/OrbitalGraph.js';
+import { TacticalMap } from './tactical/TacticalMap.js';
 import { PaletteUI } from './ui/PaletteUI.js';
 import { HistoryManager } from './core/HistoryManager.js';
 
@@ -15,10 +16,18 @@ document.addEventListener('DOMContentLoaded', () => {
   const canvasOrbital = document.getElementById('canvas-orbital');
   const orbitalGraph = new OrbitalGraph(canvasOrbital, null, null, historyManager);
 
-  // 4. Initialize UI, Inspector, Splitters & Accordions
-  const paletteUI = new PaletteUI(orbitalGraph, scene3D, historyManager);
+  // 4. Initialize Level 2D Blueprint / Tactical Command Map
+  const canvasTactical = document.getElementById('canvas-tactical');
+  const tacticalMap = new TacticalMap(canvasTactical, scene3D, orbitalGraph, (entity) => {
+    if (entity && entity.sunId) {
+      scene3D.selectEntityBySunId(entity.sunId);
+    }
+  });
 
-  // 5. Cross-Selection Synchronization (3D <-> Orbital Graph)
+  // 5. Initialize UI, Inspector, Splitters & Accordions
+  const paletteUI = new PaletteUI(orbitalGraph, scene3D, historyManager, tacticalMap);
+
+  // 6. Cross-Selection Synchronization (3D <-> Orbital Graph <-> Tactical Map)
   let isSyncing = false;
 
   scene3D.onEntitySelected = (sunId) => {
@@ -27,11 +36,13 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       if (!sunId) {
         orbitalGraph.selectedEntity = null;
+        tacticalMap.selectedItem = null;
         paletteUI.renderInspector(null);
       } else {
         const sun = orbitalGraph.suns.find(s => s.id === sunId);
         if (sun) {
           orbitalGraph.selectedEntity = sun;
+          tacticalMap.selectedItem = scene3D.entities.get(sunId) || null;
           paletteUI.renderInspector(sun);
         }
       }
@@ -50,8 +61,8 @@ document.addEventListener('DOMContentLoaded', () => {
         let targetSunId = null;
         if (entity.type === 'sun') {
           targetSunId = entity.id;
-        } else if (entity.parentSun) {
-          targetSunId = entity.parentSun.id;
+        } else if (entity.parentSunId || entity.sunId) {
+          targetSunId = entity.parentSunId || entity.sunId;
         } else {
           const parent = orbitalGraph.getPlanetParentSun(entity);
           if (parent) targetSunId = parent.id;
@@ -59,16 +70,59 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (targetSunId) {
           scene3D.selectEntityBySunId(targetSunId);
+          tacticalMap.selectedItem = scene3D.entities.get(targetSunId) || null;
         }
       } else {
         scene3D.selectEntity(null);
+        tacticalMap.selectedItem = null;
       }
     } finally {
       isSyncing = false;
     }
   };
 
-  // 6. Toolshelf Buttons & Full Tool Switching
+  // 7. Horizontal Splitter (Resize Orbital Graph vs Tactical Map)
+  const splitterCenterH = document.getElementById('splitter-center-horizontal');
+  const paneOrbital = document.getElementById('pane-orbital');
+  const paneTactical = document.getElementById('pane-tactical');
+
+  if (splitterCenterH && paneOrbital && paneTactical) {
+    let isDraggingH = false;
+    let startY = 0;
+    let startTopH = 0;
+
+    splitterCenterH.addEventListener('mousedown', (e) => {
+      isDraggingH = true;
+      startY = e.clientY;
+      startTopH = paneOrbital.getBoundingClientRect().height;
+      splitterCenterH.classList.add('is-dragging');
+      document.body.style.cursor = 'row-resize';
+      document.body.style.userSelect = 'none';
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isDraggingH) return;
+      const dy = e.clientY - startY;
+      const newTopH = Math.max(100, Math.min(window.innerHeight - 200, startTopH + dy));
+      paneOrbital.style.flex = `0 0 ${newTopH}px`;
+      paneTactical.style.flex = '1 1 auto';
+      orbitalGraph.resize();
+      tacticalMap.resize();
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (isDraggingH) {
+        isDraggingH = false;
+        splitterCenterH.classList.remove('is-dragging');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        orbitalGraph.resize();
+        tacticalMap.resize();
+      }
+    });
+  }
+
+  // 8. Toolshelf Buttons & Tool Switching
   const toolButtons = document.querySelectorAll('.seed-shelf-btn[data-tool]');
   const setTool = (toolName) => {
     toolButtons.forEach(btn => {
@@ -99,9 +153,9 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('tool-beam')?.addEventListener('click', () => setTool('beam'));
   document.getElementById('tool-inspect')?.addEventListener('click', () => setTool('inspect'));
 
-  // Keyboard shortcut listener for active shelf button updates
+  // Keyboard shortcut listener
   window.addEventListener('keydown', (e) => {
-    if (e.target.tagName === 'INPUT') return;
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
     if (e.code === 'KeyG') setTool('translate');
     else if (e.code === 'KeyR') setTool('rotate');
     else if (e.code === 'KeyS' && !e.ctrlKey) setTool('scale');
@@ -111,6 +165,13 @@ document.addEventListener('DOMContentLoaded', () => {
     else if (e.code === 'KeyV' || e.code === 'KeyW') setTool('select');
   });
 
+  // Reset tactical zoom button
+  document.getElementById('btn-reset-tactical-zoom')?.addEventListener('click', () => {
+    tacticalMap.panX = canvasTactical.parentElement.clientWidth / 2;
+    tacticalMap.panY = canvasTactical.parentElement.clientHeight / 2;
+    tacticalMap.zoom = 1.0;
+  });
+
   // Reset focus button
   document.getElementById('btn-reset-zoom')?.addEventListener('click', () => {
     orbitalGraph.panX = canvasOrbital.parentElement.clientWidth / 2;
@@ -118,7 +179,7 @@ document.addEventListener('DOMContentLoaded', () => {
     orbitalGraph.zoom = 1.0;
   });
 
-  // Clear scene button (with full 3D and history sync)
+  // Clear scene button
   document.getElementById('btn-clear-scene')?.addEventListener('click', () => {
     if (orbitalGraph.suns.length > 0) {
       historyManager.pushState(orbitalGraph.suns);
@@ -133,11 +194,13 @@ document.addEventListener('DOMContentLoaded', () => {
   // Zoom tools
   document.getElementById('tool-zoom-in')?.addEventListener('click', () => {
     orbitalGraph.zoom = Math.min(2.5, orbitalGraph.zoom * 1.15);
+    tacticalMap.zoom = Math.min(2.5, tacticalMap.zoom * 1.15);
   });
 
   document.getElementById('tool-zoom-out')?.addEventListener('click', () => {
     orbitalGraph.zoom = Math.max(0.4, orbitalGraph.zoom * 0.85);
+    tacticalMap.zoom = Math.max(0.5, tacticalMap.zoom * 0.85);
   });
 
-  console.log('🪐 Seed Studio - Lógica Orbital Funcional com Gizmo 3D Inicializado!');
+  console.log('🪐 Seed Studio - Lógica Orbital 3D & Mapa Tático 2D Ativos!');
 });

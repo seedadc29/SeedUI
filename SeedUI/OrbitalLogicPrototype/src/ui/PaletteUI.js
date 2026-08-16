@@ -1,8 +1,9 @@
 export class PaletteUI {
-  constructor(orbitalGraph, scene3D, historyManager) {
+  constructor(orbitalGraph, scene3D, historyManager, tacticalMap = null) {
     this.orbitalGraph = orbitalGraph;
     this.scene3D = scene3D;
     this.historyManager = historyManager;
+    this.tacticalMap = tacticalMap;
 
     this.maximizedPane = null;
 
@@ -126,6 +127,8 @@ export class PaletteUI {
     typeEl.textContent = entity.type ? entity.type.toUpperCase() : 'NÓ';
 
     let html = '';
+    const isTrigger = entity.name.toUpperCase().includes('GATILHO') || entity.name.toUpperCase().includes('TRIGGER');
+
     if (entity.type === 'sun') {
       html += `
         <div class="inspector-row">
@@ -140,7 +143,41 @@ export class PaletteUI {
           <span class="inspector-label">Planetas Orbitando:</span>
           <span style="color:#ff7700;font-weight:700;">${entity.planets.length}</span>
         </div>
-        <button class="btn-delete-node" id="btn-del-selected-node"><i class="ti ti-trash"></i> Excluir Sistema Solar</button>
+      `;
+
+      if (isTrigger) {
+        html += `
+          <div class="trigger-action-table-box" style="margin-top: 12px; padding: 10px; background: rgba(255, 149, 0, 0.1); border: 1px solid rgba(255, 149, 0, 0.35); border-radius: 6px;">
+            <div style="font-weight: 700; font-size: 11px; color: #ff9500; margin-bottom: 8px; display: flex; align-items: center; gap: 4px;">
+              <i class="ti ti-table"></i> TABELA DE AÇÕES DO GATILHO
+            </div>
+            <div class="inspector-row">
+              <span class="inspector-label">Condição:</span>
+              <select class="inspector-input" id="sel-trig-condition">
+                <option value="enter">Ao Entrar na Área (On Enter)</option>
+                <option value="exit">Ao Sair da Área (On Exit)</option>
+                <option value="key_e">Pressionar Tecla 'E'</option>
+              </select>
+            </div>
+            <div class="inspector-row">
+              <span class="inspector-label">Ação / Sinal:</span>
+              <select class="inspector-input" id="sel-trig-action">
+                <option value="raise_block">Elevar Bloco / Abrir Porta (+Y)</option>
+                <option value="checkpoint">Salvar Checkpoint (Sinal)</option>
+                <option value="spawn_enemy">Spawnar Inimigo</option>
+                <option value="victory">Vitória / Fim de Fase</option>
+              </select>
+            </div>
+            <div class="inspector-row">
+              <span class="inspector-label">Alvo Conectado:</span>
+              <span style="color: #38bdf8; font-weight: 700; font-size: 11px;">Bloco de Colisão / Porta</span>
+            </div>
+          </div>
+        `;
+      }
+
+      html += `
+        <button class="btn-delete-node" id="btn-del-selected-node" style="margin-top:10px;"><i class="ti ti-trash"></i> Excluir Sistema</button>
       `;
     } else if (entity.type === 'planet') {
       html += `
