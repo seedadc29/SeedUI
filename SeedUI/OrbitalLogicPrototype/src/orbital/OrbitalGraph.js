@@ -580,7 +580,7 @@ export class OrbitalGraph {
       this.historyManager.pushState(this.suns);
     }
 
-    // 1. ADDING A PERSONAGEM (SUN)
+    // 1. ADDING AN ENTITY SYSTEM (SUN)
     if (data.type === 'sun') {
       let spawnX = mousePos.x;
       let spawnY = mousePos.y;
@@ -591,9 +591,67 @@ export class OrbitalGraph {
         spawnY = (count % 3 === 0 ? 1 : -1) * 90;
       }
 
-      let defaultModel = data.model ? data.model.charAt(0).toUpperCase() + data.model.slice(1) : 'Cubo';
-      if (data.name === 'INIMIGO') defaultModel = 'Cilindro';
-      else if (data.name === 'NPC') defaultModel = 'Esfera';
+      const upperName = data.name.toUpperCase();
+      let sunColor = '#ff7700';
+      let defaultModel = 'Cubo';
+      let orbits = [{ radius: 65, dash: [4, 4] }, { radius: 115, dash: [3, 4] }];
+      let planets = [];
+
+      if (upperName.includes('PLAYER')) {
+        sunColor = '#ff7700';
+        defaultModel = 'Cubo';
+        orbits = [{ radius: 65, dash: [4, 4] }, { radius: 115, dash: [3, 4] }, { radius: 165, dash: [3, 5] }];
+        planets = [
+          { id: `planet-${Date.now()}-mesh`, name: 'Cubo', type: 'planet', orbitRadius: 65, angle: -0.6, speed: 0.3, radius: 18, color: '#382f7e', textColor: '#ffffff', moons: [] },
+          { id: `planet-${Date.now()}-andar`, name: 'Andar', type: 'planet', orbitRadius: 115, angle: 0.8, speed: 0.3, radius: 20, color: '#2b2368', textColor: '#ffffff', subOrbitRadius: 28, moons: [{ name: 'Velocidade', color: '#ffffff', angle: 0, speed: 1.0, val: 6.0 }] },
+          { id: `planet-${Date.now()}-pular`, name: 'Pular', type: 'planet', orbitRadius: 115, angle: 2.2, speed: 0.3, radius: 20, color: '#2b2368', textColor: '#ffffff', subOrbitRadius: 28, moons: [{ name: 'Força do Pulo', color: '#ff3b30', angle: 0, speed: 1.0, val: 7.5 }] },
+          { id: `planet-${Date.now()}-fisica`, name: 'Fisica', type: 'planet', orbitRadius: 115, angle: 3.6, speed: 0.25, radius: 20, color: '#2b2368', textColor: '#ffffff', subOrbitRadius: 28, moons: [{ name: 'Massa', color: '#ff9500', angle: 0, speed: 1.0, val: 1.0 }] },
+          { id: `planet-${Date.now()}-colisao`, name: 'Colisao', type: 'planet', orbitRadius: 115, angle: 5.0, speed: 0.25, radius: 20, color: '#2b2368', textColor: '#ffffff', moons: [] }
+        ];
+      } else if (upperName.includes('INIMIGO')) {
+        sunColor = '#ff3b30';
+        defaultModel = 'Cilindro';
+        planets = [
+          { id: `planet-${Date.now()}-mesh`, name: 'Cilindro', type: 'planet', orbitRadius: 65, angle: -0.6, speed: 0.3, radius: 18, color: '#382f7e', textColor: '#ffffff', moons: [] },
+          { id: `planet-${Date.now()}-andar`, name: 'Andar', type: 'planet', orbitRadius: 115, angle: 1.2, speed: 0.3, radius: 20, color: '#2b2368', textColor: '#ffffff', subOrbitRadius: 28, moons: [{ name: 'Velocidade', color: '#ffffff', angle: 0, speed: 1.0, val: 3.2 }] },
+          { id: `planet-${Date.now()}-colisao`, name: 'Colisao', type: 'planet', orbitRadius: 115, angle: 3.8, speed: 0.25, radius: 20, color: '#2b2368', textColor: '#ffffff', moons: [] }
+        ];
+      } else if (upperName.includes('NPC')) {
+        sunColor = '#34c759';
+        defaultModel = 'Esfera';
+        planets = [
+          { id: `planet-${Date.now()}-mesh`, name: 'Esfera', type: 'planet', orbitRadius: 65, angle: -0.6, speed: 0.3, radius: 18, color: '#382f7e', textColor: '#ffffff', moons: [] },
+          { id: `planet-${Date.now()}-andar`, name: 'Andar', type: 'planet', orbitRadius: 115, angle: 1.5, speed: 0.3, radius: 20, color: '#2b2368', textColor: '#ffffff', subOrbitRadius: 28, moons: [{ name: 'Velocidade', color: '#ffffff', angle: 0, speed: 1.0, val: 2.0 }] },
+          { id: `planet-${Date.now()}-colisao`, name: 'Colisao', type: 'planet', orbitRadius: 115, angle: 4.2, speed: 0.25, radius: 20, color: '#2b2368', textColor: '#ffffff', moons: [] }
+        ];
+      } else if (upperName.includes('BLOCO') || upperName.includes('COLISAO') || upperName.includes('COLISÃO')) {
+        sunColor = '#5856d6';
+        defaultModel = 'Cubo';
+        planets = [
+          { id: `planet-${Date.now()}-mesh`, name: 'Cubo', type: 'planet', orbitRadius: 65, angle: -0.6, speed: 0.2, radius: 18, color: '#382f7e', textColor: '#ffffff', moons: [] },
+          { id: `planet-${Date.now()}-colisao`, name: 'Colisao', type: 'planet', orbitRadius: 115, angle: 2.5, speed: 0.25, radius: 22, color: '#2b2368', textColor: '#ffffff', subOrbitRadius: 34, moons: [{ name: 'Estatico', color: '#5856d6', angle: 0, speed: 0.8, val: true }, { name: 'Solido', color: '#ffffff', angle: 3.14, speed: 0.8, val: true }] }
+        ];
+      } else if (upperName.includes('GATILHO') || upperName.includes('TRIGGER')) {
+        sunColor = '#ff9500';
+        defaultModel = 'Cubo';
+        planets = [
+          { id: `planet-${Date.now()}-mesh`, name: 'Cubo', type: 'planet', orbitRadius: 65, angle: -0.6, speed: 0.2, radius: 18, color: '#382f7e', textColor: '#ffffff', moons: [] },
+          { id: `planet-${Date.now()}-gatilho`, name: 'Gatilho', type: 'planet', orbitRadius: 115, angle: 2.0, speed: 0.3, radius: 22, color: '#2b2368', textColor: '#ffffff', subOrbitRadius: 34, moons: [{ name: 'Raio de Detecção', color: '#ff9500', angle: 0, speed: 1.0, val: 3.5 }, { name: 'Disparar Evento', color: '#32ade6', angle: 3.14, speed: 1.0, val: true }] }
+        ];
+      } else if (upperName.includes('PLATAFORMA')) {
+        sunColor = '#32ade6';
+        defaultModel = 'Plano';
+        orbits = [{ radius: 65, dash: [4, 4] }, { radius: 115, dash: [3, 4] }, { radius: 165, dash: [3, 5] }];
+        planets = [
+          { id: `planet-${Date.now()}-mesh`, name: 'Plano', type: 'planet', orbitRadius: 65, angle: -0.6, speed: 0.2, radius: 18, color: '#382f7e', textColor: '#ffffff', moons: [] },
+          { id: `planet-${Date.now()}-colisao`, name: 'Colisao', type: 'planet', orbitRadius: 115, angle: 1.8, speed: 0.25, radius: 22, color: '#2b2368', textColor: '#ffffff', subOrbitRadius: 34, moons: [{ name: 'Estatico', color: '#5856d6', angle: 0, speed: 0.8, val: true }] },
+          { id: `planet-${Date.now()}-andar`, name: 'Andar', type: 'planet', orbitRadius: 165, angle: 3.8, speed: 0.2, radius: 20, color: '#2b2368', textColor: '#ffffff', subOrbitRadius: 28, moons: [{ name: 'Velocidade', color: '#ffffff', angle: 0, speed: 1.0, val: 2.0 }] }
+        ];
+      } else {
+        planets = [
+          { id: `planet-${Date.now()}-mesh`, name: defaultModel, type: 'planet', orbitRadius: 65, angle: -0.6, speed: 0.3, radius: 18, color: '#382f7e', textColor: '#ffffff', moons: [] }
+        ];
+      }
 
       const newSun = {
         id: `sun-${Date.now()}`,
@@ -602,25 +660,9 @@ export class OrbitalGraph {
         x: spawnX,
         y: spawnY,
         radius: 36,
-        color: data.name === 'PLAYER' ? '#ff7700' : (data.name === 'INIMIGO' ? '#ff3b30' : '#34c759'),
-        orbits: [
-          { radius: 65, dash: [4, 4] },
-          { radius: 115, dash: [3, 4] }
-        ],
-        planets: [
-          {
-            id: `planet-${Date.now()}-mesh`,
-            name: defaultModel,
-            type: 'planet',
-            orbitRadius: 65,
-            angle: -0.6,
-            speed: 0.3,
-            radius: 18,
-            color: '#382f7e',
-            textColor: '#ffffff',
-            moons: []
-          }
-        ]
+        color: sunColor,
+        orbits,
+        planets
       };
 
       this.suns.push(newSun);

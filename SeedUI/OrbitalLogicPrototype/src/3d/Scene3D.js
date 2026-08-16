@@ -342,6 +342,9 @@ export class Scene3D {
       if (sunNameUpper.includes('PLAYER')) entityType = 'player';
       else if (sunNameUpper.includes('INIMIGO') || sunNameUpper.includes('ENEMY')) entityType = 'enemy';
       else if (sunNameUpper.includes('NPC')) entityType = 'npc';
+      else if (sunNameUpper.includes('BLOCO') || sunNameUpper.includes('COLISAO') || sunNameUpper.includes('COLISÃO') || sunNameUpper.includes('WALL') || sunNameUpper.includes('PAREDE')) entityType = 'block';
+      else if (sunNameUpper.includes('GATILHO') || sunNameUpper.includes('TRIGGER')) entityType = 'trigger';
+      else if (sunNameUpper.includes('PLATAFORMA') || sunNameUpper.includes('PLATFORM')) entityType = 'platform';
 
       let modelShape = null;
       let hasGroundPlane = false;
@@ -393,6 +396,9 @@ export class Scene3D {
         } else if (pName === 'colisao') {
           hasCollision = true;
           isSolid = true;
+        } else if (pName === 'gatilho') {
+          hasCollision = true;
+          isSolid = false;
         } else if (pName === 'animacao') {
           hasAnimation = true;
         } else if (pName === 'atrair' || pName.includes('attract')) {
@@ -408,6 +414,9 @@ export class Scene3D {
         if (entityType === 'player') modelShape = 'cube';
         else if (entityType === 'enemy') modelShape = 'cylinder';
         else if (entityType === 'npc') modelShape = 'sphere';
+        else if (entityType === 'block') modelShape = 'cube';
+        else if (entityType === 'trigger') modelShape = 'cube';
+        else if (entityType === 'platform') modelShape = 'plane';
         else modelShape = 'plane';
       }
 
@@ -443,7 +452,7 @@ export class Scene3D {
           this.selectEntity(ent);
         }
       } else {
-        if (ent.shape !== modelShape) {
+        if (ent.shape !== modelShape || ent.type !== entityType) {
           this.scene.remove(ent.mesh);
           ent.mesh.geometry?.dispose();
           const newMesh = this.createMeshForShape(modelShape, entityType, index);
@@ -481,9 +490,21 @@ export class Scene3D {
     let mat;
     let yPos = 1.1;
 
-    if (shape === 'plane') {
-      geo = new THREE.PlaneGeometry(24, 24);
-      mat = new THREE.MeshStandardMaterial({ color: 0x222225, roughness: 0.8, metalness: 0.1 });
+    if (type === 'platform' || (shape === 'plane' && type !== 'player')) {
+      if (type === 'platform') {
+        geo = new THREE.BoxGeometry(5.0, 0.4, 5.0);
+        mat = new THREE.MeshStandardMaterial({ color: 0x1e3a5f, roughness: 0.4, metalness: 0.3 });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(index * 4.0 - 4, 0.2, -1.0);
+        mesh.receiveShadow = true;
+        mesh.castShadow = true;
+        const edgeGeo = new THREE.EdgesGeometry(geo);
+        const edgeMat = new THREE.LineBasicMaterial({ color: 0x38bdf8, linewidth: 2 });
+        mesh.add(new THREE.LineSegments(edgeGeo, edgeMat));
+        return mesh;
+      }
+      geo = new THREE.PlaneGeometry(28, 28);
+      mat = new THREE.MeshStandardMaterial({ color: 0x1c1c20, roughness: 0.85, metalness: 0.1 });
       const mesh = new THREE.Mesh(geo, mat);
       mesh.rotation.x = -Math.PI / 2;
       mesh.receiveShadow = true;
@@ -500,26 +521,52 @@ export class Scene3D {
       geo = new THREE.ConeGeometry(1.0, 2.2, 24);
       yPos = 1.1;
     } else {
-      geo = new THREE.BoxGeometry(1.6, 2.2, 1.6);
+      geo = new THREE.BoxGeometry(1.8, 2.2, 1.8);
       yPos = 1.1;
     }
 
     let color = 0x1f1f22;
-    if (type === 'enemy') color = 0x5a1818;
-    else if (type === 'npc') color = 0x184a28;
-    else if (type === 'object') color = index % 2 === 1 ? 0x2a2540 : 0x203242;
+    let edgeColor = 0x555560;
+    let isTransparent = false;
+    let opacity = 1.0;
 
-    mat = new THREE.MeshStandardMaterial({ color, roughness: 0.45, metalness: 0.2 });
+    if (type === 'player') {
+      color = 0x1e2430;
+      edgeColor = 0x60a5fa;
+    } else if (type === 'enemy') {
+      color = 0x451212;
+      edgeColor = 0xf87171;
+    } else if (type === 'npc') {
+      color = 0x143820;
+      edgeColor = 0x4ade80;
+    } else if (type === 'block') {
+      color = 0x312e81;
+      edgeColor = 0xa855f7;
+    } else if (type === 'trigger') {
+      color = 0x7c2d12;
+      edgeColor = 0xfb923c;
+      isTransparent = true;
+      opacity = 0.45;
+    } else {
+      color = index % 2 === 1 ? 0x2a2540 : 0x203242;
+      edgeColor = 0x94a3b8;
+    }
+
+    mat = new THREE.MeshStandardMaterial({
+      color,
+      roughness: 0.4,
+      metalness: 0.2,
+      transparent: isTransparent,
+      opacity
+    });
+
     const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(type === 'player' ? 0 : (index * 3.5 - 2), yPos, type === 'player' ? 0 : -2.5);
-    mesh.castShadow = true;
+    mesh.position.set(type === 'player' ? 0 : (index * 3.5 - 3.5), yPos, type === 'player' ? 0 : -3.0);
+    mesh.castShadow = !isTransparent;
     mesh.receiveShadow = true;
 
     const edgeGeo = new THREE.EdgesGeometry(geo);
-    const edgeMat = new THREE.LineBasicMaterial({
-      color: type === 'player' ? 0x555560 : (type === 'enemy' ? 0xff4444 : 0x44ff88),
-      linewidth: 2
-    });
+    const edgeMat = new THREE.LineBasicMaterial({ color: edgeColor, linewidth: 2 });
     const edgeLine = new THREE.LineSegments(edgeGeo, edgeMat);
     mesh.add(edgeLine);
 
@@ -724,19 +771,37 @@ export class Scene3D {
       });
     }
 
-    // 5. RIGID BODY COLLISION & PENETRATION RESOLUTION
-    if (playerEnt && playerEnt.mesh && playerEnt.hasCollision) {
+    // 5. RIGID BODY COLLISION & TRIGGER DETECTION
+    if (playerEnt && playerEnt.mesh) {
       this.entities.forEach((otherEnt) => {
         if (otherEnt === playerEnt || !otherEnt.mesh || otherEnt.shape === 'plane') return;
 
-        if (otherEnt.hasCollision) {
-          const pPos = playerEnt.mesh.position;
-          const oPos = otherEnt.mesh.position;
+        const pPos = playerEnt.mesh.position;
+        const oPos = otherEnt.mesh.position;
+        const dx = pPos.x - oPos.x;
+        const dz = pPos.z - oPos.z;
+        const dist = Math.hypot(dx, dz);
 
-          const dx = pPos.x - oPos.x;
-          const dz = pPos.z - oPos.z;
-          const dist = Math.hypot(dx, dz);
-          const minDistance = 1.8;
+        // 5.1 TRIGGER DETECTION (GATILHO)
+        if (otherEnt.type === 'trigger') {
+          if (dist < 2.8) {
+            if (otherEnt.mesh.material) {
+              otherEnt.mesh.material.opacity = 0.85;
+            }
+            if (this.onCollisionEvent && Math.random() < 0.12) {
+              this.onCollisionEvent(playerEnt.sunName, otherEnt.sunName);
+            }
+          } else {
+            if (otherEnt.mesh.material) {
+              otherEnt.mesh.material.opacity = 0.45;
+            }
+          }
+          return;
+        }
+
+        // 5.2 SOLID COLLISION WITH BLOCKS, ENEMIES & PROPS
+        if (playerEnt.hasCollision && otherEnt.hasCollision) {
+          const minDistance = otherEnt.type === 'block' ? 2.1 : 1.8;
 
           if (dist < minDistance && dist > 0.001) {
             const overlap = minDistance - dist;
