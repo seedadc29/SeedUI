@@ -216,8 +216,8 @@ export class OrbitalGraph {
         this.draggedEntity = {
           type: hit.type,
           entity: hit,
-          startX: hit.x,
-          startY: hit.y,
+          startX: hit.x || 0,
+          startY: hit.y || 0,
           mouseStart: mouse
         };
         if (this.onSelectionChange) this.onSelectionChange(hit);
@@ -231,52 +231,64 @@ export class OrbitalGraph {
     });
 
     window.addEventListener('pointermove', (e) => {
-      const mouse = this.getCanvasPos(e);
+      try {
+        const mouse = this.getCanvasPos(e);
 
-      if (this.isPanning) {
-        this.panX += e.clientX - this.lastMouse.x;
-        this.panY += e.clientY - this.lastMouse.y;
-      } else if (this.draggedEntity) {
-        if (this.draggedEntity.type === 'sun') {
-          const sun = this.draggedEntity.entity;
-          sun.x = this.draggedEntity.startX + (mouse.x - this.draggedEntity.mouseStart.x);
-          sun.y = this.draggedEntity.startY + (mouse.y - this.draggedEntity.mouseStart.y);
-        } else if (this.draggedEntity.type === 'planet') {
-          const planet = this.draggedEntity.entity;
-          const sun = this.getPlanetParentSun(planet);
-          if (sun) {
-            const dx = mouse.x - sun.x;
-            const dy = mouse.y - sun.y;
-            planet.angle = Math.atan2(dy, dx);
-            const dist = Math.hypot(dx, dy);
-            let closestOrbit = sun.orbits[0].radius;
-            let minDiff = Infinity;
-            sun.orbits.forEach(o => {
-              const diff = Math.abs(o.radius - dist);
-              if (diff < minDiff) {
-                minDiff = diff;
-                closestOrbit = o.radius;
-              }
-            });
-            planet.orbitRadius = closestOrbit;
+        if (this.isPanning) {
+          this.panX += e.clientX - this.lastMouse.x;
+          this.panY += e.clientY - this.lastMouse.y;
+        } else if (this.draggedEntity) {
+          if (this.draggedEntity.type === 'sun') {
+            const sun = this.draggedEntity.entity;
+            sun.x = this.draggedEntity.startX + (mouse.x - this.draggedEntity.mouseStart.x);
+            sun.y = this.draggedEntity.startY + (mouse.y - this.draggedEntity.mouseStart.y);
+          } else if (this.draggedEntity.type === 'planet') {
+            const planet = this.draggedEntity.entity;
+            const sun = planet.parentSun || this.getPlanetParentSun(planet);
+            if (sun && sun.orbits && sun.orbits.length > 0) {
+              const dx = mouse.x - sun.x;
+              const dy = mouse.y - sun.y;
+              planet.angle = Math.atan2(dy, dx);
+              const dist = Math.hypot(dx, dy);
+              let closestOrbit = sun.orbits[0].radius;
+              let minDiff = Infinity;
+              sun.orbits.forEach(o => {
+                if (o && o.radius) {
+                  const diff = Math.abs(o.radius - dist);
+                  if (diff < minDiff) {
+                    minDiff = diff;
+                    closestOrbit = o.radius;
+                  }
+                }
+              });
+              planet.orbitRadius = closestOrbit;
+            }
           }
+        } else {
+          this.hoveredEntity = this.hitTest(mouse.x, mouse.y);
         }
-      } else {
-        this.hoveredEntity = this.hitTest(mouse.x, mouse.y);
+      } catch (err) {
+        console.error('Error in orbital pointermove:', err);
+      } finally {
+        this.lastMouse = { x: e.clientX, y: e.clientY };
       }
-
-      this.lastMouse = { x: e.clientX, y: e.clientY };
     });
 
-    window.addEventListener('pointerup', () => {
+    const endDrag = () => {
       if (this.draggedEntity && this.historyManager) {
         this.historyManager.pushState(this.suns);
         this.notifyGraphChange();
       }
       this.isPanning = false;
       this.draggedEntity = null;
-      this.canvas.parentElement.classList.remove('is-panning');
-    });
+      this.canvas.parentElement?.classList.remove('is-panning');
+    };
+
+    window.addEventListener('pointerup', endDrag);
+    window.addEventListener('pointercancel', endDrag);
+    window.addEventListener('mouseup', endDrag);
+    window.addEventListener('blur', endDrag);
+    this.canvas.addEventListener('pointerup', endDrag);
 
     // Zoom on wheel
     this.canvas.addEventListener('wheel', (e) => {
@@ -313,7 +325,7 @@ export class OrbitalGraph {
       this.suns = this.suns.filter(s => s.id !== entity.id);
     } else if (entity.type === 'planet') {
       this.suns.forEach(sun => {
-        sun.planets = sun.planets.filter(p => p.id !== entity.id);
+        sun.planets = sun.planets.filter(p => p.id !== entity.id && p.name !== entity.name);
       });
     } else if (entity.type === 'moon') {
       this.suns.forEach(sun => {
@@ -341,10 +353,12 @@ export class OrbitalGraph {
   }
 
   getPlanetParentSun(planet) {
+    if (!planet) return null;
+    if (planet.parentSun) return planet.parentSun;
     for (const sun of this.suns) {
-      if (sun.planets.some(p => p.id === planet.id)) return sun;
+      if (sun.planets && sun.planets.some(p => p.id === planet.id || p.name === planet.name)) return sun;
     }
-    return null;
+    return this.suns[0] || null;
   }
 
   hitTest(x, y) {
