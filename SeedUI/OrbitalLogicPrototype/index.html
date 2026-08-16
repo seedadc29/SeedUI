@@ -163,6 +163,20 @@
               <span class="pane-chip" id="chip-tactical-status"><i class="ti ti-satellite"></i> Radar Ao Vivo</span>
             </div>
             <div class="pane-header-actions">
+              <!-- Shape Creation Tools (Square, Circle, Triangle) -->
+              <div class="tactical-shape-toolbar">
+                <span class="tactical-tool-label">FORMAS:</span>
+                <button class="tactical-shape-btn" id="btn-add-rect-room" title="Adicionar Sala Quadrada / Retangular (Arrastar ou Clicar)">
+                  <i class="ti ti-square"></i>
+                </button>
+                <button class="tactical-shape-btn" id="btn-add-circle-room" title="Adicionar Zona Circular">
+                  <i class="ti ti-circle"></i>
+                </button>
+                <button class="tactical-shape-btn" id="btn-add-triangle-room" title="Adicionar Zona Triangular">
+                  <i class="ti ti-triangle"></i>
+                </button>
+              </div>
+
               <button class="pane-action-btn" id="btn-reset-tactical-zoom" title="Centralizar Mapa">
                 <i class="ti ti-crosshair"></i>
               </button>
@@ -173,6 +187,8 @@
           </div>
           <div class="tactical-canvas-wrapper" id="tactical-wrapper">
             <canvas id="canvas-tactical"></canvas>
+            <!-- Floating Inline Rename Input -->
+            <input type="text" id="tactical-inline-name-input" class="tactical-inline-name-input hidden" placeholder="Nome da sala..." />
           </div>
         </section>
       </div>

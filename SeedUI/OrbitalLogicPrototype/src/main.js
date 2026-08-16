@@ -165,6 +165,19 @@ document.addEventListener('DOMContentLoaded', () => {
     else if (e.code === 'KeyV' || e.code === 'KeyW') setTool('select');
   });
 
+  // 9. Tactical Shape Creation Tools (Square, Circle, Triangle)
+  document.getElementById('btn-add-rect-room')?.addEventListener('click', () => {
+    tacticalMap.addShape('rect');
+  });
+
+  document.getElementById('btn-add-circle-room')?.addEventListener('click', () => {
+    tacticalMap.addShape('circle');
+  });
+
+  document.getElementById('btn-add-triangle-room')?.addEventListener('click', () => {
+    tacticalMap.addShape('triangle');
+  });
+
   // Reset tactical zoom button
   document.getElementById('btn-reset-tactical-zoom')?.addEventListener('click', () => {
     tacticalMap.panX = canvasTactical.parentElement.clientWidth / 2;
