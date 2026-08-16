@@ -1,17 +1,18 @@
 /**
- * IconBrowser - Interactive Visual Tabler Icon Picker & Drag-and-Drop Customizer for BlenderPro3D
+ * IconBrowser - Universal Interactive Tabler Icon Customizer for ALL Menus & Buttons in BlenderPro3D
  * 
  * Features:
- * 1. Clean Icon REPLACEMENT: Replaces the existing button icon directly without adding alongside.
- * 2. Drag to Remove: When the Icon Catalog is open, clicking & dragging a custom icon OUT of a button
- *    (onto the viewport, into the trash dropzone, or anywhere outside) removes the custom icon and
- *    instantly restores the original default icon!
- * 3. Glow & Lighting Feedback: Buttons light up with glowing neon border when hovering with a dragged icon.
- * 4. Full localStorage persistence of customized button icons + 1-Click Reset button.
+ * 1. UNIVERSAL: Works on ALL menus, popups, Shift+A items, toolshelf, topbar, workspace tabs,
+ *    dropdowns, outliner rows, accordion headers, and navigation buttons!
+ * 2. Clean REPLACEMENT: Replaces the existing button/menu icon directly without adding alongside.
+ * 3. Drag-Out to Remove: Clicking & dragging a modified icon OUT of any menu or button (onto the viewport,
+ *    into the trash dropzone, or anywhere outside) removes the custom icon and restores the original default icon!
+ * 4. Glow & Pulse Feedback: Menus and buttons light up with glowing neon border when hovering with a dragged icon.
+ * 5. Full localStorage persistence + 1-Click Reset button.
  */
 export class IconBrowser {
   constructor() {
-    this.storageKey = 'blender_pro_custom_button_icons';
+    this.storageKey = 'blender_pro_custom_all_icons_v2';
     this.customIcons = this.loadCustomIcons();
     this.isOpen = false;
 
@@ -108,7 +109,7 @@ export class IconBrowser {
       const saved = localStorage.getItem(this.storageKey);
       if (saved) return JSON.parse(saved);
     } catch (e) {
-      console.warn('Could not load custom button icons', e);
+      console.warn('Could not load custom icons', e);
     }
     return {};
   }
@@ -117,7 +118,7 @@ export class IconBrowser {
     try {
       localStorage.setItem(this.storageKey, JSON.stringify(this.customIcons));
     } catch (e) {
-      console.warn('Could not save custom button icons', e);
+      console.warn('Could not save custom icons', e);
     }
   }
 
@@ -135,7 +136,7 @@ export class IconBrowser {
       btnIcons.className = 'topbar-btn';
       btnIcons.id = 'btn-open-icon-browser';
       btnIcons.innerHTML = '<i class="ti ti-icons"></i> Ícones Tabler';
-      btnIcons.title = 'Pesquisar e arrastar ícones para substituir os botões da tela';
+      btnIcons.title = 'Pesquisar e arrastar ícones para substituir em QUALQUER menu ou botão';
       topbarRight.prepend(btnIcons);
 
       btnIcons.addEventListener('click', () => this.open());
@@ -146,35 +147,35 @@ export class IconBrowser {
     modal.className = 'blender-modal-overlay hidden';
     modal.id = 'tabler-icon-browser-modal';
     modal.innerHTML = `
-      <div class="blender-modal-dialog" id="icon-browser-dialog" style="width: 620px; height: 520px;">
+      <div class="blender-modal-dialog" id="icon-browser-dialog" style="width: 640px; height: 530px;">
         <div class="modal-dialog-header" id="icon-browser-drag-header">
           <div class="modal-dialog-title">
-            <span><i class="ti ti-icons"></i> Catálogo & Editor de Ícones (Drag & Drop)</span>
+            <span><i class="ti ti-icons"></i> Catálogo de Ícones — Válido Para Todos os Menus e Botões</span>
           </div>
           <button class="modal-close-btn" id="btn-close-icon-browser">✕</button>
         </div>
 
         <div class="modal-dialog-body" style="flex-direction: column; padding: 12px; gap: 8px;">
-          <!-- Dual-Action Interactive Guide Hint -->
+          <!-- Universal Guide Hint -->
           <div style="background: rgba(71, 114, 179, 0.12); border: 1px solid var(--b-accent-blue); border-radius: 4px; padding: 8px 10px; font-size: 10px; color: #ffffff; display: flex; flex-direction: column; gap: 4px;">
             <div style="display: flex; justify-content: space-between; align-items: center;">
-              <span>🎯 <strong>Trocar Ícone:</strong> Arraste do catálogo e solte em cima do botão desejado.</span>
+              <span>🎯 <strong>Trocar Ícone:</strong> Arraste do catálogo e solte em cima de <strong>qualquer menu ou botão</strong> (Shift+A, Mesh, Luz, Topo, Ferramentas).</span>
               <button class="mgmt-btn" id="btn-reset-icons-all" style="font-size: 9px; padding: 2px 8px; background: rgba(234, 118, 0, 0.3); border: 1px solid var(--b-accent-orange);">Restaurar Tudo</button>
             </div>
             <div style="color: var(--b-text-muted);">
-              ↩️ <strong>Remover / Voltar ao Padrão:</strong> Clique no botão que você modificou e arraste-o para fora (solte aqui ou na tela) para remover o ícone e restaurar o original!
+              ↩️ <strong>Remover / Voltar ao Padrão:</strong> Clique no menu/botão modificado e arraste-o para fora para remover a troca e restaurar o ícone original!
             </div>
           </div>
 
-          <!-- Trash / Drop Zone to Revert -->
+          <!-- Trash / Revert Drop Zone -->
           <div id="icon-trash-dropzone" class="icon-trash-revert-zone">
-            <i class="ti ti-arrow-back-up"></i> Solte aqui ou fora do botão para remover a troca e restaurar o ícone original
+            <i class="ti ti-arrow-back-up"></i> Solte aqui ou em qualquer lugar fora para remover o ícone e restaurar o padrão
           </div>
 
           <!-- Search & Filter Header -->
           <div style="display: flex; gap: 8px; align-items: center;">
             <div style="position: relative; flex: 1;">
-              <input type="text" id="input-icon-search" class="blender-text-input" placeholder="🔍 Buscar ícone (ex: box, camera, rotate, cut, pin, sun)..." style="width: 100%; height: 26px; padding-left: 8px;">
+              <input type="text" id="input-icon-search" class="blender-text-input" placeholder="🔍 Buscar ícone (ex: box, camera, bulb, sun, cylinder, rotate, cut)..." style="width: 100%; height: 26px; padding-left: 8px;">
             </div>
             <span id="icon-count-label" style="font-size: 10px; color: var(--b-text-muted); font-family: var(--font-mono);"></span>
           </div>
@@ -220,7 +221,7 @@ export class IconBrowser {
     document.getElementById('btn-close-icon-browser')?.addEventListener('click', () => this.close());
 
     document.getElementById('btn-reset-icons-all')?.addEventListener('click', () => {
-      if (confirm('Deseja restaurar todos os ícones originais da interface?')) {
+      if (confirm('Deseja restaurar todos os ícones originais de todos os menus e botões?')) {
         this.resetAllCustomIcons();
       }
     });
@@ -256,14 +257,14 @@ export class IconBrowser {
       trashZone.addEventListener('drop', (e) => {
         e.preventDefault();
         trashZone.classList.remove('trash-active');
-        const buttonKey = e.dataTransfer.getData('text/remove-button-icon');
-        if (buttonKey) {
-          this.removeButtonIcon(buttonKey);
+        const itemKey = e.dataTransfer.getData('text/remove-button-icon');
+        if (itemKey) {
+          this.removeButtonIcon(itemKey);
         }
       });
     }
 
-    // Global dragover & drop on document body to allow dragging away from button to remove
+    // Global dragover & drop on document body to allow dragging away from menu/button to remove
     document.body.addEventListener('dragover', (e) => {
       const isRemoving = e.dataTransfer.types.includes('text/remove-button-icon');
       if (isRemoving) {
@@ -272,10 +273,10 @@ export class IconBrowser {
     });
 
     document.body.addEventListener('drop', (e) => {
-      const buttonKey = e.dataTransfer.getData('text/remove-button-icon');
-      if (buttonKey && !e.target.closest('.icon-drop-target-active')) {
+      const itemKey = e.dataTransfer.getData('text/remove-button-icon');
+      if (itemKey && !e.target.closest('.icon-drop-target-active')) {
         e.preventDefault();
-        this.removeButtonIcon(buttonKey);
+        this.removeButtonIcon(itemKey);
       }
     });
   }
@@ -294,7 +295,7 @@ export class IconBrowser {
     if (countLabel) countLabel.textContent = `${filtered.length} ícones`;
 
     grid.innerHTML = filtered.map((icon) => `
-      <div class="icon-card-item" draggable="true" data-icon="${icon.name}" title="${icon.title} (Arraste para um botão ou clique para copiar)">
+      <div class="icon-card-item" draggable="true" data-icon="${icon.name}" title="${icon.title} (Arraste para qualquer menu/botão ou clique para copiar)">
         <i class="ti ti-${icon.name}" style="font-size: 22px; color: var(--b-text-main);"></i>
         <span class="icon-card-name">${icon.name}</span>
       </div>
@@ -325,69 +326,72 @@ export class IconBrowser {
     });
   }
 
-  // 2. Interactive Drop Zones on all Buttons
-  initDropZones() {
-    const getValidButtons = () => {
-      return document.querySelectorAll(
-        '.shelf-tool-btn, .tool-btn, .topbar-btn, .win-ctrl-btn, .nav-circle-btn, .shading-sphere-btn, .submode-btn, .prop-edit-btn, .outliner-add-btn, .n-panel-tab-btn, .blender-mode-dropdown-btn'
-      );
-    };
+  getValidElements() {
+    return document.querySelectorAll(
+      'button, .shelf-tool-btn, .tool-btn, .topbar-btn, .win-ctrl-btn, .nav-circle-btn, ' +
+      '.shading-sphere-btn, .submode-btn, .prop-edit-btn, .outliner-add-btn, .n-strip-tab, ' +
+      '.blender-mode-dropdown-btn, .top-menu-item, .vp-menu-item, .ws-tab, .mode-menu-option, ' +
+      '.popup-menu-item, .sub-item, .outliner-item, .accordion-head, .key-hint, .blender-brand'
+    );
+  }
 
+  // 2. Interactive Drop Zones on ALL Menus & Buttons
+  initDropZones() {
     const attachDropListeners = () => {
-      getValidButtons().forEach((btn) => {
+      this.getValidElements().forEach((el) => {
         // Cache original default HTML once
-        if (!btn.dataset.defaultHtml) {
-          btn.dataset.defaultHtml = btn.innerHTML;
+        if (!el.dataset.defaultHtml) {
+          el.dataset.defaultHtml = el.innerHTML;
         }
 
-        if (btn.dataset.hasIconDrop) return;
-        btn.dataset.hasIconDrop = 'true';
+        if (el.dataset.hasIconDrop) return;
+        el.dataset.hasIconDrop = 'true';
 
-        const buttonKey = this.getButtonKey(btn);
+        const itemKey = this.getItemKey(el);
 
         // DRAG OVER (Incoming new icon from catalog): Light up brightly!
-        btn.addEventListener('dragover', (e) => {
+        el.addEventListener('dragover', (e) => {
           if (e.dataTransfer.types.includes('text/plain')) {
             e.preventDefault();
             e.dataTransfer.dropEffect = 'copy';
-            btn.classList.add('icon-drop-target-active');
+            el.classList.add('icon-drop-target-active');
           }
         });
 
-        btn.addEventListener('dragenter', (e) => {
+        el.addEventListener('dragenter', (e) => {
           if (e.dataTransfer.types.includes('text/plain')) {
             e.preventDefault();
-            btn.classList.add('icon-drop-target-active');
+            el.classList.add('icon-drop-target-active');
           }
         });
 
-        btn.addEventListener('dragleave', () => {
-          btn.classList.remove('icon-drop-target-active');
+        el.addEventListener('dragleave', () => {
+          el.classList.remove('icon-drop-target-active');
         });
 
         // DROP: Replace existing icon cleanly!
-        btn.addEventListener('drop', (e) => {
-          btn.classList.remove('icon-drop-target-active');
+        el.addEventListener('drop', (e) => {
+          el.classList.remove('icon-drop-target-active');
           const iconName = e.dataTransfer.getData('text/plain');
           if (!iconName) return;
 
           e.preventDefault();
           e.stopPropagation();
-          this.setButtonIcon(btn, iconName, buttonKey);
+          this.setButtonIcon(el, iconName, itemKey);
         });
 
-        // DRAG OUT (Drag existing custom icon AWAY from button to remove & restore original)
-        btn.addEventListener('dragstart', (e) => {
-          if (this.isOpen || btn.dataset.hasCustomIcon === 'true') {
-            e.dataTransfer.setData('text/remove-button-icon', buttonKey);
+        // DRAG OUT (Drag existing custom icon AWAY from menu/button to remove & restore original)
+        el.addEventListener('dragstart', (e) => {
+          if (this.isOpen || el.dataset.hasCustomIcon === 'true') {
+            e.dataTransfer.setData('text/remove-button-icon', itemKey);
             e.dataTransfer.effectAllowed = 'move';
-            btn.classList.add('is-dragging-out');
+            el.classList.add('is-dragging-out');
             document.body.classList.add('is-removing-icon');
           }
         });
 
-        btn.addEventListener('dragend', () => {
-          btn.classList.remove('is-dragging-out');
+        el.addEventListener('dragend', () => {
+          el.classList.remove('is-dragging-out');
           document.body.classList.remove('is-removing-icon');
         });
       });
@@ -398,95 +402,118 @@ export class IconBrowser {
     observer.observe(document.body, { childList: true, subtree: true });
   }
 
-  getButtonKey(btn) {
-    return btn.id || btn.dataset.tool || btn.dataset.submode || btn.dataset.shading || btn.className.split(' ').find(c => c.startsWith('tool-') || c.startsWith('nav-') || c.startsWith('btn-')) || btn.innerText.trim();
+  getItemKey(el) {
+    return el.id ||
+      (el.dataset.tool ? `tool_${el.dataset.tool}` : null) ||
+      (el.dataset.prim ? `prim_${el.dataset.prim}` : null) ||
+      (el.dataset.submode ? `submode_${el.dataset.submode}` : null) ||
+      (el.dataset.shading ? `shading_${el.dataset.shading}` : null) ||
+      (el.dataset.ws ? `ws_${el.dataset.ws}` : null) ||
+      (el.dataset.tab ? `tab_${el.dataset.tab}` : null) ||
+      (el.dataset.mode ? `mode_${el.dataset.mode}` : null) ||
+      (el.dataset.name ? `obj_${el.dataset.name}` : null) ||
+      (el.className.split(' ').find(c => c.startsWith('tool-') || c.startsWith('nav-') || c.startsWith('btn-') || c.startsWith('menu-'))) ||
+      `menu_${el.textContent.trim().replace(/\s+/g, '_')}`;
   }
 
-  findButton(buttonKey) {
-    let btn = document.getElementById(buttonKey);
-    if (!btn) btn = document.querySelector(`[data-tool="${buttonKey}"]`);
-    if (!btn) btn = document.querySelector(`[data-submode="${buttonKey}"]`);
-    if (!btn) btn = document.querySelector(`[data-shading="${buttonKey}"]`);
-    if (!btn) btn = document.querySelector(`.${buttonKey}`);
-    return btn;
+  findElement(key) {
+    let el = document.getElementById(key);
+    if (el) return el;
+
+    if (key.startsWith('tool_')) return document.querySelector(`[data-tool="${key.replace('tool_', '')}"]`);
+    if (key.startsWith('prim_')) return document.querySelector(`[data-prim="${key.replace('prim_', '')}"]`);
+    if (key.startsWith('submode_')) return document.querySelector(`[data-submode="${key.replace('submode_', '')}"]`);
+    if (key.startsWith('shading_')) return document.querySelector(`[data-shading="${key.replace('shading_', '')}"]`);
+    if (key.startsWith('ws_')) return document.querySelector(`[data-ws="${key.replace('ws_', '')}"]`);
+    if (key.startsWith('tab_')) return document.querySelector(`[data-tab="${key.replace('tab_', '')}"]`);
+    if (key.startsWith('mode_')) return document.querySelector(`[data-mode="${key.replace('mode_', '')}"]`);
+    if (key.startsWith('obj_')) return document.querySelector(`[data-name="${key.replace('obj_', '')}"]`);
+
+    el = document.querySelector(`.${key}`);
+    if (el) return el;
+
+    const all = this.getValidElements();
+    for (const item of all) {
+      if (this.getItemKey(item) === key) return item;
+    }
+    return null;
   }
 
-  setButtonIcon(btn, iconName, buttonKey) {
-    if (!btn.dataset.defaultHtml) {
-      btn.dataset.defaultHtml = btn.innerHTML;
+  setButtonIcon(el, iconName, key) {
+    if (!el.dataset.defaultHtml) {
+      el.dataset.defaultHtml = el.innerHTML;
     }
 
-    // Determine if button has text or is icon-only
-    const hasText = btn.textContent.trim().length > 0 && !btn.classList.contains('shelf-tool-btn') && !btn.classList.contains('nav-circle-btn') && !btn.classList.contains('shading-sphere-btn') && !btn.classList.contains('win-ctrl-btn') && !btn.classList.contains('submode-btn') && !btn.classList.contains('prop-edit-btn');
-
-    if (hasText) {
-      // Preserve label text, replace icon prefix cleanly
-      const labelText = btn.textContent.replace(/^[^\w\s\u00C0-\u00FF]+/, '').trim();
-      btn.innerHTML = `<i class="ti ti-${iconName}"></i> <span>${labelText}</span>`;
+    // Check if element has an existing icon tag, dot, or SVG
+    const existingIconEl = el.querySelector('i.ti, svg, span.icon, span.nav-icon, span.mode-dot, span.blender-icon');
+    
+    if (existingIconEl) {
+      existingIconEl.outerHTML = `<i class="ti ti-${iconName}"></i>`;
     } else {
-      // 100% pure icon replacement (no leftover SVGs or duplicate characters)
-      btn.innerHTML = `<i class="ti ti-${iconName}"></i>`;
+      // Check if it is an icon-only button
+      const rawText = el.textContent.trim();
+      const isIconOnly = el.classList.contains('shelf-tool-btn') || el.classList.contains('nav-circle-btn') || el.classList.contains('shading-sphere-btn') || el.classList.contains('win-ctrl-btn') || el.classList.contains('submode-btn') || el.classList.contains('prop-edit-btn') || !rawText;
+
+      if (isIconOnly) {
+        el.innerHTML = `<i class="ti ti-${iconName}"></i>`;
+      } else {
+        // Has text (like menus "Mesh", "Camera", "Light", "Arquivo", "Layout", etc.)
+        const cleanText = rawText.replace(/^[\p{Emoji}\p{Symbol}\p{Punctuation}\s]+/u, '').trim();
+        const subArrow = el.querySelector('span:last-child');
+        const hasSubArrow = subArrow && (subArrow.textContent.includes('▶') || subArrow.textContent.includes('▾') || subArrow.classList.contains('key-tag'));
+
+        if (hasSubArrow && subArrow !== el) {
+          const arrowHtml = subArrow.outerHTML;
+          el.innerHTML = `<span><i class="ti ti-${iconName}"></i> ${cleanText}</span> ${arrowHtml}`;
+        } else {
+          el.innerHTML = `<i class="ti ti-${iconName}"></i> <span>${cleanText || rawText}</span>`;
+        }
+      }
     }
 
-    btn.dataset.hasCustomIcon = 'true';
-    btn.setAttribute('draggable', 'true');
-    btn.classList.add('custom-icon-applied');
+    el.dataset.hasCustomIcon = 'true';
+    el.setAttribute('draggable', 'true');
+    el.classList.add('custom-icon-applied');
 
-    // Success burst flash
-    btn.classList.add('icon-drop-success');
-    setTimeout(() => btn.classList.remove('icon-drop-success'), 600);
+    // Success flash burst
+    el.classList.add('icon-drop-success');
+    setTimeout(() => el.classList.remove('icon-drop-success'), 600);
 
     // Save in localStorage
-    if (buttonKey) {
-      this.customIcons[buttonKey] = iconName;
+    if (key) {
+      this.customIcons[key] = iconName;
       this.saveCustomIcons();
     }
 
     this.showToast(`Ícone substituído por ti-${iconName}!`);
   }
 
-  removeButtonIcon(buttonKey) {
-    if (!buttonKey || !this.customIcons[buttonKey]) return;
+  removeButtonIcon(key) {
+    if (!key || !this.customIcons[key]) return;
 
-    delete this.customIcons[buttonKey];
+    delete this.customIcons[key];
     this.saveCustomIcons();
 
-    const btn = this.findButton(buttonKey);
-    if (btn && btn.dataset.defaultHtml) {
-      btn.innerHTML = btn.dataset.defaultHtml;
-      delete btn.dataset.hasCustomIcon;
-      btn.removeAttribute('draggable');
-      btn.classList.remove('custom-icon-applied');
+    const el = this.findElement(key);
+    if (el && el.dataset.defaultHtml) {
+      el.innerHTML = el.dataset.defaultHtml;
+      delete el.dataset.hasCustomIcon;
+      el.removeAttribute('draggable');
+      el.classList.remove('custom-icon-applied');
 
-      // Feedback animation
-      btn.classList.add('icon-drop-success');
-      setTimeout(() => btn.classList.remove('icon-drop-success'), 500);
+      el.classList.add('icon-drop-success');
+      setTimeout(() => el.classList.remove('icon-drop-success'), 500);
     }
 
-    this.showToast('Ícone removido! Ícone original restaurado com sucesso.');
+    this.showToast('Ícone removido! Padrão original restaurado.');
   }
 
   applyCustomIcons() {
-    Object.keys(this.customIcons).forEach((buttonKey) => {
-      const iconName = this.customIcons[buttonKey];
-      const btn = this.findButton(buttonKey);
-      if (btn) {
-        if (!btn.dataset.defaultHtml) {
-          btn.dataset.defaultHtml = btn.innerHTML;
-        }
-
-        const hasText = btn.textContent.trim().length > 0 && !btn.classList.contains('shelf-tool-btn') && !btn.classList.contains('nav-circle-btn') && !btn.classList.contains('shading-sphere-btn') && !btn.classList.contains('win-ctrl-btn') && !btn.classList.contains('submode-btn') && !btn.classList.contains('prop-edit-btn');
-
-        if (hasText) {
-          const labelText = btn.textContent.replace(/^[^\w\s\u00C0-\u00FF]+/, '').trim();
-          btn.innerHTML = `<i class="ti ti-${iconName}"></i> <span>${labelText}</span>`;
-        } else {
-          btn.innerHTML = `<i class="ti ti-${iconName}"></i>`;
-        }
-
-        btn.dataset.hasCustomIcon = 'true';
-        btn.setAttribute('draggable', 'true');
-        btn.classList.add('custom-icon-applied');
+    Object.keys(this.customIcons).forEach((key) => {
+      const iconName = this.customIcons[key];
+      const el = this.findElement(key);
+      if (el) {
+        this.setButtonIcon(el, iconName, null);
       }
     });
   }
