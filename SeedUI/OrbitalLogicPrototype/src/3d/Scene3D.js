@@ -357,6 +357,9 @@ export class Scene3D {
       let hasCollision = false;
       let isSolid = false;
       let hasAnimation = false;
+      let hasAttract = false;
+      let attractForce = 12.0;
+      let attractRadius = 15.0;
 
       sun.planets.forEach(planet => {
         const pName = planet.name.toLowerCase();
@@ -392,6 +395,12 @@ export class Scene3D {
           isSolid = true;
         } else if (pName === 'animacao') {
           hasAnimation = true;
+        } else if (pName === 'atrair' || pName.includes('attract')) {
+          hasAttract = true;
+          const forceMoon = planet.moons?.find(m => m.name.toLowerCase().includes('força') || m.name.toLowerCase().includes('forca'));
+          attractForce = forceMoon && forceMoon.val !== undefined ? Math.max(1, parseFloat(forceMoon.val) || 12.0) : 12.0;
+          const radiusMoon = planet.moons?.find(m => m.name.toLowerCase().includes('raio') || m.name.toLowerCase().includes('alcance'));
+          attractRadius = radiusMoon && radiusMoon.val !== undefined ? Math.max(2, parseFloat(radiusMoon.val) || 15.0) : 15.0;
         }
       });
 
@@ -421,6 +430,7 @@ export class Scene3D {
           hasPhysics, mass, gravity,
           hasCollision, isSolid,
           hasAnimation,
+          hasAttract, attractForce, attractRadius,
           velocity: new THREE.Vector3(),
           isGrounded: true,
           animTime: Math.random() * 10,
@@ -459,6 +469,9 @@ export class Scene3D {
         ent.hasCollision = hasCollision;
         ent.isSolid = isSolid;
         ent.hasAnimation = hasAnimation;
+        ent.hasAttract = hasAttract;
+        ent.attractForce = attractForce;
+        ent.attractRadius = attractRadius;
       }
     });
   }
@@ -685,7 +698,33 @@ export class Scene3D {
       }
     });
 
-    // 4. RIGID BODY COLLISION & PENETRATION RESOLUTION
+    // 4. GRAVITATIONAL ATTRACTION (ATRAIR MECÂNICA)
+    if (playerEnt && playerEnt.mesh && playerEnt.hasAttract) {
+      this.entities.forEach((otherEnt) => {
+        if (otherEnt === playerEnt || !otherEnt.mesh || otherEnt.shape === 'plane') return;
+
+        const pPos = playerEnt.mesh.position;
+        const oPos = otherEnt.mesh.position;
+
+        const toPlayer = new THREE.Vector3().subVectors(pPos, oPos);
+        toPlayer.y = 0;
+        const dist = toPlayer.length();
+
+        if (dist > 1.2 && dist <= (playerEnt.attractRadius || 15.0)) {
+          toPlayer.normalize();
+          // Mathematical gravitational attraction: F = G / sqrt(d)
+          const pullForce = (playerEnt.attractForce || 12.0) / Math.max(1.0, Math.sqrt(dist));
+          otherEnt.mesh.position.x += toPlayer.x * pullForce * delta;
+          otherEnt.mesh.position.z += toPlayer.z * pullForce * delta;
+
+          if (this.onCollisionEvent && Math.random() < 0.08) {
+            this.onCollisionEvent(playerEnt.sunName, otherEnt.sunName);
+          }
+        }
+      });
+    }
+
+    // 5. RIGID BODY COLLISION & PENETRATION RESOLUTION
     if (playerEnt && playerEnt.mesh && playerEnt.hasCollision) {
       this.entities.forEach((otherEnt) => {
         if (otherEnt === playerEnt || !otherEnt.mesh || otherEnt.shape === 'plane') return;
