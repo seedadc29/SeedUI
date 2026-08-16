@@ -178,6 +178,28 @@ export class BlenderUI {
       case 'loopcut':
         if (this.currentMode === 'edit') this.meshEditor.startLoopCut();
         break;
+      case 'subdivide':
+        if (this.currentMode === 'edit') this.meshEditor.subdivide();
+        break;
+      case 'fill':
+        if (this.currentMode === 'edit') this.meshEditor.fillFace();
+        break;
+      case 'merge':
+        if (this.currentMode === 'edit') this.meshEditor.mergeVertices('center');
+        break;
+      case 'smooth':
+        if (this.currentMode === 'edit') this.meshEditor.smoothVertices(0.5);
+        break;
+      case 'shrink':
+        if (this.currentMode === 'edit') this.meshEditor.shrinkFlatten(0.2);
+        break;
+      case 'delete':
+        if (this.currentMode === 'edit') this.meshEditor.deleteSelection();
+        else {
+          const obj = this.sceneManager.getSelectedObject();
+          if (obj) this.sceneManager.removeObject(obj);
+        }
+        break;
     }
   }
 
@@ -638,11 +660,34 @@ export class BlenderUI {
         e.preventDefault();
         this.historyManager.redo();
       }
-      // Delete: Main Delete key or X (Object deletion)
+      // Fill Face: F
+      else if (!e.ctrlKey && !e.altKey && (e.key === 'f' || e.key === 'F')) {
+        if (this.currentMode === 'edit') {
+          e.preventDefault();
+          this.meshEditor.fillFace();
+        }
+      }
+      // Merge: M
+      else if (!e.ctrlKey && !e.altKey && (e.key === 'm' || e.key === 'M')) {
+        if (this.currentMode === 'edit') {
+          e.preventDefault();
+          this.meshEditor.mergeVertices('center');
+        }
+      }
+      // Alt+S: Shrink / Fatten
+      else if (e.altKey && !e.ctrlKey && (e.key === 's' || e.key === 'S')) {
+        if (this.currentMode === 'edit') {
+          e.preventDefault();
+          this.meshEditor.shrinkFlatten(0.2);
+        }
+      }
+      // Delete: Main Delete key or X
       else if (e.code === 'Delete' || e.key === 'x' || e.key === 'X') {
-        const obj = this.sceneManager.getSelectedObject();
-        if (obj && this.currentMode === 'object') {
-          this.sceneManager.removeObject(obj);
+        if (this.currentMode === 'edit') {
+          this.meshEditor.deleteSelection();
+        } else {
+          const obj = this.sceneManager.getSelectedObject();
+          if (obj) this.sceneManager.removeObject(obj);
         }
       }
     });

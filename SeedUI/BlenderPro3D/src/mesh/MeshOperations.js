@@ -739,4 +739,178 @@ export class MeshOperations {
     }
     return Math.max(0, 1 - t);
   }
+
+  /**
+   * Fill Face (F): Creates a new polygon/quad/triangle from selected vertices
+   */
+  static fillFace(quadMesh, selectedVertices) {
+    if (!quadMesh || !selectedVertices || selectedVertices.size < 3) return null;
+    const verts = Array.from(selectedVertices);
+
+    // Order vertices around centroid for clean polygon winding
+    const centroid = new THREE.Vector3();
+    verts.forEach(idx => centroid.add(quadMesh.vertices[idx]));
+    centroid.divideScalar(verts.length);
+
+    // Compute normal of vertex set
+    const v0 = quadMesh.vertices[verts[0]];
+    const v1 = quadMesh.vertices[verts[1]];
+    const v2 = quadMesh.vertices[verts[2]];
+    const normal = new THREE.Vector3().subVectors(v1, v0).cross(new THREE.Vector3().subVectors(v2, v0)).normalize();
+    if (normal.lengthSq() < 0.0001) normal.set(0, 0, 1);
+
+    const refAxis = new THREE.Vector3().subVectors(v0, centroid).normalize();
+    const orthoAxis = new THREE.Vector3().crossVectors(normal, refAxis).normalize();
+
+    verts.sort((a, b) => {
+      const pA = new THREE.Vector3().subVectors(quadMesh.vertices[a], centroid);
+      const pB = new THREE.Vector3().subVectors(quadMesh.vertices[b], centroid);
+      const angleA = Math.atan2(pA.dot(orthoAxis), pA.dot(refAxis));
+      const angleB = Math.atan2(pB.dot(orthoAxis), pB.dot(refAxis));
+      return angleA - angleB;
+    });
+
+    if (verts.length === 3 || verts.length === 4) {
+      quadMesh.quads.push(verts);
+    } else {
+      // Fan triangulation for n-gons
+      for (let i = 1; i < verts.length - 1; i++) {
+        quadMesh.quads.push([verts[0], verts[i], verts[i + 1]]);
+      }
+    }
+
+    quadMesh.rebuildEdges();
+    return { success: true, newFaceIndex: quadMesh.quads.length - 1 };
+  }
+
+  /**
+   * Merge Vertices (M): Merges selected vertices at Center / First / Last
+   */
+  static mergeVertices(quadMesh, selectedVertices, mode = 'center') {
+    if (!quadMesh || !selectedVertices || selectedVertices.size < 2) return null;
+    const verts = Array.from(selectedVertices);
+
+    const targetPos = new THREE.Vector3();
+    verts.forEach(idx => targetPos.add(quadMesh.vertices[idx]));
+    targetPos.divideScalar(verts.length);
+
+    const keepIdx = verts[0];
+    quadMesh.vertices[keepIdx].copy(targetPos);
+
+    const vertRemap = new Map();
+    verts.forEach((vIdx) => {
+      if (vIdx !== keepIdx) vertRemap.set(vIdx, keepIdx);
+    });
+
+    // Remap vertices in all faces and remove degenerate faces
+    const newQuads = [];
+    quadMesh.quads.forEach((face) => {
+      const remapped = face.map(v => (vertRemap.has(v) ? vertRemap.get(v) : v));
+      const unique = [];
+      for (let i = 0; i < remapped.length; i++) {
+        if (remapped[i] !== remapped[(i + 1) % remapped.length]) {
+          if (!unique.includes(remapped[i])) {
+            unique.push(remapped[i]);
+          }
+        }
+      }
+      if (unique.length >= 3) {
+        newQuads.push(unique);
+      }
+    });
+
+    quadMesh.quads = newQuads;
+    quadMesh.rebuildEdges();
+    return { success: true, mergedVertex: keepIdx };
+  }
+
+  /**
+   * Smooth / Relax Vertices (Laplacian smoothing)
+   */
+  static smoothVertices(quadMesh, selectedVertices, factor = 0.5) {
+    if (!quadMesh || !selectedVertices || selectedVertices.size === 0) return null;
+
+    // Build vertex-to-neighbors adjacency map
+    const adj = new Map();
+    quadMesh.edges.forEach(([a, b]) => {
+      if (!adj.has(a)) adj.set(a, []);
+      if (!adj.has(b)) adj.set(b, []);
+      adj.get(a).push(b);
+      adj.get(b).push(a);
+    });
+
+    const newPositions = new Map();
+    selectedVertices.forEach((vIdx) => {
+      const neighbors = adj.get(vIdx);
+      if (neighbors && neighbors.length > 0) {
+        const avg = new THREE.Vector3();
+        neighbors.forEach(n => avg.add(quadMesh.vertices[n]));
+        avg.divideScalar(neighbors.length);
+        const smoothed = new THREE.Vector3().lerpVectors(quadMesh.vertices[vIdx], avg, factor);
+        newPositions.set(vIdx, smoothed);
+      }
+    });
+
+    newPositions.forEach((pos, vIdx) => {
+      quadMesh.vertices[vIdx].copy(pos);
+    });
+
+    return { success: true };
+  }
+
+  /**
+   * Shrink / Fatten along vertex normals (Alt+S)
+   */
+  static shrinkFlatten(quadMesh, selectedVertices, amount = 0.2) {
+    if (!quadMesh || !selectedVertices || selectedVertices.size === 0) return null;
+
+    // Compute approximate vertex normals from surrounding faces
+    const vertNormals = new Map();
+    selectedVertices.forEach(v => vertNormals.set(v, new THREE.Vector3()));
+
+    quadMesh.quads.forEach((face) => {
+      if (face && face.length >= 3) {
+        const v0 = quadMesh.vertices[face[0]];
+        const v1 = quadMesh.vertices[face[1]];
+        const v2 = quadMesh.vertices[face[2]];
+        const norm = new THREE.Vector3().subVectors(v1, v0).cross(new THREE.Vector3().subVectors(v2, v0)).normalize();
+        face.forEach((vIdx) => {
+          if (vertNormals.has(vIdx)) {
+            vertNormals.get(vIdx).add(norm);
+          }
+        });
+      }
+    });
+
+    vertNormals.forEach((normal, vIdx) => {
+      if (normal.lengthSq() > 0.001) {
+        normal.normalize();
+        quadMesh.vertices[vIdx].addScaledVector(normal, amount);
+      }
+    });
+
+    return { success: true };
+  }
+
+  /**
+   * Delete Elements (X / Del): Vertices, Edges, Faces
+   */
+  static deleteElements(quadMesh, selectedVertices, selectedFaces, type = 'vertices') {
+    if (!quadMesh) return null;
+
+    if (type === 'faces' && selectedFaces && selectedFaces.size > 0) {
+      quadMesh.quads = quadMesh.quads.filter((_, fIdx) => !selectedFaces.has(fIdx));
+      quadMesh.rebuildEdges();
+      return { success: true };
+    }
+
+    if (type === 'vertices' && selectedVertices && selectedVertices.size > 0) {
+      quadMesh.quads = quadMesh.quads.filter(face => !face.some(v => selectedVertices.has(v)));
+      quadMesh.rebuildEdges();
+      return { success: true };
+    }
+
+    return null;
+  }
 }
+

@@ -885,6 +885,169 @@ export class MeshEditor {
     }
   }
 
+  fillFace() {
+    if (!this.activeMesh || !this.activeMesh.userData.quadMesh || this.selectedVertices.size < 3) return;
+    const qm = this.activeMesh.userData.quadMesh;
+    const beforeVerts = qm.vertices.map(v => v.clone());
+    const beforeQuads = qm.quads.map(q => [...q]);
+
+    const result = MeshOperations.fillFace(qm, this.selectedVertices);
+    if (result && result.success) {
+      this.selectedFaces.clear();
+      this.selectedFaces.add(result.newFaceIndex);
+      this.refreshMeshGeometryBuffers();
+
+      if (this.historyManager) {
+        const targetQM = qm;
+        const afterVerts = qm.vertices.map(v => v.clone());
+        const afterQuads = qm.quads.map(q => [...q]);
+        this.historyManager.push({
+          description: 'Criar Face (Fill Face)',
+          undo: () => {
+            targetQM.vertices = beforeVerts.map(v => v.clone());
+            targetQM.quads = beforeQuads.map(q => [...q]);
+            targetQM.rebuildEdges();
+            this.refreshMeshGeometryBuffers();
+          },
+          redo: () => {
+            targetQM.vertices = afterVerts.map(v => v.clone());
+            targetQM.quads = afterQuads.map(q => [...q]);
+            targetQM.rebuildEdges();
+            this.refreshMeshGeometryBuffers();
+          }
+        });
+      }
+    }
+  }
+
+  mergeVertices(mode = 'center') {
+    if (!this.activeMesh || !this.activeMesh.userData.quadMesh || this.selectedVertices.size < 2) return;
+    const qm = this.activeMesh.userData.quadMesh;
+    const beforeVerts = qm.vertices.map(v => v.clone());
+    const beforeQuads = qm.quads.map(q => [...q]);
+
+    const result = MeshOperations.mergeVertices(qm, this.selectedVertices, mode);
+    if (result && result.success) {
+      this.selectedVertices.clear();
+      this.selectedVertices.add(result.mergedVertex);
+      this.selectedEdges.clear();
+      this.selectedFaces.clear();
+      this.refreshMeshGeometryBuffers();
+
+      if (this.historyManager) {
+        const targetQM = qm;
+        const afterVerts = qm.vertices.map(v => v.clone());
+        const afterQuads = qm.quads.map(q => [...q]);
+        this.historyManager.push({
+          description: 'Mesclar Vértices (Merge)',
+          undo: () => {
+            targetQM.vertices = beforeVerts.map(v => v.clone());
+            targetQM.quads = beforeQuads.map(q => [...q]);
+            targetQM.rebuildEdges();
+            this.refreshMeshGeometryBuffers();
+          },
+          redo: () => {
+            targetQM.vertices = afterVerts.map(v => v.clone());
+            targetQM.quads = afterQuads.map(q => [...q]);
+            targetQM.rebuildEdges();
+            this.refreshMeshGeometryBuffers();
+          }
+        });
+      }
+    }
+  }
+
+  smoothVertices(factor = 0.5) {
+    if (!this.activeMesh || !this.activeMesh.userData.quadMesh || this.selectedVertices.size === 0) return;
+    const qm = this.activeMesh.userData.quadMesh;
+    const beforeVerts = qm.vertices.map(v => v.clone());
+
+    const result = MeshOperations.smoothVertices(qm, this.selectedVertices, factor);
+    if (result && result.success) {
+      this.refreshMeshGeometryBuffers();
+
+      if (this.historyManager) {
+        const targetQM = qm;
+        const afterVerts = qm.vertices.map(v => v.clone());
+        this.historyManager.push({
+          description: 'Suavizar Vértices (Smooth)',
+          undo: () => {
+            targetQM.vertices = beforeVerts.map(v => v.clone());
+            this.refreshMeshGeometryBuffers();
+          },
+          redo: () => {
+            targetQM.vertices = afterVerts.map(v => v.clone());
+            this.refreshMeshGeometryBuffers();
+          }
+        });
+      }
+    }
+  }
+
+  shrinkFlatten(amount = 0.2) {
+    if (!this.activeMesh || !this.activeMesh.userData.quadMesh || this.selectedVertices.size === 0) return;
+    const qm = this.activeMesh.userData.quadMesh;
+    const beforeVerts = qm.vertices.map(v => v.clone());
+
+    const result = MeshOperations.shrinkFlatten(qm, this.selectedVertices, amount);
+    if (result && result.success) {
+      this.refreshMeshGeometryBuffers();
+
+      if (this.historyManager) {
+        const targetQM = qm;
+        const afterVerts = qm.vertices.map(v => v.clone());
+        this.historyManager.push({
+          description: 'Encolher / Engordar (Shrink/Flatten)',
+          undo: () => {
+            targetQM.vertices = beforeVerts.map(v => v.clone());
+            this.refreshMeshGeometryBuffers();
+          },
+          redo: () => {
+            targetQM.vertices = afterVerts.map(v => v.clone());
+            this.refreshMeshGeometryBuffers();
+          }
+        });
+      }
+    }
+  }
+
+  deleteSelection() {
+    if (!this.activeMesh || !this.activeMesh.userData.quadMesh) return;
+    const qm = this.activeMesh.userData.quadMesh;
+    const beforeVerts = qm.vertices.map(v => v.clone());
+    const beforeQuads = qm.quads.map(q => [...q]);
+
+    const type = this.submode === 'face' ? 'faces' : 'vertices';
+    const result = MeshOperations.deleteElements(qm, this.selectedVertices, this.selectedFaces, type);
+    if (result && result.success) {
+      this.selectedVertices.clear();
+      this.selectedEdges.clear();
+      this.selectedFaces.clear();
+      this.refreshMeshGeometryBuffers();
+
+      if (this.historyManager) {
+        const targetQM = qm;
+        const afterVerts = qm.vertices.map(v => v.clone());
+        const afterQuads = qm.quads.map(q => [...q]);
+        this.historyManager.push({
+          description: 'Excluir Seleção (Delete)',
+          undo: () => {
+            targetQM.vertices = beforeVerts.map(v => v.clone());
+            targetQM.quads = beforeQuads.map(q => [...q]);
+            targetQM.rebuildEdges();
+            this.refreshMeshGeometryBuffers();
+          },
+          redo: () => {
+            targetQM.vertices = afterVerts.map(v => v.clone());
+            targetQM.quads = afterQuads.map(q => [...q]);
+            targetQM.rebuildEdges();
+            this.refreshMeshGeometryBuffers();
+          }
+        });
+      }
+    }
+  }
+
   // --- EDGE DETECTION HELPER ---
 
   getClosestEdge(raycaster) {
