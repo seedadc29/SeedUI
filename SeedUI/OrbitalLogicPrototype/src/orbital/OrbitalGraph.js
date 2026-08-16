@@ -1,10 +1,12 @@
+import { HistoryManager } from '../core/HistoryManager.js';
+
 export class OrbitalGraph {
-  constructor(canvas, onSelectionChange, onGraphChange, historyManager) {
+  constructor(canvas, suns = null, onSelectionChange = null, historyManager = null) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.onSelectionChange = onSelectionChange;
-    this.onGraphChange = onGraphChange;
     this.historyManager = historyManager;
+    this.onGraphChange = null;
 
     // Viewport transform
     this.panX = 0;
@@ -12,10 +14,12 @@ export class OrbitalGraph {
     this.zoom = 1.0;
     this.isPanning = false;
     this.lastMouse = { x: 0, y: 0 };
-
-    // Active state
-    this.isOrbitAnimationActive = true;
     this.draggedEntity = null;
+
+    // Orbit Animation Toggle
+    this.isOrbitAnimationActive = true;
+
+    // Interactive selection
     this.selectedEntity = null;
     this.hoveredEntity = null;
 
@@ -23,7 +27,7 @@ export class OrbitalGraph {
     this.activeBeams = [];
 
     // Initial Systems with Real Functional Capabilities
-    this.suns = [
+    this.suns = suns || [
       {
         id: 'sun-player',
         name: 'PLAYER',
@@ -175,11 +179,6 @@ export class OrbitalGraph {
     this.initCanvas();
     this.initEvents();
     this.animate();
-
-    // Push initial history snapshot
-    if (this.historyManager) {
-      this.historyManager.pushState(this.suns);
-    }
   }
 
   initCanvas() {
@@ -450,12 +449,12 @@ export class OrbitalGraph {
 
     if (fromSun && toSun) {
       this.activeBeams.push({
-        fromX: fromSun.x,
-        fromY: fromSun.y,
-        toX: toSun.x,
-        toY: toSun.y,
-        life: 1.0,
-        color
+        x1: fromSun.x,
+        y1: fromSun.y,
+        x2: toSun.x,
+        y2: toSun.y,
+        color,
+        life: 1.0
       });
     }
   }
@@ -467,15 +466,30 @@ export class OrbitalGraph {
       this.historyManager.pushState(this.suns);
     }
 
+    // 1. ADDING A PERSONAGEM (SUN)
     if (data.type === 'sun') {
+      let spawnX = mousePos.x;
+      let spawnY = mousePos.y;
+
+      // If clicked without dragging, place at non-overlapping offset
+      if (spawnX === 0 && spawnY === 0) {
+        const count = this.suns.length;
+        spawnX = (count % 2 === 0 ? 1 : -1) * (150 + Math.floor(count / 2) * 130);
+        spawnY = (count % 3 === 0 ? 1 : -1) * 90;
+      }
+
+      let defaultModel = data.model ? data.model.charAt(0).toUpperCase() + data.model.slice(1) : 'Cubo';
+      if (data.name === 'INIMIGO') defaultModel = 'Cilindro';
+      else if (data.name === 'NPC') defaultModel = 'Esfera';
+
       const newSun = {
         id: `sun-${Date.now()}`,
         name: data.name,
         type: 'sun',
-        x: mousePos.x,
-        y: mousePos.y,
+        x: spawnX,
+        y: spawnY,
         radius: 36,
-        color: '#ff7700',
+        color: data.name === 'PLAYER' ? '#ff7700' : (data.name === 'INIMIGO' ? '#ff3b30' : '#34c759'),
         orbits: [
           { radius: 65, dash: [4, 4] },
           { radius: 115, dash: [3, 4] }
@@ -483,7 +497,7 @@ export class OrbitalGraph {
         planets: [
           {
             id: `planet-${Date.now()}-mesh`,
-            name: data.model ? data.model.charAt(0).toUpperCase() + data.model.slice(1) : 'Cubo',
+            name: defaultModel,
             type: 'planet',
             orbitRadius: 65,
             angle: -0.6,
@@ -495,17 +509,23 @@ export class OrbitalGraph {
           }
         ]
       };
+
       this.suns.push(newSun);
       this.selectedEntity = newSun;
-    } else if (data.type === 'planet' || data.type === 'mesh') {
-      // Find target sun: prefer selected sun, then closest sun, or create one if none exist
+      this.triggerEnergyBeam(newSun.name, this.suns[0]?.name || newSun.name, '#32ade6');
+    }
+
+    // 2. ADDING A MESH OR MECHANIC (PLANET)
+    else if (data.type === 'planet' || data.type === 'mesh') {
       let targetSun = null;
 
+      // Prefer currently selected Sun
       if (this.selectedEntity) {
         if (this.selectedEntity.type === 'sun') targetSun = this.selectedEntity;
         else if (this.selectedEntity.parentSun) targetSun = this.selectedEntity.parentSun;
       }
 
+      // If not selected, find closest Sun
       if (!targetSun && this.suns.length > 0) {
         let minDist = Infinity;
         this.suns.forEach(sun => {
@@ -517,6 +537,7 @@ export class OrbitalGraph {
         });
       }
 
+      // If no Suns exist, create default Objeto Sun
       if (!targetSun) {
         targetSun = {
           id: `sun-${Date.now()}`,
@@ -535,54 +556,75 @@ export class OrbitalGraph {
         this.suns.push(targetSun);
       }
 
-      const dx = mousePos.x - targetSun.x;
-      const dy = mousePos.y - targetSun.y;
-      const angle = (dx === 0 && dy === 0) ? Math.random() * Math.PI * 2 : Math.atan2(dy, dx);
-      const dist = Math.hypot(dx, dy);
+      // If adding a 3D Mesh shape (Cubo, Esfera, Cilindro, etc.), update the Sun's main shape!
+      if (data.type === 'mesh') {
+        const meshShapes = ['cubo', 'plano', 'cilindro', 'triangulo', 'esfera', 'cube', 'plane', 'cylinder', 'cone', 'sphere'];
+        const existingMeshPlanet = targetSun.planets.find(p => meshShapes.some(s => p.name.toLowerCase().includes(s)));
 
-      // Choose or create orbit
-      let orbitR = data.type === 'mesh' ? 65 : 115;
-      if (dist > 140) {
-        orbitR = Math.round(dist);
-        if (!targetSun.orbits.some(o => Math.abs(o.radius - orbitR) < 20)) {
+        if (existingMeshPlanet) {
+          existingMeshPlanet.name = data.name;
+          this.selectedEntity = existingMeshPlanet;
+        } else {
+          const newPlanet = {
+            id: `planet-${Date.now()}`,
+            name: data.name,
+            type: 'planet',
+            orbitRadius: 65,
+            angle: -0.6,
+            speed: 0.3,
+            radius: 18,
+            color: '#382f7e',
+            textColor: '#ffffff',
+            moons: [],
+            parentSun: targetSun
+          };
+          targetSun.planets.push(newPlanet);
+          this.selectedEntity = newPlanet;
+        }
+      } else {
+        // Adding a Mechanic Planet (Andar, Pular, Correr, Fisica, Colisao, Animacao)
+        let orbitR = data.name.toLowerCase().includes('animacao') ? 165 : 115;
+        if (!targetSun.orbits.some(o => Math.abs(o.radius - orbitR) < 15)) {
           targetSun.orbits.push({ radius: orbitR, dash: [3, 4] });
         }
+
+        const angle = (targetSun.planets.length * 1.35) % (Math.PI * 2);
+
+        let moons = [];
+        if (data.moons) {
+          try {
+            const rawMoons = typeof data.moons === 'string' ? JSON.parse(data.moons) : data.moons;
+            if (Array.isArray(rawMoons)) {
+              const step = (Math.PI * 2) / rawMoons.length;
+              moons = rawMoons.map((m, i) => ({
+                name: m.name,
+                color: m.color || '#ffffff',
+                angle: i * step,
+                speed: 1.0,
+                val: m.val
+              }));
+            }
+          } catch(e) {}
+        }
+
+        const newPlanet = {
+          id: `planet-${Date.now()}-${data.name}`,
+          name: data.name,
+          type: 'planet',
+          orbitRadius: orbitR,
+          angle,
+          speed: 0.3,
+          radius: 20,
+          color: '#2b2368',
+          textColor: '#ffffff',
+          subOrbitRadius: moons.length > 0 ? 32 : 0,
+          moons,
+          parentSun: targetSun
+        };
+
+        targetSun.planets.push(newPlanet);
+        this.selectedEntity = newPlanet;
       }
-
-      let moons = [];
-      if (data.moons) {
-        try {
-          const rawMoons = typeof data.moons === 'string' ? JSON.parse(data.moons) : data.moons;
-          if (Array.isArray(rawMoons)) {
-            const step = (Math.PI * 2) / rawMoons.length;
-            moons = rawMoons.map((m, i) => ({
-              name: m.name,
-              color: m.color || '#ffffff',
-              angle: i * step,
-              speed: 1.0,
-              val: m.val
-            }));
-          }
-        } catch(e) {}
-      }
-
-      const newPlanet = {
-        id: `planet-${Date.now()}`,
-        name: data.name,
-        type: 'planet',
-        orbitRadius: orbitR,
-        angle,
-        speed: 0.35,
-        radius: data.type === 'mesh' ? 18 : 22,
-        color: data.type === 'mesh' ? '#382f7e' : '#2b2368',
-        textColor: '#ffffff',
-        subOrbitRadius: moons.length > 0 ? 34 : 0,
-        moons,
-        parentSun: targetSun
-      };
-
-      targetSun.planets.push(newPlanet);
-      this.selectedEntity = newPlanet;
     }
 
     if (this.onSelectionChange) this.onSelectionChange(this.selectedEntity);
@@ -624,10 +666,10 @@ export class OrbitalGraph {
     this.activeBeams.forEach(beam => {
       this.ctx.save();
       this.ctx.beginPath();
-      this.ctx.moveTo(beam.fromX, beam.fromY);
-      this.ctx.lineTo(beam.toX, beam.toY);
+      this.ctx.moveTo(beam.x1, beam.y1);
+      this.ctx.lineTo(beam.x2, beam.y2);
       this.ctx.strokeStyle = beam.color;
-      this.ctx.lineWidth = 4 * beam.life;
+      this.ctx.lineWidth = 3 * beam.life;
       this.ctx.shadowColor = beam.color;
       this.ctx.shadowBlur = 15;
       this.ctx.stroke();
@@ -638,14 +680,13 @@ export class OrbitalGraph {
     this.suns.forEach(sun => {
       // 2.1 Draw Concentric Dashed Orbits
       sun.orbits.forEach(orbit => {
-        this.ctx.save();
         this.ctx.beginPath();
         this.ctx.arc(sun.x, sun.y, orbit.radius, 0, Math.PI * 2);
         this.ctx.setLineDash(orbit.dash || [3, 4]);
-        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
-        this.ctx.lineWidth = 1.2;
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+        this.ctx.lineWidth = 1.0;
         this.ctx.stroke();
-        this.ctx.restore();
+        this.ctx.setLineDash([]);
       });
 
       // 2.2 Draw Orbiting Planets & Moons
@@ -659,8 +700,8 @@ export class OrbitalGraph {
           this.ctx.beginPath();
           this.ctx.arc(pX, pY, subR, 0, Math.PI * 2);
           this.ctx.setLineDash([2, 3]);
-          this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
-          this.ctx.lineWidth = 1;
+          this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+          this.ctx.lineWidth = 0.8;
           this.ctx.stroke();
           this.ctx.restore();
 
@@ -668,11 +709,10 @@ export class OrbitalGraph {
             const mX = pX + Math.cos(moon.angle) * subR;
             const mY = pY + Math.sin(moon.angle) * subR;
 
-            this.ctx.save();
             this.ctx.beginPath();
             this.ctx.arc(mX, mY, 9, 0, Math.PI * 2);
-            this.ctx.fillStyle = moon.color;
-            this.ctx.shadowColor = moon.color;
+            this.ctx.fillStyle = moon.color || '#ffffff';
+            this.ctx.shadowColor = moon.color || '#ffffff';
             this.ctx.shadowBlur = 6;
             this.ctx.fill();
 
@@ -680,18 +720,19 @@ export class OrbitalGraph {
             this.ctx.font = 'bold 10px sans-serif';
             this.ctx.textAlign = 'center';
             this.ctx.textBaseline = 'middle';
-            this.ctx.fillText('-', mX, mY - 0.5);
-            this.ctx.restore();
+            this.ctx.fillText('-', mX, mY);
           });
         }
 
-        // Draw Planet Body
-        this.ctx.save();
+        // Planet Body
         this.ctx.beginPath();
         this.ctx.arc(pX, pY, planet.radius, 0, Math.PI * 2);
-        this.ctx.fillStyle = planet.color;
+        this.ctx.fillStyle = planet.color || '#2b2368';
+        this.ctx.shadowColor = '#6050dc';
+        this.ctx.shadowBlur = 10;
         this.ctx.fill();
-        this.ctx.strokeStyle = this.selectedEntity?.id === planet.id ? '#ffffff' : '#6859b8';
+
+        this.ctx.strokeStyle = this.selectedEntity?.id === planet.id ? '#ffffff' : 'rgba(255, 255, 255, 0.35)';
         this.ctx.lineWidth = this.selectedEntity?.id === planet.id ? 2.5 : 1.2;
         this.ctx.stroke();
 
@@ -700,18 +741,17 @@ export class OrbitalGraph {
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
         this.ctx.fillText(planet.name, pX, pY);
-        this.ctx.restore();
       });
 
-      // 2.3 Draw Central Sun (Orange Core)
-      this.ctx.save();
+      // 2.3 Draw Central Sun Body
       this.ctx.beginPath();
       this.ctx.arc(sun.x, sun.y, sun.radius, 0, Math.PI * 2);
       this.ctx.fillStyle = sun.color;
-      this.ctx.shadowColor = 'rgba(255, 119, 0, 0.6)';
+      this.ctx.shadowColor = sun.color;
       this.ctx.shadowBlur = 18;
       this.ctx.fill();
-      this.ctx.strokeStyle = this.selectedEntity?.id === sun.id ? '#ffffff' : '#ff9433';
+
+      this.ctx.strokeStyle = this.selectedEntity?.id === sun.id ? '#ffffff' : '#ffaa44';
       this.ctx.lineWidth = this.selectedEntity?.id === sun.id ? 3 : 1.5;
       this.ctx.stroke();
 
@@ -719,14 +759,13 @@ export class OrbitalGraph {
       this.ctx.font = 'bold 13px sans-serif';
       const textWidth = this.ctx.measureText(labelText).width;
 
-      this.ctx.fillStyle = '#000000';
-      this.ctx.fillRect(sun.x - (textWidth / 2) - 4, sun.y - 8, textWidth + 8, 16);
+      this.ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+      this.ctx.fillRect(sun.x - textWidth / 2 - 8, sun.y - 10, textWidth + 16, 20);
 
       this.ctx.fillStyle = '#ffffff';
       this.ctx.textAlign = 'center';
       this.ctx.textBaseline = 'middle';
       this.ctx.fillText(labelText, sun.x, sun.y);
-      this.ctx.restore();
     });
 
     this.ctx.restore();
