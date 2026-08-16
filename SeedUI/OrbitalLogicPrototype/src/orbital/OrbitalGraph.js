@@ -494,7 +494,11 @@ export class OrbitalGraph {
 
   getPlanetParentSun(planet) {
     if (!planet) return null;
-    if (planet.parentSun) return planet.parentSun;
+    const targetSunId = planet.sunId || planet.parentSunId;
+    if (targetSunId) {
+      const found = this.suns.find(s => s.id === targetSunId);
+      if (found) return found;
+    }
     for (const sun of this.suns) {
       if (sun.planets && sun.planets.some(p => p.id === planet.id || p.name === planet.name)) return sun;
     }
@@ -514,7 +518,7 @@ export class OrbitalGraph {
             const mX = pX + Math.cos(moon.angle) * subR;
             const mY = pY + Math.sin(moon.angle) * subR;
             if (Math.hypot(x - mX, y - mY) <= 12) {
-              return { ...moon, type: 'moon', parentPlanet: planet, parentSun: sun };
+              return { ...moon, type: 'moon', parentPlanetId: planet.id, parentSunId: sun.id };
             }
           }
         }
@@ -527,8 +531,7 @@ export class OrbitalGraph {
         const pX = sun.x + Math.cos(planet.angle) * planet.orbitRadius;
         const pY = sun.y + Math.sin(planet.angle) * planet.orbitRadius;
         if (Math.hypot(x - pX, y - pY) <= planet.radius + 4) {
-          planet.parentSun = sun;
-          return planet;
+          return { ...planet, parentSunId: sun.id };
         }
       }
     }
@@ -671,7 +674,7 @@ export class OrbitalGraph {
             color: '#382f7e',
             textColor: '#ffffff',
             moons: [],
-            parentSun: targetSun
+            sunId: targetSun.id
           };
           targetSun.planets.push(newPlanet);
           this.selectedEntity = newPlanet;
@@ -713,7 +716,7 @@ export class OrbitalGraph {
           textColor: '#ffffff',
           subOrbitRadius: moons.length > 0 ? 32 : 0,
           moons,
-          parentSun: targetSun
+          sunId: targetSun.id
         };
 
         targetSun.planets.push(newPlanet);
