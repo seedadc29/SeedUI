@@ -271,7 +271,7 @@ export class TacticalMap {
       }
 
       // 3. Check Blueprint Rooms (Smallest Area First)
-      const hitRoom = this.hitTestRooms(mouse.x, mouse.y);
+      const hitRoom = this.hitTestRooms(mouse.x, mouse.z);
       if (hitRoom) {
         const now = Date.now();
         if (now - lastClickTime < 350 && this.selectedRoom === hitRoom) {
@@ -290,7 +290,7 @@ export class TacticalMap {
       }
 
       // 4. Check 3D Entities on Map
-      const hitEntity = this.hitTestEntities(mouse.x, mouse.y);
+      const hitEntity = this.hitTestEntities(mouse.x, mouse.z);
       if (hitEntity) {
         this.selectedEntity = hitEntity;
         this.selectRoom(null);
@@ -320,10 +320,10 @@ export class TacticalMap {
             }
           }
           this.hoveredHandle = null;
-          this.hoveredRoom = this.hitTestRooms(mouse.x, mouse.y);
+          this.hoveredRoom = this.hitTestRooms(mouse.x, mouse.z);
           this.canvas.style.cursor = this.hoveredRoom ? 'pointer' : 'default';
         } else if (this.currentTool === 'move') {
-          this.hoveredRoom = this.hitTestRooms(mouse.x, mouse.y);
+          this.hoveredRoom = this.hitTestRooms(mouse.x, mouse.z);
           this.canvas.style.cursor = 'move';
         } else if (this.currentTool === 'pan') {
           this.canvas.style.cursor = 'grab';
