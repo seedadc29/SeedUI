@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
 export class Scene3D {
   constructor(canvas) {
@@ -12,18 +13,15 @@ export class Scene3D {
     };
 
     // Dynamic ECS Entities: Map(sunId -> EntityData)
-    // EntityData: {
-    //   sunId, sunName, mesh, type ('player'|'enemy'|'npc'|'object'),
-    //   hasMove, walkSpeed, hasRun, runMultiplier,
-    //   hasJump, jumpForce, hasPhysics, mass, gravity,
-    //   hasCollision, isSolid, hasAnimation,
-    //   velocity: Vector3, isGrounded: boolean, animTime: number
-    // }
     this.entities = new Map();
-
     this.onCollisionEvent = null;
 
+    // Camera view transition state
+    this.isTransitioningCamera = false;
+
     this.initScene();
+    this.initControls();
+    this.initShortcuts();
     this.initInputs();
     this.animate();
   }
@@ -33,9 +31,27 @@ export class Scene3D {
     this.scene.background = new THREE.Color(0x181818);
 
     const rect = this.canvas.getBoundingClientRect();
-    this.camera = new THREE.PerspectiveCamera(45, (rect.width || 400) / (rect.height || 400), 0.1, 1000);
-    this.camera.position.set(8, 7, 10);
-    this.camera.lookAt(0, 0.8, 0);
+    const aspect = (rect.width || 400) / (rect.height || 400);
+
+    // Perspective & Orthographic Cameras
+    this.cameraPersp = new THREE.PerspectiveCamera(45, aspect, 0.1, 1000);
+    this.cameraPersp.position.set(8, 7, 10);
+    this.cameraPersp.lookAt(0, 0.8, 0);
+
+    const frustumSize = 14;
+    this.cameraOrtho = new THREE.OrthographicCamera(
+      (-frustumSize * aspect) / 2,
+      (frustumSize * aspect) / 2,
+      frustumSize / 2,
+      -frustumSize / 2,
+      0.1,
+      1000
+    );
+    this.cameraOrtho.position.copy(this.cameraPersp.position);
+    this.cameraOrtho.lookAt(0, 0.8, 0);
+
+    this.activeCamera = this.cameraPersp;
+    this.isOrthographic = false;
 
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true });
     this.renderer.setSize(rect.width || 400, rect.height || 400);
@@ -60,6 +76,136 @@ export class Scene3D {
     this.scene.add(this.grid);
 
     window.addEventListener('resize', () => this.onResize());
+  }
+
+  initControls() {
+    this.controls = new OrbitControls(this.activeCamera, this.canvas);
+    this.controls.enableDamping = true;
+    this.controls.dampingFactor = 0.08;
+    this.controls.screenSpacePanning = true;
+    this.controls.target.set(0, 0.8, 0);
+
+    // Authentic Blender Mouse Mapping:
+    // Left Drag (when not in Play Mode): Rotate
+    // Middle Drag: Rotate
+    // Shift + Middle / Shift + Left: Pan
+    // Ctrl + Middle / Wheel: Zoom
+    this.controls.mouseButtons = {
+      LEFT: THREE.MOUSE.ROTATE,
+      MIDDLE: THREE.MOUSE.ROTATE,
+      RIGHT: THREE.MOUSE.PAN
+    };
+
+    // Smooth gating
+    this.canvas.addEventListener('pointerdown', (e) => {
+      if (this.isPlaying) {
+        // In play mode, LMB is for gameplay interaction
+        if (e.button === 0 && !e.altKey) {
+          this.controls.enabled = false;
+        } else {
+          this.controls.enabled = true;
+        }
+      } else {
+        this.controls.enabled = true;
+      }
+    });
+  }
+
+  // --- Complete Blender Viewport Shortcuts ---
+  initShortcuts() {
+    window.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT') return;
+      if (this.isPlaying) return; // In play mode keys move player
+
+      // Numpad 1 / 1: Front View (Trás com Ctrl)
+      if (e.code === 'Numpad1' || e.code === 'Digit1') {
+        e.preventDefault();
+        if (e.ctrlKey) this.setCameraView('back');
+        else this.setCameraView('front');
+      }
+      // Numpad 3 / 3: Right View (Esquerda com Ctrl)
+      else if (e.code === 'Numpad3' || e.code === 'Digit3') {
+        e.preventDefault();
+        if (e.ctrlKey) this.setCameraView('left');
+        else this.setCameraView('right');
+      }
+      // Numpad 7 / 7: Top View (Inferior com Ctrl)
+      else if (e.code === 'Numpad7' || e.code === 'Digit7') {
+        e.preventDefault();
+        if (e.ctrlKey) this.setCameraView('bottom');
+        else this.setCameraView('top');
+      }
+      // Numpad 5 / 5: Toggle Persp / Ortho
+      else if (e.code === 'Numpad5' || e.code === 'Digit5') {
+        e.preventDefault();
+        this.toggleProjection();
+      }
+      // Numpad . / F / Home: Frame / Focus Selected Entity
+      else if (e.code === 'NumpadDecimal' || e.code === 'KeyF' || e.code === 'Home') {
+        e.preventDefault();
+        this.frameSelectedEntity();
+      }
+    });
+  }
+
+  setCameraView(viewName) {
+    const target = this.controls.target.clone();
+    const dist = 14;
+    let newPos = new THREE.Vector3();
+
+    switch (viewName) {
+      case 'front': newPos.set(target.x, target.y, target.z + dist); break;
+      case 'back': newPos.set(target.x, target.y, target.z - dist); break;
+      case 'right': newPos.set(target.x + dist, target.y, target.z); break;
+      case 'left': newPos.set(target.x - dist, target.y, target.z); break;
+      case 'top': newPos.set(target.x, target.y + dist, target.z + 0.001); break;
+      case 'bottom': newPos.set(target.x, target.y - dist, target.z + 0.001); break;
+    }
+
+    this.animateCameraTo(newPos, target);
+  }
+
+  toggleProjection() {
+    this.isOrthographic = !this.isOrthographic;
+    const oldCam = this.activeCamera;
+    const newCam = this.isOrthographic ? this.cameraOrtho : this.cameraPersp;
+
+    newCam.position.copy(oldCam.position);
+    newCam.quaternion.copy(oldCam.quaternion);
+
+    this.activeCamera = newCam;
+    this.controls.object = newCam;
+    this.controls.update();
+    this.onResize();
+  }
+
+  frameSelectedEntity() {
+    const playerEnt = this.getPlayerEntity();
+    const target = playerEnt && playerEnt.mesh ? playerEnt.mesh.position.clone() : new THREE.Vector3(0, 0.8, 0);
+    const newPos = new THREE.Vector3(target.x + 6, target.y + 5, target.z + 8);
+    this.animateCameraTo(newPos, target);
+  }
+
+  animateCameraTo(newPos, newTarget) {
+    const startPos = this.activeCamera.position.clone();
+    const startTarget = this.controls.target.clone();
+    let progress = 0;
+
+    const step = () => {
+      progress += 0.08;
+      if (progress >= 1.0) {
+        this.activeCamera.position.copy(newPos);
+        this.controls.target.copy(newTarget);
+        this.controls.update();
+      } else {
+        const ease = 0.5 - 0.5 * Math.cos(progress * Math.PI);
+        this.activeCamera.position.lerpVectors(startPos, newPos, ease);
+        this.controls.target.lerpVectors(startTarget, newTarget, ease);
+        this.controls.update();
+        requestAnimationFrame(step);
+      }
+    };
+    step();
   }
 
   // --- Strict Mathematical Sync with Orbital Logic Graph ---
@@ -151,7 +297,6 @@ export class Scene3D {
         }
       });
 
-      // Default model if none specified
       if (!modelShape) {
         if (entityType === 'player') modelShape = 'cube';
         else if (entityType === 'enemy') modelShape = 'cylinder';
@@ -162,7 +307,6 @@ export class Scene3D {
       let ent = this.entities.get(sun.id);
 
       if (!ent) {
-        // Create 3D Mesh
         const mesh = this.createMeshForShape(modelShape, entityType, index);
         mesh.name = sun.name;
         this.scene.add(mesh);
@@ -186,7 +330,6 @@ export class Scene3D {
         };
         this.entities.set(sun.id, ent);
       } else {
-        // Check if shape changed
         if (ent.shape !== modelShape) {
           this.scene.remove(ent.mesh);
           ent.mesh.geometry?.dispose();
@@ -198,7 +341,6 @@ export class Scene3D {
           ent.shape = modelShape;
         }
 
-        // Update capabilities
         ent.sunName = sun.name;
         ent.type = entityType;
         ent.hasMove = hasMove;
@@ -278,7 +420,6 @@ export class Scene3D {
       if (k === 'd' || k === 'arrowright') this.keys.d = true;
       if (k === ' ' || e.code === 'Space') {
         this.keys.space = true;
-        // Trigger Jump for player if capability exists
         const playerEnt = this.getPlayerEntity();
         if (playerEnt && playerEnt.hasJump && playerEnt.isGrounded) {
           playerEnt.velocity.y = playerEnt.jumpForce;
@@ -302,7 +443,6 @@ export class Scene3D {
   setPlayMode(playing) {
     this.isPlaying = playing;
     if (!playing) {
-      // Reset all entities to initial positions
       this.entities.forEach(ent => {
         if (ent.mesh && ent.initialPos) {
           ent.mesh.position.copy(ent.initialPos);
@@ -312,6 +452,7 @@ export class Scene3D {
           ent.isGrounded = true;
         }
       });
+      this.controls.enabled = true;
     }
   }
 
@@ -326,13 +467,24 @@ export class Scene3D {
     if (!this.canvas.parentElement) return;
     const rect = this.canvas.parentElement.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return;
-    this.camera.aspect = rect.width / rect.height;
-    this.camera.updateProjectionMatrix();
+    const aspect = rect.width / rect.height;
+
+    this.cameraPersp.aspect = aspect;
+    this.cameraPersp.updateProjectionMatrix();
+
+    const frustumSize = 14;
+    this.cameraOrtho.left = (-frustumSize * aspect) / 2;
+    this.cameraOrtho.right = (frustumSize * aspect) / 2;
+    this.cameraOrtho.top = frustumSize / 2;
+    this.cameraOrtho.bottom = -frustumSize / 2;
+    this.cameraOrtho.updateProjectionMatrix();
+
     this.renderer.setSize(rect.width, rect.height);
   }
 
-  // --- Real-time Physics & Kinematics Loop ---
   update(delta) {
+    this.controls.update();
+
     if (!this.isPlaying) return;
 
     const playerEnt = this.getPlayerEntity();
@@ -344,7 +496,6 @@ export class Scene3D {
 
       // 1. KINEMATICS & MOVEMENT
       if (ent.type === 'player') {
-        // Player Control (STRICT: If Andar is removed, walkSpeed is 0 and player CANNOT move!)
         if (ent.hasMove && ent.walkSpeed > 0) {
           const moveDir = new THREE.Vector3();
           if (this.keys.w) moveDir.z -= 1;
@@ -358,26 +509,22 @@ export class Scene3D {
             ent.velocity.x = moveDir.x * activeSpeed;
             ent.velocity.z = moveDir.z * activeSpeed;
 
-            // Facing direction rotation
             ent.mesh.rotation.y = Math.atan2(-moveDir.z, moveDir.x) + Math.PI / 2;
           } else {
-            // Friction deceleration
             ent.velocity.x *= 0.75;
             ent.velocity.z *= 0.75;
           }
         } else {
-          // No Move capability -> complete freeze
           ent.velocity.x = 0;
           ent.velocity.z = 0;
         }
       } else if (ent.type === 'enemy') {
-        // Enemy AI Vector Kinematics (Tracks player if hasMove)
         if (ent.hasMove && playerEnt && playerEnt.mesh) {
           const toPlayer = new THREE.Vector3().subVectors(playerEnt.mesh.position, ent.mesh.position);
           toPlayer.y = 0;
           const dist = toPlayer.length();
 
-          if (dist > 1.8 && dist < 12) {
+          if (dist > 1.8 && dist < 14) {
             toPlayer.normalize();
             ent.velocity.x = toPlayer.x * (ent.walkSpeed || 3.0);
             ent.velocity.z = toPlayer.z * (ent.walkSpeed || 3.0);
@@ -388,13 +535,11 @@ export class Scene3D {
           }
         }
 
-        // Periodic jump if enemy has Pular
         if (ent.hasJump && ent.isGrounded && Math.sin(ent.animTime * 2) > 0.95) {
           ent.velocity.y = ent.jumpForce;
           ent.isGrounded = false;
         }
       } else if (ent.type === 'npc') {
-        // NPC Patrol Oscillation
         if (ent.hasMove) {
           ent.velocity.x = Math.sin(ent.animTime * 1.5) * (ent.walkSpeed || 2.5);
           ent.mesh.rotation.y = ent.velocity.x > 0 ? Math.PI / 2 : -Math.PI / 2;
@@ -413,20 +558,17 @@ export class Scene3D {
         }
       }
 
-      // Apply horizontal position displacement: P = P0 + V * dt
       ent.mesh.position.x += ent.velocity.x * delta;
       ent.mesh.position.z += ent.velocity.z * delta;
 
-      // 3. PROCEDURAL ANIMATION (Squash & Stretch Math)
+      // 3. PROCEDURAL ANIMATION
       if (ent.hasAnimation) {
         const speed2D = Math.hypot(ent.velocity.x, ent.velocity.z);
         if (speed2D > 0.1) {
-          // Walk / Run bobbing
           const bob = Math.abs(Math.sin(ent.animTime * (speed2D * 1.5))) * 0.15;
           ent.mesh.position.y = (ent.hasPhysics ? ent.mesh.position.y : 1.1) + bob;
           ent.mesh.scale.set(1.0 + bob * 0.5, 1.0 - bob * 0.5, 1.0 + bob * 0.5);
         } else {
-          // Idle breathing sinus
           const breath = Math.sin(ent.animTime * 3) * 0.03;
           ent.mesh.scale.set(1.0 - breath, 1.0 + breath, 1.0 - breath);
         }
@@ -440,7 +582,6 @@ export class Scene3D {
       this.entities.forEach((otherEnt) => {
         if (otherEnt === playerEnt || !otherEnt.mesh || otherEnt.shape === 'plane') return;
 
-        // Mathematical Collision: ONLY resolve if the other object HAS Colisao planet!
         if (otherEnt.hasCollision) {
           const pPos = playerEnt.mesh.position;
           const oPos = otherEnt.mesh.position;
@@ -448,19 +589,16 @@ export class Scene3D {
           const dx = pPos.x - oPos.x;
           const dz = pPos.z - oPos.z;
           const dist = Math.hypot(dx, dz);
-          const minDistance = 1.8; // Radius overlap sum
+          const minDistance = 1.8;
 
           if (dist < minDistance && dist > 0.001) {
-            // Mathematical Penetration Depth Vector: delta = (minDist - dist) * normal
             const overlap = minDistance - dist;
             const nx = dx / dist;
             const nz = dz / dist;
 
-            // Push player back
             pPos.x += nx * overlap;
             pPos.z += nz * overlap;
 
-            // Trigger energy beam in orbital graph
             if (this.onCollisionEvent) {
               this.onCollisionEvent(playerEnt.sunName, otherEnt.sunName);
             }
@@ -474,6 +612,6 @@ export class Scene3D {
     requestAnimationFrame(() => this.animate());
     const delta = 0.016;
     this.update(delta);
-    this.renderer.render(this.scene, this.camera);
+    this.renderer.render(this.scene, this.activeCamera);
   }
 }
