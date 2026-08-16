@@ -209,7 +209,7 @@ export class PaletteUI {
       if (isPlaying) {
         playBtn.classList.add('is-playing');
         playIcon.className = 'ti ti-player-pause';
-        playLabel.textContent = 'Pausar';
+        playLabel.textContent = 'Pausar (Enter)';
         if (chip3D) {
           chip3D.textContent = 'Executando (W/A/S/D)';
           chip3D.style.borderColor = '#34c759';
@@ -218,7 +218,7 @@ export class PaletteUI {
       } else {
         playBtn.classList.remove('is-playing');
         playIcon.className = 'ti ti-player-play';
-        playLabel.textContent = 'Executar';
+        playLabel.textContent = 'Executar (Enter)';
         if (chip3D) {
           chip3D.textContent = 'Pronto (3D)';
           chip3D.style.borderColor = '#32ade6';
@@ -227,10 +227,17 @@ export class PaletteUI {
       }
     };
 
-    if (playBtn) playBtn.addEventListener('click', toggle);
+    if (playBtn) {
+      playBtn.addEventListener('click', () => {
+        toggle();
+        playBtn.blur(); // Remove HTML button focus so Space key only triggers 3D Jump!
+      });
+    }
 
+    // Enter / F5 Shortcut for Play Mode (Ignored when typing in inputs)
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'F5') {
+      if (e.target.tagName === 'INPUT') return;
+      if (e.key === 'Enter' || e.key === 'F5') {
         e.preventDefault();
         toggle();
       }
