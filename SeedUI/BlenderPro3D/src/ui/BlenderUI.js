@@ -22,6 +22,8 @@ export class BlenderUI {
     this.initSubmodes();
     this.initToolshelf();
     this.initShadingControls();
+    this.initWorkspaceTabs();
+    this.initTopMenus();
     this.initNPanel();
     this.initScrubbers();
     this.initOutliner();
@@ -530,7 +532,211 @@ export class BlenderUI {
     popup.classList.toggle('hidden');
   }
 
-  // 10. Raycasting / 3D Selection
+  // 10. Workspace Tabs (Layout, Modeling, Sculpting, Shading, Rendering)
+  initWorkspaceTabs() {
+    const tabs = document.querySelectorAll('.ws-tab');
+    tabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        tabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const ws = tab.dataset.ws;
+        if (ws === 'modeling') {
+          this.setMode('edit');
+        } else if (ws === 'layout') {
+          this.setMode('object');
+        } else if (ws === 'shading') {
+          this.setShading('material');
+        } else if (ws === 'rendering') {
+          this.setShading('rendered');
+        }
+      });
+    });
+  }
+
+  // 11. Top Dropdown Menus (Arquivo, Editar, Render, Janela, Ajuda)
+  initTopMenus() {
+    const createMenu = (items, x, y) => {
+      const existing = document.getElementById('floating-top-menu');
+      if (existing) existing.remove();
+
+      const menu = document.createElement('div');
+      menu.id = 'floating-top-menu';
+      menu.className = 'blender-popup-menu';
+      menu.style.position = 'fixed';
+      menu.style.left = `${x}px`;
+      menu.style.top = `${y}px`;
+      menu.style.zIndex = '99999';
+
+      menu.innerHTML = items.map(item => `
+        <div class="popup-menu-item" data-action="${item.action}">
+          <span class="item-label">${item.icon ? `<i class="ti ti-${item.icon}"></i> ` : ''}${item.label}</span>
+          ${item.shortcut ? `<span class="key-tag">${item.shortcut}</span>` : ''}
+        </div>
+      `).join('');
+
+      document.body.appendChild(menu);
+
+      const close = (e) => {
+        if (!menu.contains(e.target)) {
+          menu.remove();
+          window.removeEventListener('pointerdown', close);
+        }
+      };
+      setTimeout(() => window.addEventListener('pointerdown', close), 10);
+
+      menu.querySelectorAll('.popup-menu-item').forEach(itemEl => {
+        itemEl.addEventListener('click', () => {
+          const action = itemEl.dataset.action;
+          this.handleMenuAction(action);
+          menu.remove();
+        });
+      });
+    };
+
+    // Top menu bar dropdowns
+    document.querySelectorAll('.top-menu-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const rect = item.getBoundingClientRect();
+        const text = item.textContent.trim().toLowerCase();
+
+        if (text.includes('arquivo')) {
+          createMenu([
+            { label: 'Novo Projeto', icon: 'file', action: 'file_new', shortcut: 'Ctrl+N' },
+            { label: 'Exportar OBJ (.obj)', icon: 'download', action: 'export_obj' },
+            { label: 'Exportar STL (.stl)', icon: 'download', action: 'export_stl' },
+          ], rect.left, rect.bottom + 4);
+        } else if (text.includes('editar')) {
+          createMenu([
+            { label: 'Desfazer', icon: 'arrow-back-up', action: 'undo', shortcut: 'Ctrl+Z' },
+            { label: 'Refazer', icon: 'arrow-forward-up', action: 'redo', shortcut: 'Ctrl+Shift+Z' },
+            { label: 'Duplicar Objeto', icon: 'copy', action: 'duplicate', shortcut: 'Shift+D' },
+            { label: 'Excluir Selecionado', icon: 'trash', action: 'delete', shortcut: 'X' },
+          ], rect.left, rect.bottom + 4);
+        } else if (text.includes('render')) {
+          createMenu([
+            { label: 'Renderizar Imagem (PBR)', icon: 'sparkles', action: 'render_pbr', shortcut: 'F12' },
+          ], rect.left, rect.bottom + 4);
+        } else if (text.includes('janela')) {
+          createMenu([
+            { label: 'Alternar Tela Cheia', icon: 'maximize', action: 'fullscreen', shortcut: 'F11' },
+            { label: 'Catálogo de Ícones Tabler', icon: 'icons', action: 'icon_browser' },
+          ], rect.left, rect.bottom + 4);
+        } else if (text.includes('ajuda')) {
+          createMenu([
+            { label: 'Atalhos do Blender', icon: 'help', action: 'help_shortcuts' },
+          ], rect.left, rect.bottom + 4);
+        }
+      });
+    });
+
+    // Viewport Header Menus (Visualizar, Selecionar)
+    document.getElementById('vp-menu-view')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const rect = e.currentTarget.getBoundingClientRect();
+      createMenu([
+        { label: 'Vista da Câmera', icon: 'camera', action: 'cam_view', shortcut: 'Numpad 0' },
+        { label: 'Superior (Top)', icon: 'arrow-up', action: 'cam_top', shortcut: 'Numpad 7' },
+        { label: 'Frontal (Front)', icon: 'arrow-right', action: 'cam_front', shortcut: 'Numpad 1' },
+        { label: 'Direita (Right)', icon: 'arrow-narrow-right', action: 'cam_right', shortcut: 'Numpad 3' },
+        { label: 'Perspectiva / Ortográfica', icon: 'grid-4x4', action: 'toggle_ortho', shortcut: 'Numpad 5' },
+        { label: 'Enquadrar Selecionado', icon: 'focus-2', action: 'focus_selected', shortcut: 'Numpad .' },
+      ], rect.left, rect.bottom + 4);
+    });
+
+    document.getElementById('vp-menu-select')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const rect = e.currentTarget.getBoundingClientRect();
+      createMenu([
+        { label: 'Selecionar Tudo', icon: 'select-all', action: 'select_all', shortcut: 'A' },
+        { label: 'Desmarcar Tudo', icon: 'square-x', action: 'deselect_all', shortcut: 'Alt+A' },
+      ], rect.left, rect.bottom + 4);
+    });
+  }
+
+  handleMenuAction(action) {
+    switch (action) {
+      case 'file_new':
+        location.reload();
+        break;
+      case 'export_obj':
+        this.sceneManager.exportOBJ();
+        break;
+      case 'export_stl':
+        this.sceneManager.exportSTL();
+        break;
+      case 'undo':
+        this.historyManager.undo();
+        break;
+      case 'redo':
+        this.historyManager.redo();
+        break;
+      case 'duplicate':
+        this.sceneManager.duplicateSelected();
+        break;
+      case 'delete':
+        if (this.currentMode === 'edit') this.meshEditor.deleteSelection();
+        else {
+          const obj = this.sceneManager.getSelectedObject();
+          if (obj) this.sceneManager.removeObject(obj);
+        }
+        break;
+      case 'render_pbr':
+        document.getElementById('btn-open-pbr-render')?.click();
+        break;
+      case 'fullscreen':
+        if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+        else document.exitFullscreen();
+        break;
+      case 'icon_browser':
+        document.getElementById('btn-toggle-icon-browser')?.click();
+        break;
+      case 'help_shortcuts':
+        alert("Atalhos do Blender:\n\n• Tab: Alternar Modo Objeto / Edição\n• 1, 2, 3: Vértice, Aresta, Face\n• E: Extrusão\n• I: Inset\n• Ctrl+B: Bevel (Chanfro)\n• Ctrl+R: Loop Cut & Slide\n• F: Criar Face\n• M: Mesclar Vértices\n• Alt+S: Encolher/Engordar\n• G, R, S: Mover, Rotacionar, Escalar\n• X / Del: Excluir\n• Shift+A: Adicionar Primitiva\n• Numpad 0: Vista da Câmera\n• Numpad .: Enquadrar Seleção");
+        break;
+      case 'cam_view':
+        this.engine.setCameraView('camera');
+        break;
+      case 'cam_top':
+        this.engine.setCameraView('top');
+        break;
+      case 'cam_front':
+        this.engine.setCameraView('front');
+        break;
+      case 'cam_right':
+        this.engine.setCameraView('right');
+        break;
+      case 'toggle_ortho':
+        this.engine.toggleOrthographic();
+        break;
+      case 'focus_selected':
+        this.engine.focusOnObject(this.sceneManager.getSelectedObject());
+        break;
+      case 'select_all':
+        if (this.currentMode === 'edit') {
+          const qm = this.meshEditor.activeMesh?.userData?.quadMesh;
+          if (qm) {
+            qm.vertices.forEach((_, i) => this.meshEditor.selectedVertices.add(i));
+            this.meshEditor.rebuildEditHelpers();
+            this.meshEditor.updateTransformAnchor();
+          }
+        }
+        break;
+      case 'deselect_all':
+        if (this.currentMode === 'edit') {
+          this.meshEditor.selectedVertices.clear();
+          this.meshEditor.selectedEdges.clear();
+          this.meshEditor.selectedFaces.clear();
+          this.meshEditor.rebuildEditHelpers();
+          this.meshEditor.updateTransformAnchor();
+        } else {
+          this.sceneManager.deselectAll();
+        }
+        break;
+    }
+  }
+
+  // 12. Raycasting / 3D Selection
   initRaycasting() {
     const canvas = this.engine.canvas;
 

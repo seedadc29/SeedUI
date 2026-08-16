@@ -766,4 +766,104 @@ export class SceneManager {
     this.selectedObject.rotation.set(rotX, rotY, rotZ);
     this.selectedObject.scale.set(sclX, sclY, sclZ);
   }
+
+  exportOBJ() {
+    const meshes = this.getAllMeshes();
+    if (meshes.length === 0) {
+      alert('Nenhuma malha 3D encontrada na cena para exportar!');
+      return;
+    }
+
+    let objContent = `# BlenderPro3D OBJ Export\n# Objects count: ${meshes.length}\n`;
+    let vertexOffset = 1;
+
+    meshes.forEach((mesh) => {
+      objContent += `o ${mesh.name}\n`;
+      mesh.updateMatrixWorld(true);
+      const qm = mesh.userData?.quadMesh;
+
+      if (qm) {
+        qm.vertices.forEach((v) => {
+          const vWorld = v.clone().applyMatrix4(mesh.matrixWorld);
+          objContent += `v ${vWorld.x.toFixed(4)} ${vWorld.y.toFixed(4)} ${vWorld.z.toFixed(4)}\n`;
+        });
+
+        qm.quads.forEach((face) => {
+          if (face.length === 4) {
+            objContent += `f ${face[0] + vertexOffset} ${face[1] + vertexOffset} ${face[2] + vertexOffset} ${face[3] + vertexOffset}\n`;
+          } else if (face.length === 3) {
+            objContent += `f ${face[0] + vertexOffset} ${face[1] + vertexOffset} ${face[2] + vertexOffset}\n`;
+          }
+        });
+        vertexOffset += qm.vertices.length;
+      }
+    });
+
+    const blob = new Blob([objContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'cena_blenderpro3d.obj';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  exportSTL() {
+    const meshes = this.getAllMeshes();
+    if (meshes.length === 0) return;
+
+    let stlContent = 'solid BlenderPro3D\n';
+    meshes.forEach((mesh) => {
+      mesh.updateMatrixWorld(true);
+      const qm = mesh.userData?.quadMesh;
+      if (qm) {
+        qm.quads.forEach((face) => {
+          const v0 = qm.vertices[face[0]].clone().applyMatrix4(mesh.matrixWorld);
+          const v1 = qm.vertices[face[1]].clone().applyMatrix4(mesh.matrixWorld);
+          const v2 = qm.vertices[face[2]].clone().applyMatrix4(mesh.matrixWorld);
+          const norm = new THREE.Vector3().subVectors(v1, v0).cross(new THREE.Vector3().subVectors(v2, v0)).normalize();
+
+          stlContent += `  facet normal ${norm.x.toFixed(4)} ${norm.y.toFixed(4)} ${norm.z.toFixed(4)}\n    outer loop\n`;
+          stlContent += `      vertex ${v0.x.toFixed(4)} ${v0.y.toFixed(4)} ${v0.z.toFixed(4)}\n`;
+          stlContent += `      vertex ${v1.x.toFixed(4)} ${v1.y.toFixed(4)} ${v1.z.toFixed(4)}\n`;
+          stlContent += `      vertex ${v2.x.toFixed(4)} ${v2.y.toFixed(4)} ${v2.z.toFixed(4)}\n`;
+          stlContent += '    endloop\n  endfacet\n';
+
+          if (face.length === 4) {
+            const v3 = qm.vertices[face[3]].clone().applyMatrix4(mesh.matrixWorld);
+            stlContent += `  facet normal ${norm.x.toFixed(4)} ${norm.y.toFixed(4)} ${norm.z.toFixed(4)}\n    outer loop\n`;
+            stlContent += `      vertex ${v0.x.toFixed(4)} ${v0.y.toFixed(4)} ${v0.z.toFixed(4)}\n`;
+            stlContent += `      vertex ${v2.x.toFixed(4)} ${v2.y.toFixed(4)} ${v2.z.toFixed(4)}\n`;
+            stlContent += `      vertex ${v3.x.toFixed(4)} ${v3.y.toFixed(4)} ${v3.z.toFixed(4)}\n`;
+            stlContent += '    endloop\n  endfacet\n';
+          }
+        });
+      }
+    });
+    stlContent += 'endsolid BlenderPro3D\n';
+
+    const blob = new Blob([stlContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'cena_blenderpro3d.stl';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  duplicateSelected() {
+    const sel = this.getSelectedObject();
+    if (!sel) return null;
+
+    const primType = sel.userData?.primitiveType || 'cube';
+    const newObj = this.createPrimitive(primType, `${sel.name}_copy`);
+    if (newObj) {
+      newObj.position.copy(sel.position).add(new THREE.Vector3(1.5, 0, 0));
+      newObj.rotation.copy(sel.rotation);
+      newObj.scale.copy(sel.scale);
+      this.selectObject(newObj);
+      return newObj;
+    }
+    return null;
+  }
 }
