@@ -372,21 +372,46 @@ export class PaletteUI {
     const iconAnim = document.getElementById('icon-orbit-anim');
     const labelAnim = document.getElementById('label-orbit-anim');
 
-    if (btnAnim) {
-      btnAnim.addEventListener('click', () => {
-        this.orbitalGraph.isOrbitAnimationActive = !this.orbitalGraph.isOrbitAnimationActive;
+    const btnTopbar = document.getElementById('btn-toggle-orbit-topbar');
+    const iconTopbar = document.getElementById('icon-orbit-topbar');
+    const labelTopbar = document.getElementById('label-orbit-topbar');
 
-        if (this.orbitalGraph.isOrbitAnimationActive) {
+    const updateVisuals = () => {
+      const active = this.orbitalGraph.isOrbitAnimationActive;
+      if (btnAnim) {
+        if (active) {
           btnAnim.classList.add('active');
-          iconAnim.className = 'ti ti-rotate';
-          labelAnim.textContent = 'Girar Órbitas';
+          if (iconAnim) iconAnim.className = 'ti ti-rotate';
+          if (labelAnim) labelAnim.textContent = 'Girar Órbitas';
         } else {
           btnAnim.classList.remove('active');
-          iconAnim.className = 'ti ti-player-pause';
-          labelAnim.textContent = 'Pausado';
+          if (iconAnim) iconAnim.className = 'ti ti-player-pause';
+          if (labelAnim) labelAnim.textContent = 'Pausado';
         }
-      });
-    }
+      }
+
+      if (btnTopbar) {
+        if (active) {
+          btnTopbar.classList.remove('is-paused');
+          btnTopbar.classList.add('is-rotating');
+          if (iconTopbar) iconTopbar.className = 'ti ti-rotate';
+          if (labelTopbar) labelTopbar.textContent = 'Girar Órbitas (Ativo)';
+        } else {
+          btnTopbar.classList.add('is-paused');
+          btnTopbar.classList.remove('is-rotating');
+          if (iconTopbar) iconTopbar.className = 'ti ti-player-pause';
+          if (labelTopbar) labelTopbar.textContent = 'Rotação Pausada';
+        }
+      }
+    };
+
+    const toggle = () => {
+      this.orbitalGraph.isOrbitAnimationActive = !this.orbitalGraph.isOrbitAnimationActive;
+      updateVisuals();
+    };
+
+    if (btnAnim) btnAnim.addEventListener('click', toggle);
+    if (btnTopbar) btnTopbar.addEventListener('click', toggle);
   }
 
   // --- Undo / Redo History Support ---

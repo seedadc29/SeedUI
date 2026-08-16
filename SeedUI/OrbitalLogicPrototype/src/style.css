@@ -176,6 +176,33 @@ html, body {
   box-shadow: 0 0 12px rgba(255, 59, 48, 0.5);
 }
 
+.seed-orbit-anim-btn {
+  background: rgba(162, 136, 255, 0.15);
+  border: 1px solid #755be6;
+  color: #a288ff;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.seed-orbit-anim-btn:hover {
+  background: #755be6;
+  color: #ffffff;
+  box-shadow: 0 0 10px rgba(117, 91, 230, 0.5);
+}
+
+.seed-orbit-anim-btn.is-paused {
+  background: #252525;
+  border-color: var(--seed-border-subtle);
+  color: var(--seed-text-muted);
+}
+
 .play-hint-tag {
   font-size: 11px;
   color: var(--seed-text-muted);
