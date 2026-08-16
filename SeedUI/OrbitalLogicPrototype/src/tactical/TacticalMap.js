@@ -56,6 +56,9 @@ export class TacticalMap {
   initCanvas() {
     this.resize();
     window.addEventListener('resize', () => this.resize());
+    if (this.canvas.parentElement && window.ResizeObserver) {
+      new ResizeObserver(() => this.resize()).observe(this.canvas.parentElement);
+    }
   }
 
   resize() {
@@ -142,8 +145,8 @@ export class TacticalMap {
     };
   }
 
-  addShape(shapeType, worldX = 0, worldZ = 0) {
-    if (worldX === 0 && worldZ === 0) {
+  addShape(shapeType, worldX = null, worldZ = null) {
+    if (worldX === null || worldZ === null) {
       const parent = this.canvas.parentElement;
       const w = parent ? parent.clientWidth : 600;
       const h = parent ? parent.clientHeight : 400;
@@ -192,6 +195,15 @@ export class TacticalMap {
     this.rooms.push(newRoom);
     this.selectedRoom = newRoom;
     this.selectedEntity = null;
+    this.isEditMode = true;
+
+    const btnEdit = document.getElementById('btn-toggle-edit-mode');
+    const labelEdit = document.getElementById('label-edit-mode');
+    const iconEdit = document.getElementById('icon-edit-mode');
+    if (btnEdit) btnEdit.classList.add('active');
+    if (labelEdit) labelEdit.textContent = 'Editar Mapa';
+    if (iconEdit) iconEdit.className = 'ti ti-edit';
+
     if (this.onSelectRoom) this.onSelectRoom(newRoom);
     return newRoom;
   }
@@ -211,16 +223,16 @@ export class TacticalMap {
 
       const mouse = this.getMapPos(e);
 
-      // Mode Check: If Navigation/Pan Mode, pan directly
+      // Explicit Navigation Mode or Middle Click -> Pan only
       if (!this.isEditMode || e.button === 1 || e.spaceKey) {
         this.isPanning = true;
         this.canvas.parentElement?.classList.add('is-panning');
         return;
       }
 
-      // 1. Check Handles on already selected room
+      // 1. Check Resize Handles on Selected Room (using 16px screen tolerance)
       if (this.selectedRoom) {
-        const handle = this.hitTestHandles(this.selectedRoom, mouse.x, mouse.y);
+        const handle = this.hitTestHandles(this.selectedRoom, mouse);
         if (handle) {
           this.activeDragHandle = handle;
           this.roomInitialState = { ...this.selectedRoom };
@@ -238,7 +250,7 @@ export class TacticalMap {
         return;
       }
 
-      // 3. Check Blueprint Rooms
+      // 3. Check Blueprint Rooms (Direct Click on Room)
       const hitRoom = this.hitTestRooms(mouse.x, mouse.y);
       if (hitRoom) {
         const now = Date.now();
@@ -256,7 +268,7 @@ export class TacticalMap {
         return;
       }
 
-      // Clicked on empty canvas -> Deselect room & prepare for gentle panning
+      // Clicked on empty space -> Deselect & pan
       this.selectedRoom = null;
       this.selectedEntity = null;
       if (this.onSelectRoom) this.onSelectRoom(null);
@@ -270,7 +282,7 @@ export class TacticalMap {
 
       if (!isMouseDown) {
         if (this.isEditMode && this.selectedRoom) {
-          this.hoveredHandle = this.hitTestHandles(this.selectedRoom, mouse.x, mouse.y);
+          this.hoveredHandle = this.hitTestHandles(this.selectedRoom, mouse);
           this.updateCursor(this.hoveredHandle);
         } else if (this.isEditMode) {
           const hoveredRoom = this.hitTestRooms(mouse.x, mouse.y);
@@ -285,7 +297,7 @@ export class TacticalMap {
       const moveDist = Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y);
       if (moveDist > 3) isDragging = true;
 
-      // 1. Dragging Resize Handles (Stretching Isolated Sides or General Resize)
+      // 1. Dragging Resize Handles
       if (this.activeDragHandle && this.selectedRoom && this.roomInitialState) {
         const room = this.selectedRoom;
         const init = this.roomInitialState;
@@ -387,7 +399,9 @@ export class TacticalMap {
     const clientY = e.clientY - rect.top;
     return {
       x: ((clientX - this.panX) / this.zoom) / this.meterToPx,
-      z: ((clientY - this.panY) / this.zoom) / this.meterToPx
+      z: ((clientY - this.panY) / this.zoom) / this.meterToPx,
+      clientX,
+      clientY
     };
   }
 
@@ -423,12 +437,19 @@ export class TacticalMap {
     return closest;
   }
 
-  hitTestHandles(room, worldX, worldZ) {
-    const hitTolerance = 0.7; // Generous 0.7m hit radius
+  hitTestHandles(room, mouse) {
+    const hitTolerancePx = 16; // 16 CSS pixels radius for effortless grabbing!
+
+    const toScreen = (wx, wz) => ({
+      x: this.panX + (wx * this.meterToPx) * this.zoom,
+      y: this.panY + (wz * this.meterToPx) * this.zoom
+    });
 
     if (room.shape === 'circle') {
-      const d = Math.hypot(worldX - (room.x + room.radius), worldZ - room.z);
-      if (d <= hitTolerance) return 'radius';
+      const sp = toScreen(room.x + room.radius, room.z);
+      if (Math.hypot(mouse.clientX - sp.x, mouse.clientY - sp.y) <= hitTolerancePx) {
+        return 'radius';
+      }
       return null;
     }
 
@@ -440,18 +461,18 @@ export class TacticalMap {
     const zm = room.z + room.h / 2;
 
     const handles = [
-      { id: 'nw', x: x1, z: z1 },
-      { id: 'n',  x: xm, z: z1 },
-      { id: 'ne', x: x2, z: z1 },
-      { id: 'e',  x: x2, z: zm },
-      { id: 'se', x: x2, z: z2 },
-      { id: 's',  x: xm, z: z2 },
-      { id: 'sw', x: x1, z: z2 },
-      { id: 'w',  x: x1, z: zm }
+      { id: 'nw', ...toScreen(x1, z1) },
+      { id: 'n',  ...toScreen(xm, z1) },
+      { id: 'ne', ...toScreen(x2, z1) },
+      { id: 'e',  ...toScreen(x2, zm) },
+      { id: 'se', ...toScreen(x2, z2) },
+      { id: 's',  ...toScreen(xm, z2) },
+      { id: 'sw', ...toScreen(x1, z2) },
+      { id: 'w',  ...toScreen(x1, zm) }
     ];
 
     for (const h of handles) {
-      if (Math.hypot(worldX - h.x, worldZ - h.z) <= hitTolerance) {
+      if (Math.hypot(mouse.clientX - h.x, mouse.clientY - h.y) <= hitTolerancePx) {
         return h.id;
       }
     }
@@ -468,6 +489,11 @@ export class TacticalMap {
     const w = this.canvas.parentElement.clientWidth;
     const h = this.canvas.parentElement.clientHeight;
     if (w === 0 || h === 0) return;
+
+    if (this.panX === 0 && this.panY === 0) {
+      this.panX = w / 2;
+      this.panY = h / 2;
+    }
 
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
