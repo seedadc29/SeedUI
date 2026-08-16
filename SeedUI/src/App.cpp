@@ -455,6 +455,81 @@ namespace seedui
             DrawDashedLine(dl, ImVec2(mn.x, mx.y), mn, color);
         }
 
+        // Cursor de redimensionamento CUSTOMIZADO (estilo Blender/CorelDRAW):
+        // o sistema só tem 4 glifos de resize (0°/90°/45°/135°) — em rotações
+        // intermediárias o cursor do SO "encosta" no mais próximo e parece
+        // não seguir a alça. Este desenha a seta dupla na direção EXATA da
+        // alça sobre o canvas, com o cursor do SO oculto (ImGuiMouseCursor_None).
+        void DrawCustomResizeCursor(ImDrawList* dl, float cx, float cy,
+                                    float angleDeg)
+        {
+            const float rad = Geo::DegToRad(angleDeg);
+            const float ux = cosf(rad), uy = sinf(rad); // eixo da alça (tela, y-baixo)
+            const float nx = -uy, ny = ux;              // normal
+            const ImU32 black = IM_COL32(0, 0, 0, 235);
+            const ImU32 white = IM_COL32(255, 255, 255, 255);
+            const float arm = 9.0f;   // haste central (meio braço)
+            const float tip = 7.0f;   // comprimento da ponta
+            const float half = 4.0f;  // meia largura da ponta
+
+            // Haste central: contorno preto grosso + miolo branco (legível
+            // sobre qualquer fundo, como os cursores do SO).
+            dl->AddLine(ImVec2(cx - ux * arm, cy - uy * arm),
+                        ImVec2(cx + ux * arm, cy + uy * arm), black, 4.0f);
+            dl->AddLine(ImVec2(cx - ux * arm, cy - uy * arm),
+                        ImVec2(cx + ux * arm, cy + uy * arm), white, 2.0f);
+
+            // Duas pontas de seta opostas (uma em cada sentido do eixo).
+            for (int side = -1; side <= 1; side += 2)
+            {
+                const float s = (float)side;
+                const float ax = cx + ux * s * arm;
+                const float ay = cy + uy * s * arm;
+                const float tx = cx + ux * s * (arm + tip);
+                const float ty = cy + uy * s * (arm + tip);
+                const ImVec2 p1(tx, ty);
+                const ImVec2 p2(ax + nx * half, ay + ny * half);
+                const ImVec2 p3(ax - nx * half, ay - ny * half);
+                dl->AddTriangle(p1, p2, p3, black, 2.0f);
+                dl->AddTriangleFilled(p1, p2, p3, white);
+            }
+        }
+
+        // Cursor de ROTAÇÃO estilo CorelDRAW: seta circular (arco com ponta)
+        // desenhada sobre o canvas quando o mouse está sobre uma quina no modo
+        // de rotação (2º clique). O cursor do SO fica oculto, como no resize.
+        void DrawCustomRotateCursor(ImDrawList* dl, float cx, float cy)
+        {
+            const ImU32 black = IM_COL32(24, 8, 40, 240);
+            const ImU32 violet = IM_COL32(187, 77, 255, 255);
+            const float radius = 9.0f;
+            const float a0 = 2.35f; // início do arco (~135°)
+            const float a1 = 4.75f; // fim do arco (~272°)
+            const int segs = 16;
+            for (int s = 0; s < segs; ++s)
+            {
+                const float ta0 = a0 + (a1 - a0) * s / segs;
+                const float ta1 = a0 + (a1 - a0) * (s + 1) / segs;
+                const ImVec2 pa(cx + cosf(ta0) * radius, cy + sinf(ta0) * radius);
+                const ImVec2 pb(cx + cosf(ta1) * radius, cy + sinf(ta1) * radius);
+                dl->AddLine(pa, pb, black, 4.0f);
+                dl->AddLine(pa, pb, violet, 2.0f);
+            }
+            // Ponta da seta no fim do arco (indica o sentido da rotação).
+            const float ang = a1;
+            const float tipX = cx + cosf(ang) * radius;
+            const float tipY = cy + sinf(ang) * radius;
+            const float tx = -sinf(ang), ty = cosf(ang); // tangente (sentido)
+            const float nx = cosf(ang), ny = sinf(ang);  // normal (raio)
+            const ImVec2 p0(tipX + tx * 6.0f, tipY + ty * 6.0f);
+            const ImVec2 p1(tipX - tx * 3.0f + nx * 4.0f,
+                            tipY - ty * 3.0f + ny * 4.0f);
+            const ImVec2 p2(tipX - tx * 3.0f - nx * 4.0f,
+                            tipY - ty * 3.0f - ny * 4.0f);
+            dl->AddTriangle(p0, p1, p2, black, 2.0f);
+            dl->AddTriangleFilled(p0, p1, p2, violet);
+        }
+
         // Aplica um deslocamento de posição no elemento E em todos os
         // descendentes (coordenadas absolutas): necessário ao mover grupos
         // por alinhamento/distribuição, senão só a caixa do grupo anda.
@@ -3820,6 +3895,15 @@ namespace seedui
             SairEdicaoPowerClip();
             return;
         }
+        // Modo de rotação (CorelDRAW): Esc sai do modo e ele só faz sentido
+        // com a ferramenta de Seleção/Transformação ativa.
+        if (mRotationMode &&
+            ((mCanvasDragMode == 0 &&
+              ImGui::IsKeyPressed(ImGuiKey_Escape, false)) ||
+             (mCurrentTool != Tool::Select && mCurrentTool != Tool::Move)))
+        {
+            mRotationMode = false;
+        }
         auto isSelected = [&](const std::string& id)
         {
             return std::find(mSelectedElementIds.begin(), mSelectedElementIds.end(), id) !=
@@ -3858,7 +3942,8 @@ namespace seedui
             if (!mPowerClipDirectFrameId.empty())
                 return Project::ConteudoPowerClipNoPonto(
                     mode, mPowerClipDirectFrameId, x, y, true);
-            return Project::ElementoNoPonto(mode, x, y);
+            return Project::ElementoNoPonto(mode, x, y,
+                                            mSelecionarInteriorSemPreenchimento);
         };
 
         // TRANSFORMAÇÃO MODAL (Alt+G / Alt+R / Alt+S, estilo Blender): a
@@ -3902,7 +3987,8 @@ namespace seedui
             }
             else
             {
-                Element* hit = Project::ElementoNoPonto(mode, mouseX, mouseY);
+                Element* hit = Project::ElementoNoPonto(
+                    mode, mouseX, mouseY, mSelecionarInteriorSemPreenchimento);
                 if (hit && hit->propriedades.is_object() &&
                     hit->propriedades.value("powerclip", false))
                 {
@@ -3920,7 +4006,8 @@ namespace seedui
             ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
             !ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
         {
-            Element* frame = Project::ElementoNoPonto(mode, mouseX, mouseY);
+            Element* frame = Project::ElementoNoPonto(
+                mode, mouseX, mouseY, mSelecionarInteriorSemPreenchimento);
             if (frame && frame->propriedades.is_object() &&
                 frame->propriedades.value("powerclip", false))
             {
@@ -4050,6 +4137,25 @@ namespace seedui
             if (localX < ex - tolerance || localX > ex + ew + tolerance ||
                 localY < ey - tolerance || localY > ey + eh + tolerance)
                 return 0;
+            // Modo de rotação estilo CorelDRAW (2º clique na forma): as
+            // QUINAS giram o objeto em torno do pivô em vez de redimensionar.
+            if (mRotationMode && mSelectedElementIds.size() == 1 &&
+                element.tipo != "grupo")
+            {
+                // Área de captura GENEROSA nas quinas (18px): em modo de
+                // rotação basta aproximar o cursor do canto para a seta
+                // violeta aparecer e o arrasto girar — sem mira de precisão.
+                const float cTol = 18.0f / std::max(0.25f, viewScale);
+                const float cTolSq = cTol * cTol;
+                const float cornerRX[4] = { ex, ex + ew, ex, ex + ew };
+                const float cornerRY[4] = { ey, ey, ey + eh, ey + eh };
+                for (int c = 0; c < 4; ++c)
+                {
+                    const float cdx = localX - cornerRX[c];
+                    const float cdy = localY - cornerRY[c];
+                    if (cdx * cdx + cdy * cdy <= cTolSq) return 19;
+                }
+            }
             if (element.tipo == "grupo")
             {
                 // Grupo: alças de tamanho (2-9) como um objeto único — o
@@ -4181,17 +4287,59 @@ namespace seedui
             else if (dragMode == 10 || dragMode == 12) ImGui::SetMouseCursor(dir45(45.0f));
             else if (dragMode == 11 || dragMode == 13) ImGui::SetMouseCursor(dir45(135.0f));
             else if (dragMode == 14 || dragMode == 15 || dragMode == 16 ||
-                     dragMode == 17 || dragMode == 1)
+                     dragMode == 17 || dragMode == 19 || dragMode == 1)
                 ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
         };
 
+        const bool wasCustomCursor = mCustomCursorActive;
+        mCustomCursorActive = false;
         if (canvasHovered && mouseOnFrame && mCanvasDragMode == 0 && !mCanvasMarquee)
         {
             if (Element* selected = Project::ResolverId(mode, mSelectedElementId))
                 if (!selected->bloqueado)
-                    applyCursor(dragModeAt(*selected, mouseX, mouseY),
-                                Geo::ElementRotation(*selected));
+                {
+                    const int hoverMode = dragModeAt(*selected, mouseX, mouseY);
+                    const float hoverRot = Geo::ElementRotation(*selected);
+                    if (hoverMode >= 2 && hoverMode <= 13)
+                    {
+                        // Alça de tamanho/quinas: seta dupla customizada na
+                        // direção EXATA da alça (local + rotação do objeto),
+                        // sem o snapping de 45° dos glifos do SO — oculta o
+                        // cursor do sistema e desenha a seta sobre o canvas.
+                        float localAngle = 0.0f;
+                        switch (hoverMode)
+                        {
+                            case 2: case 3: localAngle = 0.0f; break;  // laterais L/R
+                            case 4: case 5: localAngle = 90.0f; break; // topo/base
+                            case 6: case 9:
+                            case 10: case 12: localAngle = 45.0f; break; // TL/BR
+                            default: localAngle = 135.0f; break;         // TR/BL
+                        }
+                        ImGui::SetMouseCursor(ImGuiMouseCursor_None);
+                        DrawCustomResizeCursor(ImGui::GetForegroundDrawList(),
+                                               mouse.x, mouse.y,
+                                               localAngle + hoverRot);
+                        mCustomCursorActive = true;
+                    }
+                    else if (hoverMode == 19)
+                    {
+                        // Quina no modo de rotação: seta circular customizada.
+                        ImGui::SetMouseCursor(ImGuiMouseCursor_None);
+                        DrawCustomRotateCursor(ImGui::GetForegroundDrawList(),
+                                               mouse.x, mouse.y);
+                        mCustomCursorActive = true;
+                    }
+                    else
+                    {
+                        applyCursor(hoverMode, hoverRot);
+                    }
+                }
         }
+        // O cursor do SO ficou oculto (seta customizada no frame anterior) e
+        // o mouse saiu das alças/canvas: restaura o cursor do sistema. Durante
+        // o arrasto o applyCursor do drag já cuida do restauro.
+        if (wasCustomCursor && !mCustomCursorActive && mCanvasDragMode == 0)
+            ImGui::SetMouseCursor(ImGuiMouseCursor_Arrow);
 
         // CTRL + ALT + clique em um NÓ do caminho: DESCONECTA o contorno —
         // abre o caminho fechado no ponto clicado (o contorno volta a ser
@@ -4377,7 +4525,8 @@ namespace seedui
                 mPowerClipDirectFrameId.clear();
                 hit = insideFrame
                     ? Project::ResolverId(mode, directFrameId)
-                    : Project::ElementoNoPonto(mode, mouseX, mouseY);
+                    : Project::ElementoNoPonto(mode, mouseX, mouseY,
+                                               mSelecionarInteriorSemPreenchimento);
             }
             // Clique em espaço vazio DENTRO da caixa conjunta move o conjunto
             // (o usuário não precisa acertar o corpo de um elemento).
@@ -4442,7 +4591,8 @@ namespace seedui
             {
                 mSelectedCornerMask = 0;
                 mCanvasCornerDragMask = 0;
-                if (!isSelected(hit->id))
+                const bool hitAlreadySelected = isSelected(hit->id);
+                if (!hitAlreadySelected)
                 {
                     if (hit->id != mDup.lastDuplicatedId)
                     {
@@ -4453,12 +4603,30 @@ namespace seedui
                     mSelectedElementIds.push_back(hit->id);
                 }
                 mSelectedElementId = hit->id;
+                // Modo de rotação estilo CorelDRAW: o SEGUNDO clique simples
+                // no CORPO de uma forma já selecionada troca as alças de
+                // resize por alças de ROTAÇÃO nas quinas (setas curvas) —
+                // arrastar uma quina gira o objeto em torno do pivô. Clicar
+                // fora, noutra forma ou numa alça de resize sai do modo; o
+                // clique vazio abaixo também limpa.
+                if (hitAlreadySelected && mSelectedElementIds.size() == 1 &&
+                    (currentHandle == 0 || currentHandle == 1))
+                {
+                    mRotationMode = true;
+                }
+                else if (currentHandle != 19 && currentHandle != 15 &&
+                         currentHandle != 14 && currentHandle != 1)
+                {
+                    mRotationMode = false;
+                }
                 // DUPLO clique (sem Shift) num elemento selecionado: define
                 // a ÂNCORA de alinhamento — não precisa segurar Shift. O
                 // primeiro clique do par mantém a seleção múltipla; o
-                // segundo marca a referência violeta.
+                // segundo marca a referência violeta. A âncora tem prioridade
+                // sobre o modo de rotação.
                 if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
                 {
+                    mRotationMode = false;
                     if (mAnchorElementId == hit->id)
                     {
                         mAnchorElementId.clear();
@@ -4478,6 +4646,7 @@ namespace seedui
             {
                 mSelectedCornerMask = 0;
                 mCanvasCornerDragMask = 0;
+                mRotationMode = false;
                 if (!additive)
                 {
                     mSelectedElementIds.clear();
@@ -5086,7 +5255,7 @@ namespace seedui
                             mCanvasCornerRadiusStarts[corner] + cornerDelta)));
                 }
             }
-            else if (mCanvasDragMode == 14)
+            else if (mCanvasDragMode == 14 || mCanvasDragMode == 19)
             {
                 // ROTAÇÃO EM CONJUNTO (corpo rígido): o conjunto inteiro gira
                 // como um todo ao redor do pivô — cada elemento ORBITA o
@@ -5663,10 +5832,20 @@ namespace seedui
                         if (resizeTop)
                             pathAnchorY = mCanvasDragY + mCanvasDragH;
                     }
+                    // Largura/altura COM SINAL (right-left, bottom-top): no
+                    // resize livre o usuário pode comprimir além do zero e
+                    // FLIPAR a caixa para o lado oposto. Passar os valores
+                    // normalizados (finalW/finalH, sempre positivos) mantinha
+                    // sx/sy positivos — a forma NÃO espelhava junto com a
+                    // caixa e ficava no lado oposto com deformação errada.
+                    // Com o sinal, sx = (right-left)/ow fica negativo no
+                    // flip e os pontos espelham em torno da âncora, seguindo
+                    // a caixa (o mesmo vale para o espelhado com Shift).
                     RescalePath(selected, mCanvasPathOrigPts,
                                 mCanvasDragX, mCanvasDragY,
                                 mCanvasDragW, mCanvasDragH,
-                                finalLeft, finalTop, finalW, finalH,
+                                finalLeft, finalTop,
+                                (right - left), (bottom - top),
                                 pathAnchorX, pathAnchorY, false);
                 }
             }
@@ -6421,7 +6600,9 @@ namespace seedui
                                           mCanvasZoom, mCanvasPanX, mCanvasPanY);
                     Modo& contextMode =
                         mProject.telas[mTelaAtiva].modos[mModoAtivo];
-                    if (Element* hit = Project::ElementoNoPonto(contextMode, contextX, contextY))
+                    if (Element* hit = Project::ElementoNoPonto(
+                            contextMode, contextX, contextY,
+                            mSelecionarInteriorSemPreenchimento))
                     {
                         if (std::find(mSelectedElementIds.begin(), mSelectedElementIds.end(),
                                       hit->id) != mSelectedElementIds.end())
@@ -6568,7 +6749,33 @@ namespace seedui
                            mPowerClipEditFrameId.c_str(),
                            mPowerClipDirectFrameId.c_str(),
                            mAnchorElementId.c_str(),
-                           mCurrentTool == Tool::Pen);
+                           mCurrentTool == Tool::Pen,
+                           mRotationMode);
+
+                // Readout do ângulo durante o giro (estilo CorelDRAW): o
+                // valor atual em graus acompanha o cursor enquanto o objeto
+                // está sendo rotacionado pela alça (14) ou quina (19).
+                if ((mCanvasDragMode == 14 || mCanvasDragMode == 19) &&
+                    PossuiModoAtivo())
+                {
+                    Modo& rotMode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+                    if (Element* rotEl = Project::ResolverId(rotMode,
+                                                             mSelectedElementId))
+                    {
+                        char buf[48];
+                        snprintf(buf, sizeof(buf), "%.1f°",
+                                 Geo::ElementRotation(*rotEl));
+                        ImDrawList* dl = ImGui::GetWindowDrawList();
+                        const ImVec2 mp = ImGui::GetMousePos();
+                        const ImVec2 ts = ImGui::CalcTextSize(buf);
+                        dl->AddRectFilled(ImVec2(mp.x + 14.0f, mp.y - ts.y - 6.0f),
+                                          ImVec2(mp.x + 14.0f + ts.x + 10.0f,
+                                                 mp.y + 4.0f),
+                                          IM_COL32(20, 20, 24, 220), 4.0f);
+                        dl->AddText(ImVec2(mp.x + 19.0f, mp.y - ts.y - 2.0f),
+                                    IM_COL32(255, 220, 120, 255), buf);
+                    }
+                }
 
                 // Navegação fixa do portal: independe do zoom/pan e aparece
                 // quando um filho foi acessado por Ctrl+clique ou quando o
@@ -7567,6 +7774,18 @@ namespace seedui
                        button))
             mWireframeMode = !mWireframeMode;
         if (wireWasOn) ImGui::PopStyleColor();
+        ImGui::SameLine();
+        // Selecionar no meio: permite clicar no INTERIOR da forma (mesmo sem
+        // preenchimento) para selecioná-la — como se estivesse preenchida.
+        // Desligado, o interior só seleciona quando a forma tem cor de fundo.
+        const bool selectInsideWasOn = mSelecionarInteriorSemPreenchimento;
+        if (selectInsideWasOn) ImGui::PushStyleColor(ImGuiCol_Button, Theme::Hex(0x4f8cff, 0.30f));
+        if (IconButton(IconId::Select, mSelecionarInteriorSemPreenchimento
+                                          ? "Selecionar no meio ATIVO · clique em qualquer ponto da forma seleciona, mesmo sem preenchimento"
+                                          : "Selecionar no meio · permite clicar no interior da forma mesmo sem preenchimento",
+                       button))
+            mSelecionarInteriorSemPreenchimento = !mSelecionarInteriorSemPreenchimento;
+        if (selectInsideWasOn) ImGui::PopStyleColor();
 
         separator();
         IconButton(IconId::Model, "Projeto · Galeria de modelos (M09)", button);

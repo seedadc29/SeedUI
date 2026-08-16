@@ -2,6 +2,8 @@
 
 #include "Geo.h"
 
+#include "ColorUtils.h"
+
 #include <algorithm>
 #include <cfloat>
 #include <ctime>
@@ -94,7 +96,8 @@ namespace seedui
         }
 
         Element* HitElement(Element& element, float x, float y,
-                            bool permitirConteudoPowerClip = false)
+                            bool permitirConteudoPowerClip = false,
+                            bool forcarInterior = false)
         {
             if (!element.visivel) return nullptr;
             const bool powerClip = element.propriedades.is_object() &&
@@ -129,15 +132,27 @@ namespace seedui
                         best = std::min(best, ddx * ddx + ddy * ddy);
                     }
                     inside = best <= 64.0f; // raio 8px
-                    // Caminho FECHADO: clique DENTRO do preenchimento também
-                    // seleciona (teste de ponto no polígono — ray casting).
-                    // Só vale para caminhos com cor de fundo: sem preenchimento
-                    // o interior é transparente e o clique continua no contorno.
-                    if (!inside && closed)
+                    // Clique no MEIO da forma também seleciona quando ela está
+                    // PREENCHIDA (cor_fundo com alpha visível) — inclusive
+                    // caminhos abertos, pois o preenchimento fecha a área entre
+                    // o último e o primeiro ponto. O botão "Selecionar no meio"
+                    // (forcarInterior) estende o interior a formas SEM
+                    // preenchimento, como se estivessem preenchidas.
+                    if (!inside && n >= 3)
                     {
                         bool hasFill = powerClip || (element.estilos.is_object() &&
                             element.estilos.contains("cor_fundo"));
-                        if (hasFill)
+                        if (hasFill && !powerClip && element.estilos.is_object() &&
+                            element.estilos.contains("cor_fundo"))
+                        {
+                            float rgb[3] = { 0.0f, 0.0f, 0.0f };
+                            float alpha = 0.0f;
+                            if (ColorUtils::ParseHexWithAlpha(
+                                    element.estilos["cor_fundo"].get<std::string>(),
+                                    rgb, alpha))
+                                hasFill = alpha > 0.001f;
+                        }
+                        if (hasFill || forcarInterior)
                         {
                             bool insidePoly = false;
                             int j = n - 1;
@@ -213,7 +228,8 @@ namespace seedui
             if (element.tipo == "grupo" && inside) return &element;
             for (auto it = element.filhos.rbegin(); it != element.filhos.rend(); ++it)
                 if (Element* hit = HitElement(*it, x, y,
-                                              permitirConteudoPowerClip)) return hit;
+                                              permitirConteudoPowerClip,
+                                              forcarInterior)) return hit;
             return inside ? &element : nullptr;
         }
 
@@ -506,10 +522,12 @@ namespace seedui
             : nullptr;
     }
 
-    Element* Project::ElementoNoPonto(Modo& modo, float x, float y)
+    Element* Project::ElementoNoPonto(Modo& modo, float x, float y,
+                                      bool forcarInterior)
     {
         for (auto it = modo.raiz.rbegin(); it != modo.raiz.rend(); ++it)
-            if (Element* hit = HitElement(*it, x, y)) return hit;
+            if (Element* hit = HitElement(*it, x, y, false, forcarInterior))
+                return hit;
         return nullptr;
     }
 

@@ -87,7 +87,8 @@ namespace seedui
         // Operacoes estruturais usadas pela Hierarquia. Elementos bloqueados
         // nao podem ser movidos, reparentados ou excluidos.
         static Element* ResolverId(Modo& modo, const std::string& id);
-        static Element* ElementoNoPonto(Modo& modo, float x, float y);
+        static Element* ElementoNoPonto(Modo& modo, float x, float y,
+                                        bool forcarInterior = false);
         static Element* ConteudoPowerClipNoPonto(Modo& modo,
                                                   const std::string& frameId,
                                                   float x, float y,

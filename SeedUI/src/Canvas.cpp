@@ -838,7 +838,8 @@ namespace seedui
                     const char* powerClipEmEdicaoId,
                     const char* powerClipSelecaoDiretaId,
                     const char* elementoAncoraId,
-                    bool canetaAtiva)
+                    bool canetaAtiva,
+                    bool modoRotacao)
     {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         const ImVec2 min = ImGui::GetWindowPos();
@@ -1380,17 +1381,83 @@ namespace seedui
 
                 const ImU32 handleFill = IM_COL32(245, 245, 245, 255);
                 const float hs = 4.0f;
-                const ImVec2 points[] = {
-                    ptTL, ptTM, ptTR,
-                    ptML, ptMR,
-                    ptBL, ptBM, ptBR
-                };
-                for (const ImVec2& point : points)
+                // Modo de rotação estilo CorelDRAW: as quinas exibem setas
+                // CURVAS de rotação (arco duplo com pontas) no lugar dos
+                // quadrados de resize — arrastar uma quina gira o objeto em
+                // torno do pivô (o hit-test devolve o modo 19 nessa hora).
+                const bool corelRotate = modoRotacao && primary &&
+                                         selected->tipo != "grupo";
+                if (corelRotate)
                 {
-                    dl->AddRectFilled(ImVec2(point.x - hs, point.y - hs),
-                                      ImVec2(point.x + hs, point.y + hs), handleFill);
-                    dl->AddRect(ImVec2(point.x - hs, point.y - hs),
-                                ImVec2(point.x + hs, point.y + hs), selection);
+                    // Setas de rotação nas quinas (estilo CorelDRAW): arco
+                    // duplo em VIOLETA, alinhado à rotação real do objeto —
+                    // a diagonal externa é girada junto, então a seta fica
+                    // "colada" à quina e não gira em torno de si mesma.
+                    const ImU32 rotCol = ImGui::ColorConvertFloat4ToU32(
+                        Theme::Hex(0xbb4dff, 1.0f));
+                    const ImU32 rotGlow = ImGui::ColorConvertFloat4ToU32(
+                        Theme::Hex(0xbb4dff, 0.30f));
+                    const float cosR = cosf(rotRad);
+                    const float sinR = sinf(rotRad);
+                    const float diag[4][2] = {
+                        { -1.0f, -1.0f }, { 1.0f, -1.0f },
+                        { -1.0f, 1.0f }, { 1.0f, 1.0f }
+                    };
+                    const ImVec2 rotCorners[4] = { ptTL, ptTR, ptBL, ptBR };
+                    for (int c = 0; c < 4; ++c)
+                    {
+                        // Diagonal externa ROTACIONADA (acompanha o objeto).
+                        const float ox = (diag[c][0] * cosR - diag[c][1] * sinR) * 0.7071f;
+                        const float oy = (diag[c][0] * sinR + diag[c][1] * cosR) * 0.7071f;
+                        const float glyphR = 10.5f;
+                        const ImVec2 ctr(rotCorners[c].x + ox * glyphR * 0.75f,
+                                         rotCorners[c].y + oy * glyphR * 0.75f);
+                        const float baseAng = atan2f(oy, ox);
+                        const float a0 = baseAng - 0.75f;
+                        const float a1 = baseAng + 0.75f;
+                        const int segs = 12;
+                        for (int s = 0; s < segs; ++s)
+                        {
+                            const float ta0 = a0 + (a1 - a0) * s / segs;
+                            const float ta1 = a0 + (a1 - a0) * (s + 1) / segs;
+                            const ImVec2 pa(ctr.x + cosf(ta0) * glyphR,
+                                            ctr.y + sinf(ta0) * glyphR);
+                            const ImVec2 pb(ctr.x + cosf(ta1) * glyphR,
+                                            ctr.y + sinf(ta1) * glyphR);
+                            dl->AddLine(pa, pb, rotGlow, 5.0f);
+                            dl->AddLine(pa, pb, rotCol, 2.0f);
+                        }
+                        auto arrowHead = [&](float ang)
+                        {
+                            const float tipX = ctr.x + cosf(ang) * glyphR;
+                            const float tipY = ctr.y + sinf(ang) * glyphR;
+                            const float tx = -sinf(ang), ty = cosf(ang);
+                            const float nx = cosf(ang), ny = sinf(ang);
+                            const ImVec2 p0(tipX + tx * 5.5f, tipY + ty * 5.5f);
+                            const ImVec2 p1(tipX - tx * 2.5f + nx * 3.5f,
+                                            tipY - ty * 2.5f + ny * 3.5f);
+                            const ImVec2 p2(tipX - tx * 2.5f - nx * 3.5f,
+                                            tipY - ty * 2.5f - ny * 3.5f);
+                            dl->AddTriangleFilled(p0, p1, p2, rotCol);
+                        };
+                        arrowHead(a0);
+                        arrowHead(a1);
+                    }
+                }
+                else
+                {
+                    const ImVec2 points[] = {
+                        ptTL, ptTM, ptTR,
+                        ptML, ptMR,
+                        ptBL, ptBM, ptBR
+                    };
+                    for (const ImVec2& point : points)
+                    {
+                        dl->AddRectFilled(ImVec2(point.x - hs, point.y - hs),
+                                          ImVec2(point.x + hs, point.y + hs), handleFill);
+                        dl->AddRect(ImVec2(point.x - hs, point.y - hs),
+                                    ImVec2(point.x + hs, point.y + hs), selection);
+                    }
                 }
 
                 if (selected->tipo == "elipse" || selected->tipo == "poligono" ||

@@ -261,6 +261,10 @@ namespace seedui
         // render gira em torno do centro da caixa, que muda a cada frame, e
         // a âncora desliza). Restaurado para o modo "centro da caixa" no fim.
         bool mCanvasDragMaterializedPivot = false;
+        // Cursor de resize CUSTOMIZADO (direção exata da alça, sem o snapping
+        // de 45° dos glifos do SO): true enquanto o cursor do SO está oculto
+        // e a seta dupla é desenhada sobre o canvas.
+        bool mCustomCursorActive = false;
         // Delta aplicado no FRAME ANTERIOR do arrasto — a previsão de
         // espaçamento o usa para detectar quando o cursor "pulou" por cima
         // de um alvo (arrasto rápido) e ainda assim engatar no alvo exato.
@@ -352,6 +356,13 @@ namespace seedui
         bool mGridVisible = true;   // ocultar a grade NÃO desliga o snap
         bool mGuidesVisible = true; // ocultar as linhas guia NÃO desliga o snap
         bool mWireframeMode = false; // modo wireframe (só contornos)
+        // Selecionar no meio: permite clicar no INTERIOR da forma (mesmo sem
+        // preenchimento) para selecioná-la — como se estivesse preenchida.
+        bool mSelecionarInteriorSemPreenchimento = false;
+        // Modo de rotação estilo CorelDRAW: 2º clique na forma troca as alças
+        // de resize por alças de ROTAÇÃO nas quinas (setas curvas) + pivô
+        // arrastável. Clicar fora, Esc ou trocar de ferramenta sai do modo.
+        bool mRotationMode = false;
         bool mZoomToMouse = true; // zoom encaminha para o cursor (qualquer controle)
         bool mMarqueeContainOnly = true; // seleção exige cobertura TOTAL do elemento
         bool mColorPickerOpen = false; // janela do seletor de cor (3 modelos)
