@@ -173,34 +173,12 @@ document.addEventListener('DOMContentLoaded', () => {
     else if (e.code === 'KeyV' || e.code === 'KeyW') setTool('select');
   });
 
-  // 9. Tactical Shape Creation & Mode Toggle
-  const btnToggleEdit = document.getElementById('btn-toggle-edit-mode');
-  const labelEdit = document.getElementById('label-edit-mode');
-  const iconEdit = document.getElementById('icon-edit-mode');
-
-  btnToggleEdit?.addEventListener('click', () => {
-    tacticalMap.setEditMode(!tacticalMap.isEditMode);
-    if (tacticalMap.isEditMode) {
-      btnToggleEdit.classList.add('active');
-      if (labelEdit) labelEdit.textContent = 'Editar Mapa';
-      if (iconEdit) iconEdit.className = 'ti ti-edit';
-    } else {
-      btnToggleEdit.classList.remove('active');
-      if (labelEdit) labelEdit.textContent = 'Navegar / Pan';
-      if (iconEdit) iconEdit.className = 'ti ti-hand-grab';
-    }
-  });
-
-  document.getElementById('btn-add-rect-room')?.addEventListener('click', () => {
-    tacticalMap.addShape('rect');
-  });
-
-  document.getElementById('btn-add-circle-room')?.addEventListener('click', () => {
-    tacticalMap.addShape('circle');
-  });
-
-  document.getElementById('btn-add-triangle-room')?.addEventListener('click', () => {
-    tacticalMap.addShape('triangle');
+  // 9. Tactical Map Tool Selector Buttons (Mover, Quadrado, Círculo, Triângulo, Pan)
+  document.querySelectorAll('.tactical-tool-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const toolName = btn.dataset.ttool;
+      if (toolName) tacticalMap.setTool(toolName);
+    });
   });
 
   // Reset tactical zoom button

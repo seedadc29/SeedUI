@@ -498,41 +498,43 @@ html, body {
   gap: 8px;
 }
 
-.tactical-mode-btn {
-  background: var(--seed-bg-chip);
+.tactical-tools-group {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 2px 4px;
+  border-radius: 6px;
   border: 1px solid var(--seed-border-dark);
+  margin-right: 6px;
+}
+
+.tactical-tool-btn {
+  background: transparent;
+  border: 1px solid transparent;
   color: var(--seed-text-muted);
-  padding: 2px 8px;
+  padding: 2px 7px;
   border-radius: 4px;
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   transition: all 0.15s;
-  margin-right: 6px;
 }
 
-.tactical-mode-btn:hover {
+.tactical-tool-btn:hover {
   background: var(--seed-bg-chip-hover);
   color: #ffffff;
 }
 
-.tactical-mode-btn.active {
-  background: rgba(56, 189, 248, 0.18);
+.tactical-tool-btn.active {
+  background: #38bdf8;
+  color: #0b0f19;
   border-color: #38bdf8;
-  color: #38bdf8;
-  box-shadow: 0 0 8px rgba(56, 189, 248, 0.35);
-}
-
-.tactical-shape-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding-right: 8px;
-  margin-right: 6px;
-  border-right: 1px solid var(--seed-border-dark);
+  font-weight: 700;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.5);
 }
 
 .tactical-tool-label {

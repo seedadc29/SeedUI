@@ -15,11 +15,12 @@ export class TacticalMap {
     this.isPanning = false;
     this.lastMouse = { x: 0, y: 0 };
 
-    // Modes: isEditMode = true (Edit / Move / Stretch shapes) vs false (Pan / Navigate)
-    this.isEditMode = true;
+    // Active Tool: 'select' | 'rect' | 'circle' | 'triangle' | 'pan'
+    this.currentTool = 'select';
 
     // Interactive selection & manipulation
     this.selectedRoom = null;
+    this.hoveredRoom = null;
     this.selectedEntity = null;
     this.hoveredHandle = null;
     this.activeDragHandle = null;
@@ -78,12 +79,19 @@ export class TacticalMap {
     }
   }
 
-  setEditMode(enabled) {
-    this.isEditMode = enabled;
-    if (!enabled) {
+  setTool(toolName) {
+    this.currentTool = toolName;
+    document.querySelectorAll('.tactical-tool-btn').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.ttool === toolName);
+    });
+
+    if (toolName === 'pan') {
       this.selectedRoom = null;
       this.activeDragHandle = null;
       this.isDraggingRoom = false;
+      this.canvas.style.cursor = 'grab';
+    } else {
+      this.canvas.style.cursor = 'default';
     }
   }
 
@@ -195,14 +203,7 @@ export class TacticalMap {
     this.rooms.push(newRoom);
     this.selectedRoom = newRoom;
     this.selectedEntity = null;
-    this.isEditMode = true;
-
-    const btnEdit = document.getElementById('btn-toggle-edit-mode');
-    const labelEdit = document.getElementById('label-edit-mode');
-    const iconEdit = document.getElementById('icon-edit-mode');
-    if (btnEdit) btnEdit.classList.add('active');
-    if (labelEdit) labelEdit.textContent = 'Editar Mapa';
-    if (iconEdit) iconEdit.className = 'ti ti-edit';
+    this.setTool('select');
 
     if (this.onSelectRoom) this.onSelectRoom(newRoom);
     return newRoom;
@@ -223,14 +224,21 @@ export class TacticalMap {
 
       const mouse = this.getMapPos(e);
 
-      // Explicit Navigation Mode or Middle Click -> Pan only
-      if (!this.isEditMode || e.button === 1 || e.spaceKey) {
+      // 1. Tool-Specific Actions (Creation Tools)
+      if (this.currentTool === 'rect' || this.currentTool === 'circle' || this.currentTool === 'triangle') {
+        this.addShape(this.currentTool, mouse.x, mouse.y);
+        return;
+      }
+
+      // 2. Pan Tool
+      if (this.currentTool === 'pan' || e.button === 1 || e.spaceKey) {
         this.isPanning = true;
         this.canvas.parentElement?.classList.add('is-panning');
         return;
       }
 
-      // 1. Check Resize Handles on Selected Room (using 16px screen tolerance)
+      // 3. Select & Move Tool
+      // Check Resize Handles on Selected Room (16px screen tolerance)
       if (this.selectedRoom) {
         const handle = this.hitTestHandles(this.selectedRoom, mouse);
         if (handle) {
@@ -240,7 +248,7 @@ export class TacticalMap {
         }
       }
 
-      // 2. Check 3D Entities on Map
+      // Check 3D Entities on Map
       const hitEntity = this.hitTestEntities(mouse.x, mouse.y);
       if (hitEntity) {
         this.selectedEntity = hitEntity;
@@ -250,7 +258,7 @@ export class TacticalMap {
         return;
       }
 
-      // 3. Check Blueprint Rooms (Direct Click on Room)
+      // Check Blueprint Rooms
       const hitRoom = this.hitTestRooms(mouse.x, mouse.y);
       if (hitRoom) {
         const now = Date.now();
@@ -268,12 +276,11 @@ export class TacticalMap {
         return;
       }
 
-      // Clicked on empty space -> Deselect & pan
+      // Clicked on empty canvas -> Deselect room & allow gentle pan if user drags
       this.selectedRoom = null;
       this.selectedEntity = null;
       if (this.onSelectRoom) this.onSelectRoom(null);
       this.isPanning = true;
-      this.canvas.parentElement?.classList.add('is-panning');
       this.cancelInlineRename();
     });
 
@@ -281,14 +288,19 @@ export class TacticalMap {
       const mouse = this.getMapPos(e);
 
       if (!isMouseDown) {
-        if (this.isEditMode && this.selectedRoom) {
-          this.hoveredHandle = this.hitTestHandles(this.selectedRoom, mouse);
-          this.updateCursor(this.hoveredHandle);
-        } else if (this.isEditMode) {
-          const hoveredRoom = this.hitTestRooms(mouse.x, mouse.y);
-          this.canvas.style.cursor = hoveredRoom ? 'pointer' : 'default';
-        } else {
+        if (this.currentTool === 'select') {
+          if (this.selectedRoom) {
+            this.hoveredHandle = this.hitTestHandles(this.selectedRoom, mouse);
+            this.updateCursor(this.hoveredHandle);
+          } else {
+            this.hoveredHandle = null;
+            this.hoveredRoom = this.hitTestRooms(mouse.x, mouse.y);
+            this.canvas.style.cursor = this.hoveredRoom ? 'pointer' : 'default';
+          }
+        } else if (this.currentTool === 'pan') {
           this.canvas.style.cursor = 'grab';
+        } else {
+          this.canvas.style.cursor = 'crosshair';
         }
         this.lastMouse = { x: e.clientX, y: e.clientY };
         return;
@@ -346,6 +358,7 @@ export class TacticalMap {
       else if (this.isPanning) {
         this.panX += e.clientX - this.lastMouse.x;
         this.panY += e.clientY - this.lastMouse.y;
+        this.canvas.parentElement?.classList.add('is-panning');
       }
 
       this.lastMouse = { x: e.clientX, y: e.clientY };
@@ -368,7 +381,7 @@ export class TacticalMap {
       this.zoom = Math.max(0.4, Math.min(2.5, this.zoom * zoomFactor));
     }, { passive: false });
 
-    // Keyboard Shortcuts (Delete room)
+    // Keyboard Shortcuts (Delete room, tool hotkeys)
     window.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
       if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -377,13 +390,17 @@ export class TacticalMap {
           this.selectedRoom = null;
           if (this.onSelectRoom) this.onSelectRoom(null);
         }
-      }
+      } else if (e.code === 'KeyV') this.setTool('select');
+      else if (e.code === 'KeyR') this.setTool('rect');
+      else if (e.code === 'KeyC') this.setTool('circle');
+      else if (e.code === 'KeyT') this.setTool('triangle');
+      else if (e.code === 'KeyH') this.setTool('pan');
     });
   }
 
   updateCursor(handle) {
     if (!handle) {
-      this.canvas.style.cursor = this.isEditMode ? 'default' : 'grab';
+      this.canvas.style.cursor = this.currentTool === 'pan' ? 'grab' : (this.currentTool === 'select' ? 'default' : 'crosshair');
       return;
     }
     if (handle === 'n' || handle === 's') this.canvas.style.cursor = 'ns-resize';
@@ -409,12 +426,11 @@ export class TacticalMap {
     for (let i = this.rooms.length - 1; i >= 0; i--) {
       const r = this.rooms[i];
       if (r.shape === 'circle') {
-        if (Math.hypot(worldX - r.x, worldZ - r.z) <= r.radius + 0.3) return r;
+        if (Math.hypot(worldX - r.x, worldZ - r.z) <= r.radius) return r;
+      } else if (r.shape === 'triangle') {
+        if (worldX >= r.x && worldX <= r.x + r.w && worldZ >= r.z && worldZ <= r.z + r.h) return r;
       } else {
-        const pad = 0.3;
-        if (worldX >= r.x - pad && worldX <= r.x + r.w + pad && worldZ >= r.z - pad && worldZ <= r.z + r.h + pad) {
-          return r;
-        }
+        if (worldX >= r.x && worldX <= r.x + r.w && worldZ >= r.z && worldZ <= r.z + r.h) return r;
       }
     }
     return null;
@@ -438,7 +454,7 @@ export class TacticalMap {
   }
 
   hitTestHandles(room, mouse) {
-    const hitTolerancePx = 16; // 16 CSS pixels radius for effortless grabbing!
+    const hitTolerancePx = 16;
 
     const toScreen = (wx, wz) => ({
       x: this.panX + (wx * this.meterToPx) * this.zoom,
@@ -560,6 +576,7 @@ export class TacticalMap {
   drawRooms() {
     this.rooms.forEach((room) => {
       const isSel = this.selectedRoom === room;
+      const isHov = this.hoveredRoom === room && !isSel;
       const rx = room.x * this.meterToPx;
       const rz = room.z * this.meterToPx;
 
@@ -573,11 +590,11 @@ export class TacticalMap {
         this.ctx.fillStyle = room.color;
         this.ctx.fill();
 
-        this.ctx.strokeStyle = isSel ? '#38bdf8' : '#333742';
-        this.ctx.lineWidth = isSel ? 3 : 2;
+        this.ctx.strokeStyle = isSel ? '#38bdf8' : (isHov ? '#0284c7' : '#333742');
+        this.ctx.lineWidth = isSel ? 3 : (isHov ? 2.5 : 2);
         if (isSel) {
           this.ctx.shadowColor = '#38bdf8';
-          this.ctx.shadowBlur = 12;
+          this.ctx.shadowBlur = 14;
         }
         this.ctx.stroke();
 
@@ -597,11 +614,11 @@ export class TacticalMap {
         this.ctx.fillStyle = room.color;
         this.ctx.fill();
 
-        this.ctx.strokeStyle = isSel ? '#38bdf8' : '#333742';
-        this.ctx.lineWidth = isSel ? 3 : 2;
+        this.ctx.strokeStyle = isSel ? '#38bdf8' : (isHov ? '#0284c7' : '#333742');
+        this.ctx.lineWidth = isSel ? 3 : (isHov ? 2.5 : 2);
         if (isSel) {
           this.ctx.shadowColor = '#38bdf8';
-          this.ctx.shadowBlur = 12;
+          this.ctx.shadowBlur = 14;
         }
         this.ctx.stroke();
 
@@ -625,11 +642,11 @@ export class TacticalMap {
           this.ctx.stroke();
         }
 
-        this.ctx.strokeStyle = isSel ? '#38bdf8' : '#333742';
-        this.ctx.lineWidth = isSel ? 3 : 2;
+        this.ctx.strokeStyle = isSel ? '#38bdf8' : (isHov ? '#0284c7' : '#333742');
+        this.ctx.lineWidth = isSel ? 3 : (isHov ? 2.5 : 2);
         if (isSel) {
           this.ctx.shadowColor = '#38bdf8';
-          this.ctx.shadowBlur = 12;
+          this.ctx.shadowBlur = 14;
         }
         this.ctx.strokeRect(rx, rz, rw, rh);
 
@@ -644,7 +661,7 @@ export class TacticalMap {
     this.ctx.font = 'bold 11px sans-serif';
     const txtWidth = this.ctx.measureText(text).width;
 
-    this.ctx.fillStyle = 'rgba(15, 17, 23, 0.85)';
+    this.ctx.fillStyle = 'rgba(15, 17, 23, 0.88)';
     this.ctx.fillRect(cx - txtWidth / 2 - 6, cy - 8, txtWidth + 12, 16);
 
     this.ctx.fillStyle = isSel ? '#38bdf8' : 'rgba(255, 255, 255, 0.65)';

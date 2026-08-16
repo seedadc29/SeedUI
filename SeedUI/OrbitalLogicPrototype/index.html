@@ -163,23 +163,22 @@
               <span class="pane-chip" id="chip-tactical-status"><i class="ti ti-satellite"></i> Radar Ao Vivo</span>
             </div>
             <div class="pane-header-actions">
-              <!-- Edit Map Mode Toggle -->
-              <button class="tactical-mode-btn active" id="btn-toggle-edit-mode" title="Alternar entre Modo Editar Mapa e Modo Navegação / Pan">
-                <i class="ti ti-edit" id="icon-edit-mode"></i>
-                <span id="label-edit-mode">Editar Mapa</span>
-              </button>
-
-              <!-- Shape Creation Tools (Square, Circle, Triangle) -->
-              <div class="tactical-shape-toolbar">
-                <span class="tactical-tool-label">FORMAS:</span>
-                <button class="tactical-shape-btn" id="btn-add-rect-room" title="Adicionar Sala Quadrada / Retangular">
-                  <i class="ti ti-square"></i>
+              <!-- Tactical Map Tools Group -->
+              <div class="tactical-tools-group">
+                <button class="tactical-tool-btn active" id="tool-tactical-select" data-ttool="select" title="Seleção & Mover Salas (V)">
+                  <i class="ti ti-pointer"></i> <span>Mover</span>
                 </button>
-                <button class="tactical-shape-btn" id="btn-add-circle-room" title="Adicionar Zona Circular">
-                  <i class="ti ti-circle"></i>
+                <button class="tactical-tool-btn" id="tool-tactical-rect" data-ttool="rect" title="Criar Sala Retangular / Quadrada (R)">
+                  <i class="ti ti-square"></i> <span>Quadrado</span>
                 </button>
-                <button class="tactical-shape-btn" id="btn-add-triangle-room" title="Adicionar Zona Triangular">
-                  <i class="ti ti-triangle"></i>
+                <button class="tactical-tool-btn" id="tool-tactical-circle" data-ttool="circle" title="Criar Zona Circular (C)">
+                  <i class="ti ti-circle"></i> <span>Círculo</span>
+                </button>
+                <button class="tactical-tool-btn" id="tool-tactical-triangle" data-ttool="triangle" title="Criar Zona Triangular (T)">
+                  <i class="ti ti-triangle"></i> <span>Triângulo</span>
+                </button>
+                <button class="tactical-tool-btn" id="tool-tactical-pan" data-ttool="pan" title="Mão / Navegar Mapa (H)">
+                  <i class="ti ti-hand-grab"></i> <span>Pan</span>
                 </button>
               </div>
 
