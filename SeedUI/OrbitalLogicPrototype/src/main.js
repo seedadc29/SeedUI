@@ -18,6 +18,57 @@ document.addEventListener('DOMContentLoaded', () => {
   // 4. Initialize UI, Inspector, Splitters & Accordions
   const paletteUI = new PaletteUI(orbitalGraph, scene3D, historyManager);
 
+  // 5. Cross-Selection Synchronization (3D <-> Orbital Graph)
+  scene3D.onEntitySelected = (sunId) => {
+    if (!sunId) {
+      orbitalGraph.selectedEntity = null;
+      paletteUI.renderInspector(null);
+    } else {
+      const sun = orbitalGraph.suns.find(s => s.id === sunId);
+      if (sun) {
+        orbitalGraph.selectedEntity = sun;
+        paletteUI.renderInspector(sun);
+      }
+    }
+  };
+
+  const origSelectionChange = orbitalGraph.onSelectionChange;
+  orbitalGraph.onSelectionChange = (entity) => {
+    if (origSelectionChange) origSelectionChange(entity);
+    if (entity) {
+      const targetSunId = entity.type === 'sun' ? entity.id : entity.parentSun?.id;
+      if (targetSunId) {
+        scene3D.selectEntityBySunId(targetSunId);
+      }
+    }
+  };
+
+  // 6. Toolshelf Buttons (Transform Gizmo Modes)
+  const toolButtons = document.querySelectorAll('.seed-shelf-btn[data-tool]');
+  const setTool = (toolName) => {
+    toolButtons.forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.tool === toolName);
+    });
+
+    if (toolName === 'translate' || toolName === 'rotate' || toolName === 'scale') {
+      scene3D.setGizmoMode(toolName);
+    }
+  };
+
+  document.getElementById('tool-select')?.addEventListener('click', () => setTool('select'));
+  document.getElementById('tool-move')?.addEventListener('click', () => setTool('translate'));
+  document.getElementById('tool-rotate')?.addEventListener('click', () => setTool('rotate'));
+  document.getElementById('tool-scale')?.addEventListener('click', () => setTool('scale'));
+
+  // Keyboard shortcut listener for active shelf button updates
+  window.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT') return;
+    if (e.code === 'KeyG') setTool('translate');
+    else if (e.code === 'KeyR') setTool('rotate');
+    else if (e.code === 'KeyS' && !e.ctrlKey) setTool('scale');
+    else if (e.code === 'KeyV' || e.code === 'KeyW') setTool('select');
+  });
+
   // Reset focus button
   document.getElementById('btn-reset-zoom')?.addEventListener('click', () => {
     orbitalGraph.panX = canvasOrbital.parentElement.clientWidth / 2;
@@ -46,5 +97,5 @@ document.addEventListener('DOMContentLoaded', () => {
     orbitalGraph.zoom = Math.max(0.4, orbitalGraph.zoom * 0.85);
   });
 
-  console.log('🪐 Seed Studio - Lógica Orbital Funcional Inicializada!');
+  console.log('🪐 Seed Studio - Lógica Orbital Funcional com Gizmo 3D Inicializado!');
 });

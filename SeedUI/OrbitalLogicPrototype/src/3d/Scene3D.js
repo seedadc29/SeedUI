@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 
 export class Scene3D {
   constructor(canvas) {
@@ -14,13 +15,17 @@ export class Scene3D {
 
     // Dynamic ECS Entities: Map(sunId -> EntityData)
     this.entities = new Map();
+    this.selectedEntity = null;
     this.onCollisionEvent = null;
+    this.onEntitySelected = null;
 
-    // Camera view transition state
-    this.isTransitioningCamera = false;
+    // Raycaster for 3D selection
+    this.raycaster = new THREE.Raycaster();
+    this.mouse = new THREE.Vector2();
 
     this.initScene();
     this.initControls();
+    this.initTransformControls();
     this.initShortcuts();
     this.initInputs();
     this.animate();
@@ -85,11 +90,6 @@ export class Scene3D {
     this.controls.screenSpacePanning = true;
     this.controls.target.set(0, 0.8, 0);
 
-    // Authentic Blender Mouse Mapping:
-    // Left Drag (when not in Play Mode): Rotate
-    // Middle Drag: Rotate
-    // Shift + Middle / Shift + Left: Pan
-    // Ctrl + Middle / Wheel: Zoom
     this.controls.mouseButtons = {
       LEFT: THREE.MOUSE.ROTATE,
       MIDDLE: THREE.MOUSE.ROTATE,
@@ -97,51 +97,137 @@ export class Scene3D {
     };
 
     // Smooth gating
+    let downPos = { x: 0, y: 0 };
     this.canvas.addEventListener('pointerdown', (e) => {
+      downPos = { x: e.clientX, y: e.clientY };
       if (this.isPlaying) {
-        // In play mode, LMB is for gameplay interaction
-        if (e.button === 0 && !e.altKey) {
+        if (e.button === 0 && !e.altKey) this.controls.enabled = false;
+        else this.controls.enabled = true;
+      } else {
+        if (this.transformControls && this.transformControls.dragging) {
           this.controls.enabled = false;
         } else {
           this.controls.enabled = true;
         }
-      } else {
-        this.controls.enabled = true;
       }
     });
+
+    // Raycast selection on click
+    this.canvas.addEventListener('click', (e) => {
+      if (this.isPlaying) return;
+      if (Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y) > 4) return;
+      if (this.transformControls && this.transformControls.dragging) return;
+
+      const rect = this.canvas.getBoundingClientRect();
+      this.mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      this.mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+      this.raycaster.setFromCamera(this.mouse, this.activeCamera);
+      const meshes = Array.from(this.entities.values()).map(e => e.mesh).filter(m => m && m.geometry.type !== 'PlaneGeometry');
+      const intersects = this.raycaster.intersectObjects(meshes, true);
+
+      if (intersects.length > 0) {
+        let hitMesh = intersects[0].object;
+        while (hitMesh && hitMesh.parent && hitMesh.parent !== this.scene) {
+          hitMesh = hitMesh.parent;
+        }
+        for (const ent of this.entities.values()) {
+          if (ent.mesh === hitMesh) {
+            this.selectEntity(ent);
+            break;
+          }
+        }
+      } else {
+        this.selectEntity(null);
+      }
+    });
+  }
+
+  // --- Interactive Transform Gizmo (Translate, Rotate, Scale) ---
+  initTransformControls() {
+    this.transformControls = new TransformControls(this.activeCamera, this.canvas);
+    this.transformControls.size = 0.85;
+    this.transformControls.setSpace('world');
+    this.transformControls.setMode('translate');
+
+    this.transformControls.addEventListener('dragging-changed', (e) => {
+      this.controls.enabled = !e.value;
+      if (!e.value && this.selectedEntity) {
+        // Update initialPos when dragging ends
+        this.selectedEntity.initialPos.copy(this.selectedEntity.mesh.position);
+      }
+    });
+
+    const helper = this.transformControls.getHelper ? this.transformControls.getHelper() : this.transformControls;
+    this.scene.add(helper);
+  }
+
+  setGizmoMode(mode) { // 'translate' | 'rotate' | 'scale'
+    if (this.transformControls) {
+      this.transformControls.setMode(mode);
+    }
+  }
+
+  selectEntity(entity) {
+    this.selectedEntity = entity;
+
+    if (entity && entity.mesh && entity.shape !== 'plane') {
+      this.transformControls.attach(entity.mesh);
+      if (this.onEntitySelected) {
+        this.onEntitySelected(entity.sunId);
+      }
+    } else {
+      this.transformControls.detach();
+      if (this.onEntitySelected) {
+        this.onEntitySelected(null);
+      }
+    }
+  }
+
+  selectEntityBySunId(sunId) {
+    if (!sunId) {
+      this.selectEntity(null);
+      return;
+    }
+    const ent = this.entities.get(sunId);
+    if (ent) this.selectEntity(ent);
   }
 
   // --- Complete Blender Viewport Shortcuts ---
   initShortcuts() {
     window.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT') return;
-      if (this.isPlaying) return; // In play mode keys move player
+      if (this.isPlaying) return;
 
-      // Numpad 1 / 1: Front View (Trás com Ctrl)
-      if (e.code === 'Numpad1' || e.code === 'Digit1') {
+      // Transform Gizmo shortcuts
+      if (e.code === 'KeyG') {
+        e.preventDefault();
+        this.setGizmoMode('translate');
+      } else if (e.code === 'KeyR') {
+        e.preventDefault();
+        this.setGizmoMode('rotate');
+      } else if (e.code === 'KeyS' && !e.ctrlKey) {
+        e.preventDefault();
+        this.setGizmoMode('scale');
+      }
+
+      // Camera view shortcuts
+      else if (e.code === 'Numpad1' || e.code === 'Digit1') {
         e.preventDefault();
         if (e.ctrlKey) this.setCameraView('back');
         else this.setCameraView('front');
-      }
-      // Numpad 3 / 3: Right View (Esquerda com Ctrl)
-      else if (e.code === 'Numpad3' || e.code === 'Digit3') {
+      } else if (e.code === 'Numpad3' || e.code === 'Digit3') {
         e.preventDefault();
         if (e.ctrlKey) this.setCameraView('left');
         else this.setCameraView('right');
-      }
-      // Numpad 7 / 7: Top View (Inferior com Ctrl)
-      else if (e.code === 'Numpad7' || e.code === 'Digit7') {
+      } else if (e.code === 'Numpad7' || e.code === 'Digit7') {
         e.preventDefault();
         if (e.ctrlKey) this.setCameraView('bottom');
         else this.setCameraView('top');
-      }
-      // Numpad 5 / 5: Toggle Persp / Ortho
-      else if (e.code === 'Numpad5' || e.code === 'Digit5') {
+      } else if (e.code === 'Numpad5' || e.code === 'Digit5') {
         e.preventDefault();
         this.toggleProjection();
-      }
-      // Numpad . / F / Home: Frame / Focus Selected Entity
-      else if (e.code === 'NumpadDecimal' || e.code === 'KeyF' || e.code === 'Home') {
+      } else if (e.code === 'NumpadDecimal' || e.code === 'KeyF' || e.code === 'Home') {
         e.preventDefault();
         this.frameSelectedEntity();
       }
@@ -175,13 +261,14 @@ export class Scene3D {
 
     this.activeCamera = newCam;
     this.controls.object = newCam;
+    this.transformControls.camera = newCam;
     this.controls.update();
     this.onResize();
   }
 
   frameSelectedEntity() {
-    const playerEnt = this.getPlayerEntity();
-    const target = playerEnt && playerEnt.mesh ? playerEnt.mesh.position.clone() : new THREE.Vector3(0, 0.8, 0);
+    const ent = this.selectedEntity || this.getPlayerEntity();
+    const target = ent && ent.mesh ? ent.mesh.position.clone() : new THREE.Vector3(0, 0.8, 0);
     const newPos = new THREE.Vector3(target.x + 6, target.y + 5, target.z + 8);
     this.animateCameraTo(newPos, target);
   }
@@ -208,7 +295,7 @@ export class Scene3D {
     step();
   }
 
-  // --- Strict Mathematical Sync with Orbital Logic Graph ---
+  // --- Dynamic Synchronization with Orbital Logic Suns ---
   syncWithOrbitalSuns(suns) {
     if (!suns || suns.length === 0) {
       this.entities.forEach(ent => {
@@ -218,6 +305,7 @@ export class Scene3D {
         }
       });
       this.entities.clear();
+      this.selectEntity(null);
       return;
     }
 
@@ -230,6 +318,7 @@ export class Scene3D {
           this.scene.remove(ent.mesh);
           ent.mesh.geometry?.dispose();
         }
+        if (this.selectedEntity === ent) this.selectEntity(null);
         this.entities.delete(sunId);
       }
     });
@@ -242,7 +331,6 @@ export class Scene3D {
       else if (sunNameUpper.includes('INIMIGO') || sunNameUpper.includes('ENEMY')) entityType = 'enemy';
       else if (sunNameUpper.includes('NPC')) entityType = 'npc';
 
-      // Inspect orbiting planets
       let modelShape = null;
       let hasGroundPlane = false;
       let hasMove = false;
@@ -261,7 +349,6 @@ export class Scene3D {
       sun.planets.forEach(planet => {
         const pName = planet.name.toLowerCase();
 
-        // Model Mesh
         if (pName.includes('cubo') || pName.includes('cube')) modelShape = 'cube';
         else if (pName.includes('esfera') || pName.includes('sphere')) modelShape = 'sphere';
         else if (pName.includes('cilindro') || pName.includes('cylinder')) modelShape = 'cylinder';
@@ -271,7 +358,6 @@ export class Scene3D {
           hasGroundPlane = true;
         }
 
-        // Capabilities
         if (pName === 'andar') {
           hasMove = true;
           const speedMoon = planet.moons?.find(m => m.name.toLowerCase().includes('velocidade'));
@@ -329,6 +415,11 @@ export class Scene3D {
           initialPos: mesh.position.clone()
         };
         this.entities.set(sun.id, ent);
+
+        // Auto select player by default
+        if (entityType === 'player' && !this.selectedEntity) {
+          this.selectEntity(ent);
+        }
       } else {
         if (ent.shape !== modelShape) {
           this.scene.remove(ent.mesh);
@@ -339,6 +430,7 @@ export class Scene3D {
           this.scene.add(newMesh);
           ent.mesh = newMesh;
           ent.shape = modelShape;
+          if (this.selectedEntity === ent) this.transformControls.attach(newMesh);
         }
 
         ent.sunName = sun.name;
@@ -387,9 +479,9 @@ export class Scene3D {
       yPos = 1.1;
     }
 
-    let color = 0x1f1f22; // Player dark charcoal
-    if (type === 'enemy') color = 0x5a1818; // Crimson Enemy
-    else if (type === 'npc') color = 0x184a28; // Forest NPC
+    let color = 0x1f1f22;
+    if (type === 'enemy') color = 0x5a1818;
+    else if (type === 'npc') color = 0x184a28;
     else if (type === 'object') color = index % 2 === 1 ? 0x2a2540 : 0x203242;
 
     mat = new THREE.MeshStandardMaterial({ color, roughness: 0.45, metalness: 0.2 });
@@ -398,7 +490,6 @@ export class Scene3D {
     mesh.castShadow = true;
     mesh.receiveShadow = true;
 
-    // Edge highlight
     const edgeGeo = new THREE.EdgesGeometry(geo);
     const edgeMat = new THREE.LineBasicMaterial({
       color: type === 'player' ? 0x555560 : (type === 'enemy' ? 0xff4444 : 0x44ff88),
@@ -442,6 +533,11 @@ export class Scene3D {
 
   setPlayMode(playing) {
     this.isPlaying = playing;
+    if (this.transformControls) {
+      if (playing) this.transformControls.detach();
+      else if (this.selectedEntity && this.selectedEntity.mesh) this.transformControls.attach(this.selectedEntity.mesh);
+    }
+
     if (!playing) {
       this.entities.forEach(ent => {
         if (ent.mesh && ent.initialPos) {
