@@ -1822,6 +1822,11 @@ namespace seedui
                                         spts[index]["cy2"] = -dy;
                                         spts[index]["curva"] = 1.0f;
                                     }
+                                    // Alça arrastada pode esticar a curva além
+                                    // dos nós — recalcula a caixa para as
+                                    // alças de seleção continuarem cobrindo a
+                                    // forma toda.
+                                    RecalcularCaixaCaminho(*sel);
                                 }
                                 else
                                 {
@@ -1830,6 +1835,7 @@ namespace seedui
                                     spts[index]["cx2"] = px - nx;
                                     spts[index]["cy2"] = py - ny;
                                     spts[index]["curva"] = 1.0f;
+                                    RecalcularCaixaCaminho(*sel);
                                 }
                                 mProjectDirty = true;
                             }
@@ -2122,6 +2128,9 @@ namespace seedui
                         last["cy2"] = 0.0f;
                         last["curva"] = 0.0f;
                     }
+                    // A alça de curva pode esticar além da caixa atual —
+                    // recalcula para as alças de seleção cobrirem a forma.
+                    RecalcularCaixaCaminho(*path);
                 }
             }
             mProjectDirty = true;
@@ -3978,18 +3987,64 @@ namespace seedui
                 if (rdx * rdx + rdy * rdy <= rotTol * rotTol) return 14;
             }
 
-            // Caminho (caneta): com a ferramenta de SELEÇÃO/transformação o
-            // caminho se comporta como um objeto ÚNICO — tem alças de resize
-            // (2-9), rotação (14) e pivô (15) como os demais elementos, e o
-            // clique dentro da caixa move a forma INTEIRA (modo 1). A edição
-            // de NÓS (arrastar pontos/alças) fica para a CANETA (HandlePenTool).
-
-            // Transforma o ponto (x, y) para o espaço local não rotacionado do elemento
+            // Transforma o ponto (x, y) para o espaço local não rotacionado
+            // do elemento — usado tanto no hit-test dos NÓS (pontos locais)
+            // quanto nas alças de resize (a caixa é local).
             float localX = x;
             float localY = y;
             if (rotRad != 0.0f)
             {
                 Geo::RotatePoint(localX, localY, px, py, -rotRad);
+            }
+
+            // Caminho (caneta): NÓS e alças de curva têm prioridade absoluta
+            // (16 = nó, 17 = alça de SAÍDA, 18 = alça de ENTRADA) — clicar
+            // num ponto edita aquele ponto, em qualquer ferramenta. Fora dos
+            // nós, o caminho se comporta como objeto ÚNICO: alças de resize
+            // (2-9), rotação (14), pivô (15) e clique no corpo move a forma
+            // INTEIRA (modo 1).
+            if (element.tipo == "caminho" &&
+                element.transformacao.contains("pontos") &&
+                element.transformacao["pontos"].is_array())
+            {
+                const auto& pts = element.transformacao["pontos"];
+                const float nodeTol = 13.0f / std::max(0.25f, viewScale);
+                const float nodeTolSq = nodeTol * nodeTol;
+                for (int i = 0; i < (int)pts.size(); ++i)
+                {
+                    const float nx = ex + pts[i].value("x", 0.0f);
+                    const float ny = ey + pts[i].value("y", 0.0f);
+                    const bool broken = pts[i].value("quebrado", 0.0f) > 0.5f;
+                    // Alça de entrada
+                    const float ix = broken
+                        ? nx + pts[i].value("cx1", 0.0f)
+                        : nx - pts[i].value("cx2", 0.0f);
+                    const float iy = broken
+                        ? ny + pts[i].value("cy1", 0.0f)
+                        : ny - pts[i].value("cy2", 0.0f);
+                    const float idx = localX - ix, idy = localY - iy;
+                    if (idx * idx + idy * idy <= nodeTolSq)
+                    {
+                        mPathEditIndex = i;
+                        return 18;
+                    }
+                    // Alça de saída
+                    const float hx = nx + pts[i].value("cx2", 0.0f);
+                    const float hy = ny + pts[i].value("cy2", 0.0f);
+                    const float hdx = localX - hx, hdy = localY - hy;
+                    if (hdx * hdx + hdy * hdy <= nodeTolSq)
+                    {
+                        mPathEditIndex = i;
+                        return 17;
+                    }
+                    // Nó central
+                    const float ndx = localX - nx, ndy = localY - ny;
+                    if (ndx * ndx + ndy * ndy <= nodeTolSq)
+                    {
+                        mPathEditIndex = i;
+                        return 16;
+                    }
+                }
             }
 
             if (localX < ex - tolerance || localX > ex + ew + tolerance ||
@@ -5078,10 +5133,25 @@ namespace seedui
                     {
                         const float bx = element->transformacao.value("x", 0.0f);
                         const float by = element->transformacao.value("y", 0.0f);
+                        // Caminho ROTACIONADO: o mouse está em coordenadas
+                        // de PROJETO, mas os pontos são armazenados no espaço
+                        // LOCAL (não rotacionado) do elemento. Converte o
+                        // mouse para o espaço local — mesmo tratamento do
+                        // resize — para o nó não "escapar" da forma ao
+                        // arrastar um objeto girado.
+                        float mox = mouseX, moy = mouseY;
+                        const float rotRadNode = Geo::DegToRad(
+                            Geo::ElementRotation(*element));
+                        if (rotRadNode != 0.0f)
+                        {
+                            float px0, py0;
+                            Geo::ElementPivot(*element, px0, py0);
+                            Geo::RotatePoint(mox, moy, px0, py0, -rotRadNode);
+                        }
                         if (mCanvasDragMode == 16)
                         {
-                            pts[index]["x"] = mouseX - bx;
-                            pts[index]["y"] = mouseY - by;
+                            pts[index]["x"] = mox - bx;
+                            pts[index]["y"] = moy - by;
                             RecalcularCaixaCaminho(*element);
                         }
                         else if (mCanvasDragMode == 18)
@@ -5092,7 +5162,7 @@ namespace seedui
                             const float nx = bx + pts[index].value("x", 0.0f);
                             const float ny = by + pts[index].value("y", 0.0f);
                             const bool broken = pts[index].value("quebrado", 0.0f) > 0.5f;
-                            const float dx = mouseX - nx, dy = mouseY - ny;
+                            const float dx = mox - nx, dy = moy - ny;
                             if (broken)
                             {
                                 pts[index]["cx1"] = dx;
@@ -5105,14 +5175,16 @@ namespace seedui
                                 pts[index]["cy2"] = -dy;
                                 pts[index]["curva"] = 1.0f;
                             }
+                            RecalcularCaixaCaminho(*element);
                         }
                         else
                         {
                             const float nx = bx + pts[index].value("x", 0.0f);
                             const float ny = by + pts[index].value("y", 0.0f);
-                            pts[index]["cx2"] = mouseX - nx;
-                            pts[index]["cy2"] = mouseY - ny;
+                            pts[index]["cx2"] = mox - nx;
+                            pts[index]["cy2"] = moy - ny;
                             pts[index]["curva"] = 1.0f;
+                            RecalcularCaixaCaminho(*element);
                         }
                         mProjectDirty = true;
                     }
@@ -5129,6 +5201,23 @@ namespace seedui
                                        mCanvasDragMode == 7;
                 const bool resizeBottom = mCanvasDragMode == 5 || mCanvasDragMode == 8 ||
                                           mCanvasDragMode == 9;
+
+                // Objeto ROTACIONADO: o delta do mouse (dx/dy) está em
+                // coordenadas de PROJETO, mas as alças de resize operam na
+                // caixa LOCAL (não rotacionada) do elemento. Converte o
+                // delta para o espaço local girando por -rotRad como vetor —
+                // sem isso, puxar a alça de um objeto girado move a aresta
+                // errada, a forma "desliza"/deforma e a seta parece fora de
+                // orientação. (Multi-seleção usa a caixa conjunta alinhada
+                // aos eixos e força mCanvasDragRotation = 0, então o delta
+                // do projeto já é o correto.)
+                float dragDx = dx;
+                float dragDy = dy;
+                if (mCanvasDragRotation != 0.0f)
+                {
+                    const float rotRad = Geo::DegToRad(mCanvasDragRotation);
+                    Geo::RotatePoint(dragDx, dragDy, 0.0f, 0.0f, -rotRad);
+                }
 
                 // Shift+Alt + alça de CANTO = redimensionamento PROPORCIONAL
                 // (uniforme): largura e altura escalam JUNTAS, preservando a
@@ -5244,10 +5333,10 @@ namespace seedui
                     float hx, hy, ax, ay;
                     switch (mCanvasDragMode)
                     {
-                        case 6: hx = x0 + dx; hy = y0 + dy; ax = x1; ay = y1; break; // TL
-                        case 7: hx = x1 + dx; hy = y0 + dy; ax = x0; ay = y1; break; // TR
-                        case 8: hx = x0 + dx; hy = y1 + dy; ax = x1; ay = y0; break; // BL
-                        default: hx = x1 + dx; hy = y1 + dy; ax = x0; ay = y0; break; // BR
+                        case 6: hx = x0 + dragDx; hy = y0 + dragDy; ax = x1; ay = y1; break; // TL
+                        case 7: hx = x1 + dragDx; hy = y0 + dragDy; ax = x0; ay = y1; break; // TR
+                        case 8: hx = x0 + dragDx; hy = y1 + dragDy; ax = x1; ay = y0; break; // BL
+                        default: hx = x1 + dragDx; hy = y1 + dragDy; ax = x0; ay = y0; break; // BR
                     }
                     const float origW = std::max(0.01f, mCanvasDragW);
                     const float origH = std::max(0.01f, mCanvasDragH);
@@ -5259,13 +5348,13 @@ namespace seedui
 
                 // Resize livre: sem travas de tamanho mínimo (compressão total até 0 e inversão/flip para o lado oposto).
                 if (resizeLeft)
-                    left = mCanvasDragX + dx;
+                    left = mCanvasDragX + dragDx;
                 if (resizeRight)
-                    right = mCanvasDragX + mCanvasDragW + dx;
+                    right = mCanvasDragX + mCanvasDragW + dragDx;
                 if (resizeTop)
-                    top = mCanvasDragY + dy;
+                    top = mCanvasDragY + dragDy;
                 if (resizeBottom)
-                    bottom = mCanvasDragY + mCanvasDragH + dy;
+                    bottom = mCanvasDragY + mCanvasDragH + dragDy;
 
                 // Resize ESPELHADO (Shift isolado): a aresta oposta à alça
                 // espelha o movimento em torno do ponto de origem (pivô).
@@ -5279,23 +5368,23 @@ namespace seedui
                     const float origBottom = mCanvasDragY + mCanvasDragH;
                     if (resizeRight)
                     {
-                        right = origRight + dx;
-                        left = 2.0f * px - origRight - dx;
+                        right = origRight + dragDx;
+                        left = 2.0f * px - origRight - dragDx;
                     }
                     else if (resizeLeft)
                     {
-                        left = origLeft + dx;
-                        right = 2.0f * px - origLeft - dx;
+                        left = origLeft + dragDx;
+                        right = 2.0f * px - origLeft - dragDx;
                     }
                     if (resizeBottom)
                     {
-                        bottom = origBottom + dy;
-                        top = 2.0f * py - origBottom - dy;
+                        bottom = origBottom + dragDy;
+                        top = 2.0f * py - origBottom - dragDy;
                     }
                     else if (resizeTop)
                     {
-                        top = origTop + dy;
-                        bottom = 2.0f * py - origTop - dy;
+                        top = origTop + dragDy;
+                        bottom = 2.0f * py - origTop - dragDy;
                     }
                 }
 
@@ -5352,10 +5441,10 @@ namespace seedui
                         float hx, hy, ax, ay;
                         switch (mCanvasDragMode)
                         {
-                            case 6: hx = gx0 + dx; hy = gy0 + dy; ax = gx1; ay = gy1; break;
-                            case 7: hx = gx1 + dx; hy = gy0 + dy; ax = gx0; ay = gy1; break;
-                            case 8: hx = gx0 + dx; hy = gy1 + dy; ax = gx1; ay = gy0; break;
-                            default: hx = gx1 + dx; hy = gy1 + dy; ax = gx0; ay = gy0; break;
+                            case 6: hx = gx0 + dragDx; hy = gy0 + dragDy; ax = gx1; ay = gy1; break;
+                            case 7: hx = gx1 + dragDx; hy = gy0 + dragDy; ax = gx0; ay = gy1; break;
+                            case 8: hx = gx0 + dragDx; hy = gy1 + dragDy; ax = gx1; ay = gy0; break;
+                            default: hx = gx1 + dragDx; hy = gy1 + dragDy; ax = gx0; ay = gy0; break;
                         }
                         const float s = std::max(0.001f, std::max(fabsf(hx - ax) / groupW,
                                                                  fabsf(hy - ay) / groupH));
@@ -5379,35 +5468,35 @@ namespace seedui
                         const float py = groupTop + groupH * 0.5f;
                         if (resizeRight)
                         {
-                            newRight = groupRight + dx;
-                            newLeft = 2.0f * px - groupRight - dx;
+                            newRight = groupRight + dragDx;
+                            newLeft = 2.0f * px - groupRight - dragDx;
                         }
                         else if (resizeLeft)
                         {
-                            newLeft = groupLeft + dx;
-                            newRight = 2.0f * px - groupLeft - dx;
+                            newLeft = groupLeft + dragDx;
+                            newRight = 2.0f * px - groupLeft - dragDx;
                         }
                         if (resizeBottom)
                         {
-                            newBottom = groupBottom + dy;
-                            newTop = 2.0f * py - groupBottom - dy;
+                            newBottom = groupBottom + dragDy;
+                            newTop = 2.0f * py - groupBottom - dragDy;
                         }
                         else if (resizeTop)
                         {
-                            newTop = groupTop + dy;
-                            newBottom = 2.0f * py - groupTop - dy;
+                            newTop = groupTop + dragDy;
+                            newBottom = 2.0f * py - groupTop - dragDy;
                         }
                     }
                     else
                     {
                         if (resizeLeft)
-                            newLeft = groupLeft + dx;
+                            newLeft = groupLeft + dragDx;
                         if (resizeRight)
-                            newRight = groupRight + dx;
+                            newRight = groupRight + dragDx;
                         if (resizeTop)
-                            newTop = groupTop + dy;
+                            newTop = groupTop + dragDy;
                         if (resizeBottom)
-                            newBottom = groupBottom + dy;
+                            newBottom = groupBottom + dragDy;
                     }
 
                     const float finalGLeft = std::min(newLeft, newRight);

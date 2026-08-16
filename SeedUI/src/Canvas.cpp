@@ -410,13 +410,17 @@ namespace seedui
                     // Caminho (caneta): fita vetorial contínua e nítida (estilo CorelDRAW).
                     // O preenchimento só é desenhado quando o usuário definir
                     // uma cor de fundo explícita (estilos.cor_fundo) — por
-                    // padrão o caminho é um elemento de TRAÇO.
+                    // padrão o caminho é um elemento de TRAÇO. Caminhos
+                    // ABERTOS também podem ser preenchidos: o preenchimento
+                    // fecha a área entre o último e o primeiro ponto (estilo
+                    // Illustrator/CorelDRAW), então aplicar uma cor de fundo
+                    // numa forma desenhada mas não fechada ainda funciona.
                     std::vector<ImVec2> pts;
                     Geo::OutlineScreen(e, origin.x, origin.y, scale, pts, 64);
                     const bool closed = e.transformacao.value("fechado", 0.0f) > 0.5f;
                     const bool hasFill = e.estilos.is_object() &&
                         e.estilos.contains("cor_fundo");
-                    if (pts.size() >= 3 && closed && hasFill && (fill & IM_COL32_A_MASK) != 0)
+                    if (pts.size() >= 3 && hasFill && (fill & IM_COL32_A_MASK) != 0)
                         dl->AddConcavePolyFilled(pts.data(), (int)pts.size(), fill);
                     if (pts.size() >= 2 && outlineWidth > 0.0f && (outline & IM_COL32_A_MASK) != 0)
                         StrokePolyline(dl, pts, outline, outlineWidth, closed);
@@ -1278,11 +1282,12 @@ namespace seedui
                 }
                 if ((!primary && !anchor) || selected->bloqueado) continue;
 
-                // Caminho (caneta): desenha os NÓS editáveis (sem contorno
-                // laranja e sem alças de tamanho — o caminho é editado pelos
-                // pontos, como no Illustrator/CorelDRAW). O contorno externo
-                // já foi pulado acima via isPath. Só com a CANETA ativa.
-                if (selected->tipo == "caminho" && canetaAtiva &&
+                // Caminho: desenha os NÓS editáveis sempre que o caminho
+                // estiver selecionado (qualquer ferramenta) — os pontos
+                // ficam visíveis e clicáveis para edição direta. Com a
+                // CANETA ativa, apenas os nós (sem alças de tamanho); com a
+                // SELEÇÃO, os nós aparecem junto com as alças de resize.
+                if (selected->tipo == "caminho" &&
                     selected->transformacao.contains("pontos") &&
                     selected->transformacao["pontos"].is_array())
                 {
@@ -1346,7 +1351,9 @@ namespace seedui
                         dl->AddRect(ImVec2(sx - ns, sy - ns), ImVec2(sx + ns, sy + ns),
                                     nodeBorder, 0.0f, 0, 1.2f);
                     }
-                    continue;
+                    // Com a CANETA ativa o caminho é editado só pelos nós;
+                    // com a SELEÇÃO os nós convivem com as alças de tamanho.
+                    if (canetaAtiva) continue;
                 }
                 if (selected->tipo == "grupo")
                     continue;
@@ -1369,9 +1376,11 @@ namespace seedui
                                 ImVec2(point.x + hs, point.y + hs), selection);
                 }
 
-                if (selected->tipo == "elipse" || selected->tipo == "poligono" || rotated)
+                if (selected->tipo == "elipse" || selected->tipo == "poligono" ||
+                    selected->tipo == "caminho" || rotated)
                 {
-                    // Alça de rotação para formas rotacionadas
+                    // Alça de rotação para formas rotacionadas (e para o
+                    // caminho, que também tem rotação própria)
                     const float cosR = cosf(rotRad);
                     const float sinR = sinf(rotRad);
                     float tmx = x + w * 0.5f, tmy = y;
