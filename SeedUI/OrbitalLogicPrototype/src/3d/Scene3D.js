@@ -123,7 +123,7 @@ export class Scene3D {
       this.mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 
       this.raycaster.setFromCamera(this.mouse, this.activeCamera);
-      const meshes = Array.from(this.entities.values()).map(e => e.mesh).filter(m => m && m.geometry.type !== 'PlaneGeometry');
+      const meshes = Array.from(this.entities.values()).map(e => e.mesh).filter(Boolean);
       const intersects = this.raycaster.intersectObjects(meshes, true);
 
       if (intersects.length > 0) {
@@ -176,10 +176,10 @@ export class Scene3D {
       this.selectionBoxHelper = null;
     }
 
-    if (entity && entity.mesh && entity.shape !== 'plane') {
+    if (entity && entity.mesh) {
       this.transformControls.attach(entity.mesh);
 
-      this.selectionBoxHelper = new THREE.BoxHelper(entity.mesh, 0xff7700);
+      this.selectionBoxHelper = new THREE.BoxHelper(entity.mesh, 0x38bdf8);
       this.selectionBoxHelper.material.linewidth = 2;
       this.selectionBoxHelper.material.depthTest = false;
       this.selectionBoxHelper.renderOrder = 999;
