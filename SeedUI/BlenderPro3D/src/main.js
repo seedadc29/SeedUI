@@ -7,6 +7,7 @@ import { MeshEditor } from './mesh/MeshEditor.js';
 import { BlenderUI } from './ui/BlenderUI.js';
 import { ViewportGizmo } from './ui/ViewportGizmo.js';
 import { UIEditor } from './ui/UIEditor.js';
+import { IconBrowser } from './ui/IconBrowser.js';
 
 console.log('🚀 [BlenderPro3D] Inicializando ambiente 3D autêntico Blender 4.1...');
 
@@ -35,9 +36,12 @@ const viewportGizmo = new ViewportGizmo(engine);
 // 8. Initialize Complete Workspace & UI Customizer (Colors, Sizes, Docking, Pinning)
 const uiEditor = new UIEditor(engine);
 
+// 9. Initialize Interactive Tabler Icon Browser & Explorer
+const iconBrowser = new IconBrowser();
+
 // Select default Cube
 if (sceneManager.objects.length > 0) {
   sceneManager.selectObject(sceneManager.objects[0]);
 }
 
-console.log('✨ [BlenderPro3D] Pronto e operacional com Sistema de Customização de Workspace!');
+console.log('✨ [BlenderPro3D] Pronto e operacional com Catálogo Tabler Icons!');

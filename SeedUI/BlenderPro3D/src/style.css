@@ -1,3 +1,6 @@
+/* Tabler Icons Library */
+@import '@tabler/icons-webfont/dist/tabler-icons.min.css';
+
 /* ==========================================================================
    Blender 4.1 Pro — Authentic Pure Dark UI Theme
    ========================================================================== */
@@ -1624,4 +1627,64 @@ body.blender-body {
 
 .undo-btn:hover {
   background: #ff9800;
+}
+
+/* ==========================================================================
+   Tabler Icon Browser Styles
+   ========================================================================== */
+.icon-cat-btn {
+  background: var(--b-bg-input);
+  border: 1px solid var(--b-border);
+  border-radius: 12px;
+  color: var(--b-text-muted);
+  font-size: 10px;
+  font-weight: 500;
+  padding: 3px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.1s;
+}
+
+.icon-cat-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.icon-cat-btn.active {
+  background: var(--b-accent-blue);
+  border-color: var(--b-accent-blue);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.icon-card-item {
+  background: var(--b-bg-panel);
+  border: 1px solid var(--b-border-subtle);
+  border-radius: 4px;
+  padding: 8px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.icon-card-item:hover {
+  background: var(--b-bg-input);
+  border-color: var(--b-accent-orange);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+}
+
+.icon-card-name {
+  font-size: 9px;
+  color: var(--b-text-muted);
+  font-family: var(--font-mono);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
 }
