@@ -737,6 +737,7 @@ export class BlenderUI {
   }
 
   // 12. Raycasting & Live Box Selection (Marquee Select)
+  // 12. Raycasting & Live Box Selection (Marquee Select)
   initRaycasting() {
     const canvas = this.engine.canvas;
     const marquee = document.getElementById('selection-marquee-box');
@@ -744,6 +745,7 @@ export class BlenderUI {
 
     let isPointerDown = false;
     let isBoxSelecting = false;
+    let wasBoxSelecting = false;
     let startX = 0;
     let startY = 0;
 
@@ -790,6 +792,9 @@ export class BlenderUI {
 
       if (isBoxSelecting) {
         isBoxSelecting = false;
+        wasBoxSelecting = true;
+        setTimeout(() => { wasBoxSelecting = false; }, 80);
+
         if (marquee) marquee.style.display = 'none';
 
         const minX = Math.min(startX, e.clientX);
@@ -798,6 +803,7 @@ export class BlenderUI {
         const maxY = Math.max(startY, e.clientY);
         const isSubtract = e.ctrlKey || e.altKey;
         const isAdd = e.shiftKey;
+        const canvasRect = canvas.getBoundingClientRect();
 
         if (this.currentMode === 'edit') {
           const activeMesh = this.meshEditor.activeMesh;
@@ -814,14 +820,14 @@ export class BlenderUI {
             const cam = this.engine.activeCamera;
             const matWorld = activeMesh.matrixWorld;
 
-            // Box select vertices
+            // Box select vertices with exact viewport screen bounding coordinates
             for (let i = 0; i < qm.vertices.length; i++) {
               const vWorld = qm.vertices[i].clone().applyMatrix4(matWorld);
               const vNDC = vWorld.project(cam);
 
               if (vNDC.z < 1.0) {
-                const screenX = (vNDC.x * 0.5 + 0.5) * window.innerWidth;
-                const screenY = (-vNDC.y * 0.5 + 0.5) * window.innerHeight;
+                const screenX = canvasRect.left + (vNDC.x * 0.5 + 0.5) * canvasRect.width;
+                const screenY = canvasRect.top + (-vNDC.y * 0.5 + 0.5) * canvasRect.height;
 
                 if (screenX >= minX && screenX <= maxX && screenY >= minY && screenY <= maxY) {
                   if (isSubtract) this.meshEditor.selectedVertices.delete(i);
@@ -830,7 +836,7 @@ export class BlenderUI {
               }
             }
 
-            // Sync edges & faces
+            // Sync edges & faces based on current submode
             if (this.currentSubmode === 'edge') {
               qm.edges.forEach((edge, eIdx) => {
                 if (this.meshEditor.selectedVertices.has(edge[0]) && this.meshEditor.selectedVertices.has(edge[1])) {
@@ -858,28 +864,73 @@ export class BlenderUI {
             this.sceneManager.deselectAll();
           }
 
+          const matchedObjects = [];
+
           objects.forEach((obj) => {
+            let isInside = false;
+
+            // 1. Check center origin
             const pos = new THREE.Vector3();
             obj.getWorldPosition(pos);
-            const vNDC = pos.project(cam);
+            const centerNDC = pos.project(cam);
+            if (centerNDC.z < 1.0) {
+              const cx = canvasRect.left + (centerNDC.x * 0.5 + 0.5) * canvasRect.width;
+              const cy = canvasRect.top + (-centerNDC.y * 0.5 + 0.5) * canvasRect.height;
+              if (cx >= minX && cx <= maxX && cy >= minY && cy <= maxY) {
+                isInside = true;
+              }
+            }
 
-            if (vNDC.z < 1.0) {
-              const screenX = (vNDC.x * 0.5 + 0.5) * window.innerWidth;
-              const screenY = (-vNDC.y * 0.5 + 0.5) * window.innerHeight;
+            // 2. Check geometry bounding box corners
+            if (!isInside && obj.geometry) {
+              if (!obj.geometry.boundingBox) obj.geometry.computeBoundingBox();
+              const bb = obj.geometry.boundingBox;
+              if (bb) {
+                const corners = [
+                  new THREE.Vector3(bb.min.x, bb.min.y, bb.min.z),
+                  new THREE.Vector3(bb.min.x, bb.min.y, bb.max.z),
+                  new THREE.Vector3(bb.min.x, bb.max.y, bb.min.z),
+                  new THREE.Vector3(bb.min.x, bb.max.y, bb.max.z),
+                  new THREE.Vector3(bb.max.x, bb.min.y, bb.min.z),
+                  new THREE.Vector3(bb.max.x, bb.min.y, bb.max.z),
+                  new THREE.Vector3(bb.max.x, bb.max.y, bb.min.z),
+                  new THREE.Vector3(bb.max.x, bb.max.y, bb.max.z)
+                ];
 
-              if (screenX >= minX && screenX <= maxX && screenY >= minY && screenY <= maxY) {
-                if (isSubtract) this.sceneManager.deselectObject(obj);
-                else this.sceneManager.selectObject(obj, true);
+                for (let c of corners) {
+                  const worldCorner = c.clone().applyMatrix4(obj.matrixWorld);
+                  const cornerNDC = worldCorner.project(cam);
+                  if (cornerNDC.z < 1.0) {
+                    const sx = canvasRect.left + (cornerNDC.x * 0.5 + 0.5) * canvasRect.width;
+                    const sy = canvasRect.top + (-cornerNDC.y * 0.5 + 0.5) * canvasRect.height;
+                    if (sx >= minX && sx <= maxX && sy >= minY && sy <= maxY) {
+                      isInside = true;
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+
+            if (isInside) {
+              if (isSubtract) {
+                this.sceneManager.deselectObject(obj);
+              } else {
+                matchedObjects.push(obj);
               }
             }
           });
+
+          if (matchedObjects.length > 0) {
+            this.sceneManager.selectObjects(matchedObjects, isAdd);
+          }
         }
       }
     });
 
     // Single Click Raycast Selection Fallback
     canvas.addEventListener('click', (e) => {
-      if (this.transformManager.isTransforming || isBoxSelecting) return;
+      if (this.transformManager.isTransforming || isBoxSelecting || wasBoxSelecting) return;
 
       const rect = canvas.getBoundingClientRect();
       this.mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;

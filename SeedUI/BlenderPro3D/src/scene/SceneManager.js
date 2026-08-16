@@ -539,6 +539,20 @@ export class SceneManager {
     }
   }
 
+  deselectObject(mesh) {
+    if (!mesh) return;
+    this.selectedObjects.delete(mesh);
+    if (this.selectedObject === mesh) {
+      this.selectedObject = Array.from(this.selectedObjects)[0] || null;
+    }
+    this.updateSelectionVisuals();
+    this.updateOutlinerUI();
+    this.updateTransformUI();
+    if (this.onSelectionChange) {
+      this.onSelectionChange(this.selectedObject);
+    }
+  }
+
   selectObjects(meshes, addToSelection = false) {
     if (!addToSelection) {
       this.selectedObjects.clear();
