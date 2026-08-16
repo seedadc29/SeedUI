@@ -163,10 +163,16 @@
               <span class="pane-chip" id="chip-tactical-status"><i class="ti ti-satellite"></i> Radar Ao Vivo</span>
             </div>
             <div class="pane-header-actions">
+              <!-- Edit Map Mode Toggle -->
+              <button class="tactical-mode-btn active" id="btn-toggle-edit-mode" title="Alternar entre Modo Editar Mapa e Modo Navegação / Pan">
+                <i class="ti ti-edit" id="icon-edit-mode"></i>
+                <span id="label-edit-mode">Editar Mapa</span>
+              </button>
+
               <!-- Shape Creation Tools (Square, Circle, Triangle) -->
               <div class="tactical-shape-toolbar">
                 <span class="tactical-tool-label">FORMAS:</span>
-                <button class="tactical-shape-btn" id="btn-add-rect-room" title="Adicionar Sala Quadrada / Retangular (Arrastar ou Clicar)">
+                <button class="tactical-shape-btn" id="btn-add-rect-room" title="Adicionar Sala Quadrada / Retangular">
                   <i class="ti ti-square"></i>
                 </button>
                 <button class="tactical-shape-btn" id="btn-add-circle-room" title="Adicionar Zona Circular">

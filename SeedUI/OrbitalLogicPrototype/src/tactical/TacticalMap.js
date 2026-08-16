@@ -1,22 +1,27 @@
 export class TacticalMap {
-  constructor(canvas, scene3D = null, orbitalGraph = null, onSelectEntity = null) {
+  constructor(canvas, scene3D = null, orbitalGraph = null, onSelectEntity = null, onSelectRoom = null) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.scene3D = scene3D;
     this.orbitalGraph = orbitalGraph;
     this.onSelectEntity = onSelectEntity;
+    this.onSelectRoom = onSelectRoom;
 
     // Viewport transform
     this.panX = 0;
     this.panY = 0;
     this.zoom = 1.0;
+    this.dpr = 1;
     this.isPanning = false;
     this.lastMouse = { x: 0, y: 0 };
+
+    // Modes: isEditMode = true (Edit / Move / Stretch shapes) vs false (Pan / Navigate)
+    this.isEditMode = true;
 
     // Interactive selection & manipulation
     this.selectedRoom = null;
     this.selectedEntity = null;
-    this.hoveredHandle = null; // 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'radius'
+    this.hoveredHandle = null;
     this.activeDragHandle = null;
     this.isDraggingRoom = false;
     this.roomDragOffset = { x: 0, z: 0 };
@@ -56,18 +61,26 @@ export class TacticalMap {
   resize() {
     if (!this.canvas.parentElement) return;
     const parent = this.canvas.parentElement;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
     const width = parent.clientWidth;
     const height = parent.clientHeight;
     if (width === 0 || height === 0) return;
 
-    this.canvas.width = width * dpr;
-    this.canvas.height = height * dpr;
-    this.ctx.scale(dpr, dpr);
+    this.canvas.width = width * this.dpr;
+    this.canvas.height = height * this.dpr;
 
     if (this.panX === 0 && this.panY === 0) {
       this.panX = width / 2;
       this.panY = height / 2;
+    }
+  }
+
+  setEditMode(enabled) {
+    this.isEditMode = enabled;
+    if (!enabled) {
+      this.selectedRoom = null;
+      this.activeDragHandle = null;
+      this.isDraggingRoom = false;
     }
   }
 
@@ -104,6 +117,7 @@ export class TacticalMap {
   saveInlineRename() {
     if (this.editingRoom && this.inlineInput) {
       this.editingRoom.name = this.inlineInput.value.trim() || 'Nova Sala';
+      if (this.onSelectRoom) this.onSelectRoom(this.editingRoom);
       this.cancelInlineRename();
     }
   }
@@ -130,11 +144,13 @@ export class TacticalMap {
 
   addShape(shapeType, worldX = 0, worldZ = 0) {
     if (worldX === 0 && worldZ === 0) {
-      worldX = ((this.canvas.parentElement.clientWidth / 2 - this.panX) / this.zoom) / this.meterToPx;
-      worldZ = ((this.canvas.parentElement.clientHeight / 2 - this.panY) / this.zoom) / this.meterToPx;
+      const parent = this.canvas.parentElement;
+      const w = parent ? parent.clientWidth : 600;
+      const h = parent ? parent.clientHeight : 400;
+      worldX = ((w / 2 - this.panX) / this.zoom) / this.meterToPx;
+      worldZ = ((h / 2 - this.panY) / this.zoom) / this.meterToPx;
     }
 
-    // Snap to 0.5m grid
     worldX = Math.round(worldX * 2) / 2;
     worldZ = Math.round(worldZ * 2) / 2;
 
@@ -154,8 +170,8 @@ export class TacticalMap {
         id: `room-tri-${Date.now()}`,
         shape: 'triangle',
         name: 'Zona Triangular',
-        x: worldX,
-        z: worldZ,
+        x: worldX - 3,
+        z: worldZ - 2.5,
         w: 6.0,
         h: 5.5,
         color: '#1a1d24'
@@ -176,6 +192,7 @@ export class TacticalMap {
     this.rooms.push(newRoom);
     this.selectedRoom = newRoom;
     this.selectedEntity = null;
+    if (this.onSelectRoom) this.onSelectRoom(newRoom);
     return newRoom;
   }
 
@@ -194,7 +211,14 @@ export class TacticalMap {
 
       const mouse = this.getMapPos(e);
 
-      // 1. Check Resize Handles on Selected Room
+      // Mode Check: If Navigation/Pan Mode, pan directly
+      if (!this.isEditMode || e.button === 1 || e.spaceKey) {
+        this.isPanning = true;
+        this.canvas.parentElement?.classList.add('is-panning');
+        return;
+      }
+
+      // 1. Check Handles on already selected room
       if (this.selectedRoom) {
         const handle = this.hitTestHandles(this.selectedRoom, mouse.x, mouse.y);
         if (handle) {
@@ -210,13 +234,13 @@ export class TacticalMap {
         this.selectedEntity = hitEntity;
         this.selectedRoom = null;
         if (this.onSelectEntity) this.onSelectEntity(hitEntity);
+        if (this.onSelectRoom) this.onSelectRoom(null);
         return;
       }
 
       // 3. Check Blueprint Rooms
       const hitRoom = this.hitTestRooms(mouse.x, mouse.y);
       if (hitRoom) {
-        // Double-click to rename inline!
         const now = Date.now();
         if (now - lastClickTime < 350 && this.selectedRoom === hitRoom) {
           this.startInlineRename(hitRoom);
@@ -228,12 +252,14 @@ export class TacticalMap {
         this.selectedEntity = null;
         this.isDraggingRoom = true;
         this.roomDragOffset = { x: mouse.x - hitRoom.x, z: mouse.z - hitRoom.z };
+        if (this.onSelectRoom) this.onSelectRoom(hitRoom);
         return;
       }
 
-      // Clicked on empty canvas -> Pan
+      // Clicked on empty canvas -> Deselect room & prepare for gentle panning
       this.selectedRoom = null;
       this.selectedEntity = null;
+      if (this.onSelectRoom) this.onSelectRoom(null);
       this.isPanning = true;
       this.canvas.parentElement?.classList.add('is-panning');
       this.cancelInlineRename();
@@ -243,12 +269,14 @@ export class TacticalMap {
       const mouse = this.getMapPos(e);
 
       if (!isMouseDown) {
-        if (this.selectedRoom) {
+        if (this.isEditMode && this.selectedRoom) {
           this.hoveredHandle = this.hitTestHandles(this.selectedRoom, mouse.x, mouse.y);
           this.updateCursor(this.hoveredHandle);
+        } else if (this.isEditMode) {
+          const hoveredRoom = this.hitTestRooms(mouse.x, mouse.y);
+          this.canvas.style.cursor = hoveredRoom ? 'pointer' : 'default';
         } else {
-          this.hoveredHandle = null;
-          this.updateCursor(null);
+          this.canvas.style.cursor = 'grab';
         }
         this.lastMouse = { x: e.clientX, y: e.clientY };
         return;
@@ -267,7 +295,6 @@ export class TacticalMap {
           const dist = Math.hypot(mouse.x - init.x, mouse.z - init.z);
           room.radius = Math.max(1.0, Math.round(dist * 2) / 2);
         } else {
-          // Rectangular / Triangular Stretch
           if (h.includes('e')) {
             const newW = mouse.x - init.x;
             room.w = Math.max(1.5, Math.round(newW * 2) / 2);
@@ -293,6 +320,7 @@ export class TacticalMap {
             }
           }
         }
+        if (this.onSelectRoom) this.onSelectRoom(room);
       }
       // 2. Dragging Room Position on Grid
       else if (this.isDraggingRoom && this.selectedRoom) {
@@ -300,6 +328,7 @@ export class TacticalMap {
         const newZ = Math.round((mouse.z - this.roomDragOffset.z) * 2) / 2;
         this.selectedRoom.x = newX;
         this.selectedRoom.z = newZ;
+        if (this.onSelectRoom) this.onSelectRoom(this.selectedRoom);
       }
       // 3. Panning Viewport
       else if (this.isPanning) {
@@ -334,6 +363,7 @@ export class TacticalMap {
         if (this.selectedRoom) {
           this.rooms = this.rooms.filter(r => r.id !== this.selectedRoom.id);
           this.selectedRoom = null;
+          if (this.onSelectRoom) this.onSelectRoom(null);
         }
       }
     });
@@ -341,7 +371,7 @@ export class TacticalMap {
 
   updateCursor(handle) {
     if (!handle) {
-      this.canvas.style.cursor = 'default';
+      this.canvas.style.cursor = this.isEditMode ? 'default' : 'grab';
       return;
     }
     if (handle === 'n' || handle === 's') this.canvas.style.cursor = 'ns-resize';
@@ -362,15 +392,15 @@ export class TacticalMap {
   }
 
   hitTestRooms(worldX, worldZ) {
-    // Search in reverse order so top-most room is hit first
     for (let i = this.rooms.length - 1; i >= 0; i--) {
       const r = this.rooms[i];
       if (r.shape === 'circle') {
-        if (Math.hypot(worldX - r.x, worldZ - r.z) <= r.radius) return r;
-      } else if (r.shape === 'triangle') {
-        if (worldX >= r.x && worldX <= r.x + r.w && worldZ >= r.z && worldZ <= r.z + r.h) return r;
+        if (Math.hypot(worldX - r.x, worldZ - r.z) <= r.radius + 0.3) return r;
       } else {
-        if (worldX >= r.x && worldX <= r.x + r.w && worldZ >= r.z && worldZ <= r.z + r.h) return r;
+        const pad = 0.3;
+        if (worldX >= r.x - pad && worldX <= r.x + r.w + pad && worldZ >= r.z - pad && worldZ <= r.z + r.h + pad) {
+          return r;
+        }
       }
     }
     return null;
@@ -379,7 +409,7 @@ export class TacticalMap {
   hitTestEntities(worldX, worldZ) {
     if (!this.scene3D) return null;
     let closest = null;
-    let minDist = 1.5;
+    let minDist = 1.6;
 
     this.scene3D.entities.forEach((ent) => {
       if (!ent.mesh || ent.shape === 'plane') return;
@@ -394,7 +424,7 @@ export class TacticalMap {
   }
 
   hitTestHandles(room, worldX, worldZ) {
-    const hitTolerance = 0.5; // 0.5 meters
+    const hitTolerance = 0.7; // Generous 0.7m hit radius
 
     if (room.shape === 'circle') {
       const d = Math.hypot(worldX - (room.x + room.radius), worldZ - room.z);
@@ -439,35 +469,37 @@ export class TacticalMap {
     const h = this.canvas.parentElement.clientHeight;
     if (w === 0 || h === 0) return;
 
-    this.ctx.clearRect(0, 0, w, h);
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
     this.ctx.save();
+    // 1. Correct DPR Scale Matrix
+    this.ctx.scale(this.dpr, this.dpr);
     this.ctx.translate(this.panX, this.panY);
     this.ctx.scale(this.zoom, this.zoom);
 
-    // 1. Blueprint Grid
+    // 2. Blueprint Grid
     this.drawGrid();
 
-    // 2. Blueprint Rooms & Shapes
+    // 3. Blueprint Rooms & Shapes
     this.drawRooms();
 
-    // 3. Navigation Routes
+    // 4. Navigation Routes
     this.drawRoutes();
 
-    // 4. Trigger Action Lines
+    // 5. Trigger Action Lines
     this.drawTriggerActionLinks();
 
-    // 5. 3D Entities on Map
+    // 6. 3D Entities on Map
     this.drawEntities();
 
-    // 6. Selected Room Transform Handles & Borders
+    // 7. Selected Room Transform Handles & Borders
     if (this.selectedRoom) {
       this.drawRoomHandles(this.selectedRoom);
     }
 
     this.ctx.restore();
 
-    // 7. Map Legend
+    // 8. Map Legend (in Screen CSS coordinates)
     this.drawLegend(w, h);
   }
 
@@ -491,7 +523,7 @@ export class TacticalMap {
       this.ctx.stroke();
     }
 
-    this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+    this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.14)';
     this.ctx.beginPath();
     this.ctx.moveTo(-30, 0); this.ctx.lineTo(30, 0);
     this.ctx.moveTo(0, -30); this.ctx.lineTo(0, 30);
@@ -516,7 +548,11 @@ export class TacticalMap {
         this.ctx.fill();
 
         this.ctx.strokeStyle = isSel ? '#38bdf8' : '#333742';
-        this.ctx.lineWidth = isSel ? 2.5 : 2;
+        this.ctx.lineWidth = isSel ? 3 : 2;
+        if (isSel) {
+          this.ctx.shadowColor = '#38bdf8';
+          this.ctx.shadowBlur = 12;
+        }
         this.ctx.stroke();
 
         this.drawRoomLabel(room.name, rx, rz, isSel);
@@ -536,7 +572,11 @@ export class TacticalMap {
         this.ctx.fill();
 
         this.ctx.strokeStyle = isSel ? '#38bdf8' : '#333742';
-        this.ctx.lineWidth = isSel ? 2.5 : 2;
+        this.ctx.lineWidth = isSel ? 3 : 2;
+        if (isSel) {
+          this.ctx.shadowColor = '#38bdf8';
+          this.ctx.shadowBlur = 12;
+        }
         this.ctx.stroke();
 
         this.drawRoomLabel(room.name, rx + rw / 2, rz + rh * 0.65, isSel);
@@ -560,7 +600,11 @@ export class TacticalMap {
         }
 
         this.ctx.strokeStyle = isSel ? '#38bdf8' : '#333742';
-        this.ctx.lineWidth = isSel ? 2.5 : 2;
+        this.ctx.lineWidth = isSel ? 3 : 2;
+        if (isSel) {
+          this.ctx.shadowColor = '#38bdf8';
+          this.ctx.shadowBlur = 12;
+        }
         this.ctx.strokeRect(rx, rz, rw, rh);
 
         this.drawRoomLabel(room.name, rx + rw / 2, rz + rh / 2, isSel);
@@ -574,11 +618,10 @@ export class TacticalMap {
     this.ctx.font = 'bold 11px sans-serif';
     const txtWidth = this.ctx.measureText(text).width;
 
-    // Label badge background
-    this.ctx.fillStyle = 'rgba(15, 17, 23, 0.82)';
+    this.ctx.fillStyle = 'rgba(15, 17, 23, 0.85)';
     this.ctx.fillRect(cx - txtWidth / 2 - 6, cy - 8, txtWidth + 12, 16);
 
-    this.ctx.fillStyle = isSel ? '#38bdf8' : 'rgba(255, 255, 255, 0.55)';
+    this.ctx.fillStyle = isSel ? '#38bdf8' : 'rgba(255, 255, 255, 0.65)';
     this.ctx.textAlign = 'center';
     this.ctx.textBaseline = 'middle';
     this.ctx.fillText(text, cx, cy);
@@ -619,16 +662,16 @@ export class TacticalMap {
     this.ctx.fillStyle = '#38bdf8';
     this.ctx.strokeStyle = '#ffffff';
     this.ctx.lineWidth = 1.5;
-    this.ctx.fillRect(x - 4, y - 4, 8, 8);
-    this.ctx.strokeRect(x - 4, y - 4, 8, 8);
+    this.ctx.fillRect(x - 5, y - 5, 10, 10);
+    this.ctx.strokeRect(x - 5, y - 5, 10, 10);
   }
 
   drawHandleCircle(x, y) {
     this.ctx.beginPath();
-    this.ctx.arc(x, y, 4, 0, Math.PI * 2);
+    this.ctx.arc(x, y, 5, 0, Math.PI * 2);
     this.ctx.fillStyle = '#ffffff';
     this.ctx.strokeStyle = '#38bdf8';
-    this.ctx.lineWidth = 1.5;
+    this.ctx.lineWidth = 2;
     this.ctx.fill();
     this.ctx.stroke();
   }
@@ -727,7 +770,7 @@ export class TacticalMap {
       const pz = ent.mesh.position.z * this.meterToPx;
       const isSelected = this.scene3D.selectedEntity === ent || this.selectedEntity === ent;
 
-      // 1. TRIGGER ZONE (Orange Glowing Box)
+      // 1. TRIGGER ZONE
       if (ent.type === 'trigger') {
         const boxSize = 2.8 * this.meterToPx;
         this.ctx.save();
@@ -749,7 +792,7 @@ export class TacticalMap {
         return;
       }
 
-      // 2. BLOCK / SOLID OBSTACLE (Indigo Block)
+      // 2. BLOCK / SOLID OBSTACLE
       if (ent.type === 'block') {
         const size = 1.8 * this.meterToPx;
         this.ctx.save();
@@ -769,7 +812,7 @@ export class TacticalMap {
         return;
       }
 
-      // 3. ENEMY (Red Dot)
+      // 3. ENEMY
       if (ent.type === 'enemy') {
         this.ctx.save();
         this.ctx.beginPath();
@@ -791,7 +834,7 @@ export class TacticalMap {
         return;
       }
 
-      // 4. PLAYER (Cyan Dot with Heading Indicator)
+      // 4. PLAYER
       if (ent.type === 'player') {
         this.ctx.save();
         const pulse = (this.animTime * 2) % 1.0;

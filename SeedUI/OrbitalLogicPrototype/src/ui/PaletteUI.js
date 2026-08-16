@@ -110,6 +110,87 @@ export class PaletteUI {
     };
   }
 
+  renderRoomInspector(room) {
+    const titleEl = document.getElementById('inspector-node-title');
+    const typeEl = document.getElementById('inspector-node-type');
+    const bodyEl = document.getElementById('inspector-body');
+    if (!titleEl || !bodyEl) return;
+
+    if (!room) {
+      this.renderInspector(null);
+      return;
+    }
+
+    titleEl.textContent = room.name;
+    typeEl.textContent = `SALA TÁTICA (${room.shape.toUpperCase()})`;
+
+    let html = `
+      <div class="inspector-row">
+        <span class="inspector-label">Nome da Sala:</span>
+        <input type="text" class="inspector-input" value="${room.name}" id="inp-room-name" />
+      </div>
+      <div class="inspector-row">
+        <span class="inspector-label">Forma Geométrica:</span>
+        <span style="color:#38bdf8;font-weight:700;">${room.shape.toUpperCase()}</span>
+      </div>
+    `;
+
+    if (room.shape === 'circle') {
+      html += `
+        <div class="inspector-row">
+          <span class="inspector-label">Raio (m):</span>
+          <input type="number" step="0.5" class="inspector-input" value="${room.radius}" id="inp-room-radius" />
+        </div>
+      `;
+    } else {
+      html += `
+        <div class="inspector-row">
+          <span class="inspector-label">Largura (W):</span>
+          <input type="number" step="0.5" class="inspector-input" value="${room.w}" id="inp-room-w" />
+        </div>
+        <div class="inspector-row">
+          <span class="inspector-label">Altura (H):</span>
+          <input type="number" step="0.5" class="inspector-input" value="${room.h}" id="inp-room-h" />
+        </div>
+      `;
+    }
+
+    html += `
+      <div class="inspector-row">
+        <span class="inspector-label">Posição Grid:</span>
+        <span style="color:var(--seed-text-muted);font-size:11px;">X: ${room.x}m, Z: ${room.z}m</span>
+      </div>
+      <button class="btn-delete-node" id="btn-del-room-node" style="margin-top:10px;"><i class="ti ti-trash"></i> Excluir Sala</button>
+    `;
+
+    bodyEl.innerHTML = html;
+
+    // Attach listeners
+    document.getElementById('inp-room-name')?.addEventListener('input', (e) => {
+      room.name = e.target.value;
+    });
+
+    document.getElementById('inp-room-radius')?.addEventListener('input', (e) => {
+      room.radius = Math.max(1, parseFloat(e.target.value) || 1);
+    });
+
+    document.getElementById('inp-room-w')?.addEventListener('input', (e) => {
+      room.w = Math.max(1.5, parseFloat(e.target.value) || 1.5);
+    });
+
+    document.getElementById('inp-room-h')?.addEventListener('input', (e) => {
+      room.h = Math.max(1.5, parseFloat(e.target.value) || 1.5);
+    });
+
+    document.getElementById('btn-del-room-node')?.addEventListener('click', () => {
+      if (this.tacticalMap) {
+        this.tacticalMap.rooms = this.tacticalMap.rooms.filter(r => r.id !== room.id);
+        this.tacticalMap.selectedRoom = null;
+        this.renderInspector(null);
+      }
+    });
+  }
+
   renderInspector(entity) {
     const titleEl = document.getElementById('inspector-node-title');
     const typeEl = document.getElementById('inspector-node-type');
@@ -119,7 +200,7 @@ export class PaletteUI {
     if (!entity) {
       titleEl.textContent = 'Propriedades';
       typeEl.textContent = 'Nenhum';
-      bodyEl.innerHTML = `<div class="inspector-empty-hint">Clique em qualquer Sol, Planeta ou Lua para editar seus valores em tempo real.</div>`;
+      bodyEl.innerHTML = `<div class="inspector-empty-hint">Clique em qualquer Sol, Planeta, Lua ou Sala Tática para editar em tempo real.</div>`;
       return;
     }
 

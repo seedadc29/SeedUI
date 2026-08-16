@@ -18,11 +18,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 4. Initialize Level 2D Blueprint / Tactical Command Map
   const canvasTactical = document.getElementById('canvas-tactical');
-  const tacticalMap = new TacticalMap(canvasTactical, scene3D, orbitalGraph, (entity) => {
-    if (entity && entity.sunId) {
-      scene3D.selectEntityBySunId(entity.sunId);
+  const tacticalMap = new TacticalMap(
+    canvasTactical,
+    scene3D,
+    orbitalGraph,
+    (entity) => {
+      if (entity && entity.sunId) {
+        scene3D.selectEntityBySunId(entity.sunId);
+      }
+    },
+    (room) => {
+      paletteUI.renderRoomInspector(room);
     }
-  });
+  );
 
   // 5. Initialize UI, Inspector, Splitters & Accordions
   const paletteUI = new PaletteUI(orbitalGraph, scene3D, historyManager, tacticalMap);
@@ -165,7 +173,24 @@ document.addEventListener('DOMContentLoaded', () => {
     else if (e.code === 'KeyV' || e.code === 'KeyW') setTool('select');
   });
 
-  // 9. Tactical Shape Creation Tools (Square, Circle, Triangle)
+  // 9. Tactical Shape Creation & Mode Toggle
+  const btnToggleEdit = document.getElementById('btn-toggle-edit-mode');
+  const labelEdit = document.getElementById('label-edit-mode');
+  const iconEdit = document.getElementById('icon-edit-mode');
+
+  btnToggleEdit?.addEventListener('click', () => {
+    tacticalMap.setEditMode(!tacticalMap.isEditMode);
+    if (tacticalMap.isEditMode) {
+      btnToggleEdit.classList.add('active');
+      if (labelEdit) labelEdit.textContent = 'Editar Mapa';
+      if (iconEdit) iconEdit.className = 'ti ti-edit';
+    } else {
+      btnToggleEdit.classList.remove('active');
+      if (labelEdit) labelEdit.textContent = 'Navegar / Pan';
+      if (iconEdit) iconEdit.className = 'ti ti-hand-grab';
+    }
+  });
+
   document.getElementById('btn-add-rect-room')?.addEventListener('click', () => {
     tacticalMap.addShape('rect');
   });
