@@ -30,8 +30,10 @@ export class PaletteUI {
 
   initDragAndDrop() {
     const orbitalWrapper = document.getElementById('orbital-wrapper');
+    const orbitalCanvas = document.getElementById('canvas-orbital');
 
     document.querySelectorAll('.palette-chip-item').forEach((item) => {
+      // 1. Drag Start
       item.addEventListener('dragstart', (e) => {
         const data = {
           type: item.dataset.type,
@@ -40,27 +42,46 @@ export class PaletteUI {
           model: item.dataset.model,
           moons: item.dataset.moons
         };
-        e.dataTransfer.setData('text/plain', JSON.stringify(data));
+        const jsonStr = JSON.stringify(data);
+        e.dataTransfer.setData('text/plain', jsonStr);
+        e.dataTransfer.setData('application/json', jsonStr);
         e.dataTransfer.effectAllowed = 'copy';
+      });
+
+      // 2. Direct Click to Add (Instant Add to Active / Closest Sun)
+      item.addEventListener('click', () => {
+        const data = {
+          type: item.dataset.type,
+          category: item.dataset.category,
+          name: item.dataset.name,
+          model: item.dataset.model,
+          moons: item.dataset.moons
+        };
+        const pos = { x: 0, y: 0 };
+        this.orbitalGraph.addEntityFromPalette(data, pos);
+        this.updateStatsCounters();
+        this.scene3D.syncWithOrbitalSuns(this.orbitalGraph.suns);
       });
     });
 
-    if (orbitalWrapper) {
-      orbitalWrapper.addEventListener('dragover', (e) => {
+    const setupDropTarget = (target) => {
+      if (!target) return;
+
+      target.addEventListener('dragover', (e) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'copy';
-        orbitalWrapper.classList.add('drag-over');
+        orbitalWrapper?.classList.add('drag-over');
       });
 
-      orbitalWrapper.addEventListener('dragleave', () => {
-        orbitalWrapper.classList.remove('drag-over');
+      target.addEventListener('dragleave', () => {
+        orbitalWrapper?.classList.remove('drag-over');
       });
 
-      orbitalWrapper.addEventListener('drop', (e) => {
+      target.addEventListener('drop', (e) => {
         e.preventDefault();
-        orbitalWrapper.classList.remove('drag-over');
+        orbitalWrapper?.classList.remove('drag-over');
         try {
-          const raw = e.dataTransfer.getData('text/plain');
+          const raw = e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain');
           if (!raw) return;
           const data = JSON.parse(raw);
           const mousePos = this.orbitalGraph.getCanvasPos(e);
@@ -68,10 +89,13 @@ export class PaletteUI {
           this.updateStatsCounters();
           this.scene3D.syncWithOrbitalSuns(this.orbitalGraph.suns);
         } catch (err) {
-          console.error(err);
+          console.error('Drop error:', err);
         }
       });
-    }
+    };
+
+    setupDropTarget(orbitalWrapper);
+    setupDropTarget(orbitalCanvas);
   }
 
   initInspector() {

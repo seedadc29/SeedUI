@@ -461,6 +461,8 @@ export class OrbitalGraph {
   }
 
   addEntityFromPalette(data, mousePos) {
+    if (!mousePos) mousePos = { x: 0, y: 0 };
+
     if (this.historyManager) {
       this.historyManager.pushState(this.suns);
     }
@@ -496,60 +498,91 @@ export class OrbitalGraph {
       this.suns.push(newSun);
       this.selectedEntity = newSun;
     } else if (data.type === 'planet' || data.type === 'mesh') {
-      let closestSun = this.suns[0];
-      let minDist = Infinity;
-      this.suns.forEach(sun => {
-        const d = Math.hypot(sun.x - mousePos.x, sun.y - mousePos.y);
-        if (d < minDist) {
-          minDist = d;
-          closestSun = sun;
+      // Find target sun: prefer selected sun, then closest sun, or create one if none exist
+      let targetSun = null;
+
+      if (this.selectedEntity) {
+        if (this.selectedEntity.type === 'sun') targetSun = this.selectedEntity;
+        else if (this.selectedEntity.parentSun) targetSun = this.selectedEntity.parentSun;
+      }
+
+      if (!targetSun && this.suns.length > 0) {
+        let minDist = Infinity;
+        this.suns.forEach(sun => {
+          const d = Math.hypot(sun.x - mousePos.x, sun.y - mousePos.y);
+          if (d < minDist) {
+            minDist = d;
+            targetSun = sun;
+          }
+        });
+      }
+
+      if (!targetSun) {
+        targetSun = {
+          id: `sun-${Date.now()}`,
+          name: 'Objeto',
+          type: 'sun',
+          x: mousePos.x || 0,
+          y: mousePos.y || 0,
+          radius: 36,
+          color: '#ff7700',
+          orbits: [
+            { radius: 65, dash: [4, 4] },
+            { radius: 115, dash: [3, 4] }
+          ],
+          planets: []
+        };
+        this.suns.push(targetSun);
+      }
+
+      const dx = mousePos.x - targetSun.x;
+      const dy = mousePos.y - targetSun.y;
+      const angle = (dx === 0 && dy === 0) ? Math.random() * Math.PI * 2 : Math.atan2(dy, dx);
+      const dist = Math.hypot(dx, dy);
+
+      // Choose or create orbit
+      let orbitR = data.type === 'mesh' ? 65 : 115;
+      if (dist > 140) {
+        orbitR = Math.round(dist);
+        if (!targetSun.orbits.some(o => Math.abs(o.radius - orbitR) < 20)) {
+          targetSun.orbits.push({ radius: orbitR, dash: [3, 4] });
         }
-      });
+      }
 
-      if (closestSun) {
-        const dx = mousePos.x - closestSun.x;
-        const dy = mousePos.y - closestSun.y;
-        const angle = Math.atan2(dy, dx);
-        const dist = Math.hypot(dx, dy);
-
-        let orbitR = 115;
-        if (dist > 140) {
-          orbitR = dist;
-          closestSun.orbits.push({ radius: dist, dash: [3, 4] });
-        }
-
-        let moons = [];
-        if (data.moons) {
-          try {
-            const rawMoons = typeof data.moons === 'string' ? JSON.parse(data.moons) : data.moons;
+      let moons = [];
+      if (data.moons) {
+        try {
+          const rawMoons = typeof data.moons === 'string' ? JSON.parse(data.moons) : data.moons;
+          if (Array.isArray(rawMoons)) {
             const step = (Math.PI * 2) / rawMoons.length;
             moons = rawMoons.map((m, i) => ({
               name: m.name,
-              color: m.color || '#fff',
+              color: m.color || '#ffffff',
               angle: i * step,
               speed: 1.0,
               val: m.val
             }));
-          } catch(e) {}
-        }
-
-        const newPlanet = {
-          id: `planet-${Date.now()}`,
-          name: data.name,
-          type: 'planet',
-          orbitRadius: orbitR,
-          angle,
-          speed: 0.35,
-          radius: data.type === 'mesh' ? 18 : 22,
-          color: data.type === 'mesh' ? '#382f7e' : '#2b2368',
-          textColor: '#ffffff',
-          subOrbitRadius: moons.length > 0 ? 34 : 0,
-          moons
-        };
-
-        closestSun.planets.push(newPlanet);
-        this.selectedEntity = newPlanet;
+          }
+        } catch(e) {}
       }
+
+      const newPlanet = {
+        id: `planet-${Date.now()}`,
+        name: data.name,
+        type: 'planet',
+        orbitRadius: orbitR,
+        angle,
+        speed: 0.35,
+        radius: data.type === 'mesh' ? 18 : 22,
+        color: data.type === 'mesh' ? '#382f7e' : '#2b2368',
+        textColor: '#ffffff',
+        subOrbitRadius: moons.length > 0 ? 34 : 0,
+        moons,
+        parentSun: targetSun
+      };
+
+      targetSun.planets.push(newPlanet);
+      this.selectedEntity = newPlanet;
     }
 
     if (this.onSelectionChange) this.onSelectionChange(this.selectedEntity);
