@@ -1,12 +1,22 @@
 export class PaletteUI {
-  constructor(orbitalGraph, scene3D) {
+  constructor(orbitalGraph, scene3D, historyManager) {
     this.orbitalGraph = orbitalGraph;
     this.scene3D = scene3D;
+    this.historyManager = historyManager;
+
+    this.maximizedPane = null;
 
     this.initAccordions();
     this.initDragAndDrop();
     this.initInspector();
     this.initPlayMode();
+    this.initSplitters();
+    this.initMaximizeControls();
+    this.initAnimationToggle();
+    this.initHistory();
+
+    // Initial 3D sync
+    this.scene3D.syncWithOrbitalSuns(this.orbitalGraph.suns);
   }
 
   initAccordions() {
@@ -21,7 +31,6 @@ export class PaletteUI {
   initDragAndDrop() {
     const orbitalWrapper = document.getElementById('orbital-wrapper');
 
-    // 1. Dragstart on chips
     document.querySelectorAll('.palette-chip-item').forEach((item) => {
       item.addEventListener('dragstart', (e) => {
         const data = {
@@ -36,7 +45,6 @@ export class PaletteUI {
       });
     });
 
-    // 2. Dragover & Drop on Canvas
     if (orbitalWrapper) {
       orbitalWrapper.addEventListener('dragover', (e) => {
         e.preventDefault();
@@ -58,6 +66,7 @@ export class PaletteUI {
           const mousePos = this.orbitalGraph.getCanvasPos(e);
           this.orbitalGraph.addEntityFromPalette(data, mousePos);
           this.updateStatsCounters();
+          this.scene3D.syncWithOrbitalSuns(this.orbitalGraph.suns);
         } catch (err) {
           console.error(err);
         }
@@ -68,6 +77,11 @@ export class PaletteUI {
   initInspector() {
     this.orbitalGraph.onSelectionChange = (entity) => {
       this.renderInspector(entity);
+    };
+
+    this.orbitalGraph.onGraphChange = (suns) => {
+      this.updateStatsCounters();
+      this.scene3D.syncWithOrbitalSuns(suns);
     };
   }
 
@@ -102,6 +116,7 @@ export class PaletteUI {
           <span class="inspector-label">Planetas Orbitando:</span>
           <span style="color:#ff7700;font-weight:700;">${entity.planets.length}</span>
         </div>
+        <button class="btn-delete-node" id="btn-del-selected-node"><i class="ti ti-trash"></i> Excluir Sistema Solar</button>
       `;
     } else if (entity.type === 'planet') {
       html += `
@@ -121,6 +136,7 @@ export class PaletteUI {
           <span class="inspector-label">Luas Acopladas:</span>
           <span style="color:#ffffff;font-weight:700;">${entity.moons ? entity.moons.length : 0}</span>
         </div>
+        <button class="btn-delete-node" id="btn-del-selected-node"><i class="ti ti-trash"></i> Excluir Planeta</button>
       `;
     } else if (entity.type === 'moon') {
       html += `
@@ -132,6 +148,7 @@ export class PaletteUI {
           <span class="inspector-label">Valor Ativo:</span>
           <input type="text" class="inspector-input" value="${entity.val}" id="inp-moon-val" />
         </div>
+        <button class="btn-delete-node" id="btn-del-selected-node"><i class="ti ti-trash"></i> Excluir Lua</button>
       `;
     }
 
@@ -142,6 +159,7 @@ export class PaletteUI {
     if (inpSunName) {
       inpSunName.addEventListener('input', (e) => {
         entity.name = e.target.value;
+        this.scene3D.syncWithOrbitalSuns(this.orbitalGraph.suns);
       });
     }
 
@@ -156,6 +174,22 @@ export class PaletteUI {
     if (inpPlanetOrbit) {
       inpPlanetOrbit.addEventListener('input', (e) => {
         entity.orbitRadius = parseFloat(e.target.value) || 60;
+      });
+    }
+
+    const inpMoonVal = document.getElementById('inp-moon-val');
+    if (inpMoonVal) {
+      inpMoonVal.addEventListener('input', (e) => {
+        entity.val = e.target.value;
+        this.scene3D.syncWithOrbitalSuns(this.orbitalGraph.suns);
+      });
+    }
+
+    // Delete Button in Inspector
+    const btnDel = document.getElementById('btn-del-selected-node');
+    if (btnDel) {
+      btnDel.addEventListener('click', () => {
+        this.orbitalGraph.deleteEntity(entity);
       });
     }
   }
@@ -195,7 +229,6 @@ export class PaletteUI {
 
     if (playBtn) playBtn.addEventListener('click', toggle);
 
-    // F5 toggle
     window.addEventListener('keydown', (e) => {
       if (e.key === 'F5') {
         e.preventDefault();
@@ -203,10 +236,206 @@ export class PaletteUI {
       }
     });
 
-    // Handle collision trigger from 3D scene to orbital graph
     this.scene3D.onCollisionEvent = (player, obstacle) => {
       this.orbitalGraph.triggerEnergyBeam('PLAYER', 'Objeto', '#ff3b30');
     };
+  }
+
+  // --- Resizable Splitters ---
+  initSplitters() {
+    const splitterLeft = document.getElementById('splitter-left');
+    const splitterRight = document.getElementById('splitter-right');
+    const pane3D = document.getElementById('pane-3d');
+    const paneOrbital = document.getElementById('pane-orbital');
+    const paneCatalog = document.getElementById('pane-catalog');
+    const workspace = document.getElementById('main-workspace');
+
+    let isDraggingLeft = false;
+    let isDraggingRight = false;
+
+    if (splitterLeft) {
+      splitterLeft.addEventListener('pointerdown', (e) => {
+        isDraggingLeft = true;
+        splitterLeft.classList.add('is-dragging');
+        document.body.style.cursor = 'col-resize';
+      });
+    }
+
+    if (splitterRight) {
+      splitterRight.addEventListener('pointerdown', (e) => {
+        isDraggingRight = true;
+        splitterRight.classList.add('is-dragging');
+        document.body.style.cursor = 'col-resize';
+      });
+    }
+
+    window.addEventListener('pointermove', (e) => {
+      if (!isDraggingLeft && !isDraggingRight) return;
+      const wsRect = workspace.getBoundingClientRect();
+      const relativeX = e.clientX - wsRect.left;
+
+      if (isDraggingLeft) {
+        const leftPercent = Math.max(15, Math.min(65, (relativeX / wsRect.width) * 100));
+        pane3D.style.flex = `0 0 ${leftPercent}%`;
+        pane3D.style.width = `${leftPercent}%`;
+        this.scene3D.onResize();
+        this.orbitalGraph.resize();
+      } else if (isDraggingRight) {
+        const rightWidth = wsRect.right - e.clientX;
+        const rightPercent = Math.max(12, Math.min(45, (rightWidth / wsRect.width) * 100));
+        paneCatalog.style.flex = `0 0 ${rightPercent}%`;
+        paneCatalog.style.width = `${rightPercent}%`;
+        this.orbitalGraph.resize();
+      }
+    });
+
+    window.addEventListener('pointerup', () => {
+      if (isDraggingLeft || isDraggingRight) {
+        isDraggingLeft = false;
+        isDraggingRight = false;
+        splitterLeft?.classList.remove('is-dragging');
+        splitterRight?.classList.remove('is-dragging');
+        document.body.style.cursor = '';
+        this.scene3D.onResize();
+        this.orbitalGraph.resize();
+      }
+    });
+  }
+
+  // --- Maximize / Solo Windows ---
+  initMaximizeControls() {
+    const pane3D = document.getElementById('pane-3d');
+    const paneOrbital = document.getElementById('pane-orbital');
+    const paneCatalog = document.getElementById('pane-catalog');
+    const splitterLeft = document.getElementById('splitter-left');
+    const splitterRight = document.getElementById('splitter-right');
+
+    const resetLayout = () => {
+      this.maximizedPane = null;
+      [pane3D, paneOrbital, paneCatalog].forEach(p => {
+        p.classList.remove('is-maximized', 'is-hidden');
+        p.style.flex = '';
+        p.style.width = '';
+      });
+      splitterLeft.style.display = '';
+      splitterRight.style.display = '';
+      document.getElementById('icon-max-3d').className = 'ti ti-maximize';
+      document.getElementById('icon-max-orbital').className = 'ti ti-maximize';
+      document.getElementById('icon-max-catalog').className = 'ti ti-maximize';
+      setTimeout(() => {
+        this.scene3D.onResize();
+        this.orbitalGraph.resize();
+      }, 50);
+    };
+
+    const toggleMaximize = (targetPane, iconId) => {
+      if (this.maximizedPane === targetPane) {
+        resetLayout();
+        return;
+      }
+
+      this.maximizedPane = targetPane;
+      const allPanes = [pane3D, paneOrbital, paneCatalog];
+      allPanes.forEach(p => {
+        if (p === targetPane) {
+          p.classList.add('is-maximized');
+          p.classList.remove('is-hidden');
+        } else {
+          p.classList.remove('is-maximized');
+          p.classList.add('is-hidden');
+        }
+      });
+
+      splitterLeft.style.display = 'none';
+      splitterRight.style.display = 'none';
+
+      document.getElementById('icon-max-3d').className = 'ti ti-maximize';
+      document.getElementById('icon-max-orbital').className = 'ti ti-maximize';
+      document.getElementById('icon-max-catalog').className = 'ti ti-maximize';
+      document.getElementById(iconId).className = 'ti ti-minimize';
+
+      setTimeout(() => {
+        this.scene3D.onResize();
+        this.orbitalGraph.resize();
+      }, 50);
+    };
+
+    document.getElementById('btn-max-3d')?.addEventListener('click', () => toggleMaximize(pane3D, 'icon-max-3d'));
+    document.getElementById('btn-max-orbital')?.addEventListener('click', () => toggleMaximize(paneOrbital, 'icon-max-orbital'));
+    document.getElementById('btn-max-catalog')?.addEventListener('click', () => toggleMaximize(paneCatalog, 'icon-max-catalog'));
+    document.getElementById('btn-reset-layout')?.addEventListener('click', resetLayout);
+  }
+
+  // --- Toggle Planet Rotation Animation ---
+  initAnimationToggle() {
+    const btnAnim = document.getElementById('btn-toggle-orbit-anim');
+    const iconAnim = document.getElementById('icon-orbit-anim');
+    const labelAnim = document.getElementById('label-orbit-anim');
+
+    if (btnAnim) {
+      btnAnim.addEventListener('click', () => {
+        this.orbitalGraph.isOrbitAnimationActive = !this.orbitalGraph.isOrbitAnimationActive;
+
+        if (this.orbitalGraph.isOrbitAnimationActive) {
+          btnAnim.classList.add('active');
+          iconAnim.className = 'ti ti-rotate';
+          labelAnim.textContent = 'Girar Órbitas';
+        } else {
+          btnAnim.classList.remove('active');
+          iconAnim.className = 'ti ti-player-pause';
+          labelAnim.textContent = 'Pausado';
+        }
+      });
+    }
+  }
+
+  // --- Undo / Redo History Support ---
+  initHistory() {
+    const btnUndo = document.getElementById('btn-undo');
+    const btnRedo = document.getElementById('btn-redo');
+
+    const handleUndo = () => {
+      if (this.historyManager) {
+        const restored = this.historyManager.undo(this.orbitalGraph.suns);
+        if (restored) {
+          this.orbitalGraph.suns = restored;
+          this.orbitalGraph.selectedEntity = null;
+          this.renderInspector(null);
+          this.updateStatsCounters();
+          this.scene3D.syncWithOrbitalSuns(restored);
+        }
+      }
+    };
+
+    const handleRedo = () => {
+      if (this.historyManager) {
+        const restored = this.historyManager.redo(this.orbitalGraph.suns);
+        if (restored) {
+          this.orbitalGraph.suns = restored;
+          this.orbitalGraph.selectedEntity = null;
+          this.renderInspector(null);
+          this.updateStatsCounters();
+          this.scene3D.syncWithOrbitalSuns(restored);
+        }
+      }
+    };
+
+    if (btnUndo) btnUndo.addEventListener('click', handleUndo);
+    if (btnRedo) btnRedo.addEventListener('click', handleRedo);
+
+    window.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT') return;
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'z' || e.key === 'Z') {
+          e.preventDefault();
+          if (e.shiftKey) handleRedo();
+          else handleUndo();
+        } else if (e.key === 'y' || e.key === 'Y') {
+          e.preventDefault();
+          handleRedo();
+        }
+      }
+    });
   }
 
   updateStatsCounters() {

@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Seed Studio - Lógica Orbital (Protótipo)</title>
-  <script type="module" crossorigin src="/assets/index-DU6vpM6M.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-CU5eKXmH.css">
+  <title>Seed Studio - Lógica Orbital (Protótipo Funcional)</title>
+  <script type="module" crossorigin src="/assets/index-DBvfwxlp.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-CRZ0MbOf.css">
 </head>
 <body class="seed-dark-theme">
   <div class="seed-app-root">
@@ -26,6 +26,14 @@
           <button class="top-menu-btn" data-menu="models">Modelos</button>
           <button class="top-menu-btn" data-menu="help">Ajuda</button>
         </div>
+        <div class="topbar-history-group">
+          <button class="seed-top-icon-btn" id="btn-undo" title="Desfazer Ação (Ctrl + Z)">
+            <i class="ti ti-arrow-back-up"></i>
+          </button>
+          <button class="seed-top-icon-btn" id="btn-redo" title="Refazer Ação (Ctrl + Shift + Z / Ctrl + Y)">
+            <i class="ti ti-arrow-forward-up"></i>
+          </button>
+        </div>
       </div>
 
       <div class="topbar-center">
@@ -34,21 +42,24 @@
           <i class="ti ti-player-play" id="play-btn-icon"></i>
           <span id="play-btn-label">Executar</span>
         </button>
-        <span class="play-hint-tag">Modo Play: Use W/A/S/D + Espaço para controlar o Cubo</span>
+        <span class="play-hint-tag">Modo Play: W/A/S/D + Espaço para mover o Cubo</span>
       </div>
 
       <div class="topbar-right">
+        <button class="seed-top-action-btn" id="btn-reset-layout" title="Restaurar Layout de 3 Colunas">
+          <i class="ti ti-layout-columns"></i> Layout Padrão
+        </button>
         <button class="seed-top-action-btn" id="btn-reset-zoom" title="Centralizar Visualização Orbital">
           <i class="ti ti-crosshair"></i> Focar Órbitas
         </button>
-        <button class="seed-top-action-btn" id="btn-clear-scene" title="Limpar Grafo Orbital">
+        <button class="seed-top-action-btn" id="btn-clear-scene" title="Limpar Grafo e 3D">
           <i class="ti ti-trash"></i> Limpar
         </button>
       </div>
     </header>
 
-    <!-- 2. Main Workspace (Split View) -->
-    <main class="seed-workspace">
+    <!-- 2. Main Workspace (Split View with Resizable Splitters) -->
+    <main class="seed-workspace" id="main-workspace">
       <!-- 2.1 Left Vertical Tool Shelf -->
       <aside class="seed-toolshelf">
         <button class="seed-shelf-btn active" id="tool-select" data-tool="select" title="Seleção & Arraste de Órbitas (V)">
@@ -73,10 +84,15 @@
       </aside>
 
       <!-- 2.2 Left Pane: Real-time 3D Viewport -->
-      <section class="seed-viewport-3d-pane" id="pane-3d">
+      <section class="seed-pane seed-viewport-3d-pane" id="pane-3d">
         <div class="pane-header">
           <span class="pane-title"><i class="ti ti-cube-3d-sphere"></i> Viewport 3D (Cena em Tempo Real)</span>
-          <span class="pane-chip" id="chip-3d-status">Pronto (3D)</span>
+          <div class="pane-header-actions">
+            <span class="pane-chip" id="chip-3d-status">Pronto (3D)</span>
+            <button class="pane-action-btn" id="btn-max-3d" title="Maximizar / Expandir Viewport 3D">
+              <i class="ti ti-maximize" id="icon-max-3d"></i>
+            </button>
+          </div>
         </div>
         <div class="viewport-canvas-wrapper">
           <canvas id="canvas-3d"></canvas>
@@ -89,14 +105,29 @@
         </div>
       </section>
 
+      <!-- Splitter Left (Drag to resize 3D vs Orbital) -->
+      <div class="seed-splitter" id="splitter-left" title="Arrastar para ajustar largura"></div>
+
       <!-- 2.3 Center Pane: Interactive Orbital Logic Graph -->
-      <section class="seed-orbital-graph-pane" id="pane-orbital">
+      <section class="seed-pane seed-orbital-graph-pane" id="pane-orbital">
         <div class="pane-header">
-          <span class="pane-title"><i class="ti ti-atom-2"></i> Grafo de Lógica Orbital (Sistema Solar)</span>
-          <div class="orbital-stats-tags">
-            <span class="orbital-stat-chip" id="stat-suns">2 Sistemas</span>
-            <span class="orbital-stat-chip" id="stat-planets">4 Planetas</span>
-            <span class="orbital-stat-chip" id="stat-moons">6 Luas</span>
+          <div class="orbital-header-left">
+            <span class="pane-title"><i class="ti ti-atom-2"></i> Grafo de Lógica Orbital (Sistema Solar)</span>
+            <div class="orbital-stats-tags">
+              <span class="orbital-stat-chip" id="stat-suns">2 Sistemas</span>
+              <span class="orbital-stat-chip" id="stat-planets">4 Planetas</span>
+              <span class="orbital-stat-chip" id="stat-moons">6 Luas</span>
+            </div>
+          </div>
+          <div class="pane-header-actions">
+            <!-- Toggle Planet Rotation Animation -->
+            <button class="orbital-control-btn active" id="btn-toggle-orbit-anim" title="Pausar / Retomar Rotação dos Planetas">
+              <i class="ti ti-rotate" id="icon-orbit-anim"></i>
+              <span id="label-orbit-anim">Girar Órbitas</span>
+            </button>
+            <button class="pane-action-btn" id="btn-max-orbital" title="Maximizar / Expandir Grafo Orbital">
+              <i class="ti ti-maximize" id="icon-max-orbital"></i>
+            </button>
           </div>
         </div>
         <div class="orbital-canvas-wrapper" id="orbital-wrapper">
@@ -108,90 +139,104 @@
         </div>
       </section>
 
+      <!-- Splitter Right (Drag to resize Orbital vs Catalog) -->
+      <div class="seed-splitter" id="splitter-right" title="Arrastar para ajustar largura"></div>
+
       <!-- 2.4 Right Pane: Catalog Accordion & Inspector -->
-      <aside class="seed-catalog-pane" id="pane-catalog">
-        <!-- Section 1: PERSONAGEM -->
-        <div class="catalog-accordion-group" data-group="personagem">
-          <div class="accordion-header">
-            <span><i class="ti ti-user"></i> PERSONAGEM</span>
-            <span class="accordion-arrow">▾</span>
-          </div>
-          <div class="accordion-body">
-            <div class="palette-chip-item" draggable="true" data-type="sun" data-category="personagem" data-name="PLAYER" data-model="cube">
-              <span class="chip-dot dot-player">●</span>
-              <span class="chip-label">PLAYER</span>
-            </div>
-            <div class="palette-chip-item" draggable="true" data-type="sun" data-category="personagem" data-name="INIMIGO" data-model="cylinder">
-              <span class="chip-dot dot-enemy">●</span>
-              <span class="chip-label">INIMIGO</span>
-            </div>
-            <div class="palette-chip-item" draggable="true" data-type="sun" data-category="personagem" data-name="NPC" data-model="sphere">
-              <span class="chip-dot dot-npc">●</span>
-              <span class="chip-label">NPC</span>
-            </div>
+      <aside class="seed-pane seed-catalog-pane" id="pane-catalog">
+        <div class="pane-header">
+          <span class="pane-title"><i class="ti ti-category"></i> Catálogo & Propriedades</span>
+          <div class="pane-header-actions">
+            <button class="pane-action-btn" id="btn-max-catalog" title="Maximizar / Expandir Catálogo">
+              <i class="ti ti-maximize" id="icon-max-catalog"></i>
+            </button>
           </div>
         </div>
 
-        <!-- Section 2: OBJETOS -->
-        <div class="catalog-accordion-group" data-group="objetos">
-          <div class="accordion-header">
-            <span><i class="ti ti-box"></i> OBJETOS</span>
-            <span class="accordion-arrow">▾</span>
-          </div>
-          <div class="accordion-body grid-2col">
-            <div class="palette-chip-item" draggable="true" data-type="mesh" data-category="objetos" data-name="Cubo" data-model="cube">
-              <span class="chip-dot dot-mesh">●</span>
-              <span class="chip-label">Cubo</span>
+        <div class="catalog-scroll-container">
+          <!-- Section 1: PERSONAGEM -->
+          <div class="catalog-accordion-group" data-group="personagem">
+            <div class="accordion-header">
+              <span><i class="ti ti-user"></i> PERSONAGEM</span>
+              <span class="accordion-arrow">▾</span>
             </div>
-            <div class="palette-chip-item" draggable="true" data-type="mesh" data-category="objetos" data-name="Plano" data-model="plane">
-              <span class="chip-dot dot-mesh">●</span>
-              <span class="chip-label">Plano</span>
-            </div>
-            <div class="palette-chip-item" draggable="true" data-type="mesh" data-category="objetos" data-name="Cilindro" data-model="cylinder">
-              <span class="chip-dot dot-mesh">●</span>
-              <span class="chip-label">Cilindro</span>
-            </div>
-            <div class="palette-chip-item" draggable="true" data-type="mesh" data-category="objetos" data-name="Triangulo" data-model="cone">
-              <span class="chip-dot dot-mesh">●</span>
-              <span class="chip-label">Triangulo</span>
-            </div>
-            <div class="palette-chip-item" draggable="true" data-type="mesh" data-category="objetos" data-name="Esfera" data-model="sphere">
-              <span class="chip-dot dot-mesh">●</span>
-              <span class="chip-label">Esfera</span>
+            <div class="accordion-body">
+              <div class="palette-chip-item" draggable="true" data-type="sun" data-category="personagem" data-name="PLAYER" data-model="cube">
+                <span class="chip-dot dot-player">●</span>
+                <span class="chip-label">PLAYER</span>
+              </div>
+              <div class="palette-chip-item" draggable="true" data-type="sun" data-category="personagem" data-name="INIMIGO" data-model="cylinder">
+                <span class="chip-dot dot-enemy">●</span>
+                <span class="chip-label">INIMIGO</span>
+              </div>
+              <div class="palette-chip-item" draggable="true" data-type="sun" data-category="personagem" data-name="NPC" data-model="sphere">
+                <span class="chip-dot dot-npc">●</span>
+                <span class="chip-label">NPC</span>
+              </div>
             </div>
           </div>
-        </div>
 
-        <!-- Section 3: MECÂNICA -->
-        <div class="catalog-accordion-group" data-group="mecanica">
-          <div class="accordion-header">
-            <span><i class="ti ti-settings"></i> MECÂNICA</span>
-            <span class="accordion-arrow">▾</span>
+          <!-- Section 2: OBJETOS -->
+          <div class="catalog-accordion-group" data-group="objetos">
+            <div class="accordion-header">
+              <span><i class="ti ti-box"></i> OBJETOS</span>
+              <span class="accordion-arrow">▾</span>
+            </div>
+            <div class="accordion-body grid-2col">
+              <div class="palette-chip-item" draggable="true" data-type="mesh" data-category="objetos" data-name="Cubo" data-model="cube">
+                <span class="chip-dot dot-mesh">●</span>
+                <span class="chip-label">Cubo</span>
+              </div>
+              <div class="palette-chip-item" draggable="true" data-type="mesh" data-category="objetos" data-name="Plano" data-model="plane">
+                <span class="chip-dot dot-mesh">●</span>
+                <span class="chip-label">Plano</span>
+              </div>
+              <div class="palette-chip-item" draggable="true" data-type="mesh" data-category="objetos" data-name="Cilindro" data-model="cylinder">
+                <span class="chip-dot dot-mesh">●</span>
+                <span class="chip-label">Cilindro</span>
+              </div>
+              <div class="palette-chip-item" draggable="true" data-type="mesh" data-category="objetos" data-name="Triangulo" data-model="cone">
+                <span class="chip-dot dot-mesh">●</span>
+                <span class="chip-label">Triangulo</span>
+              </div>
+              <div class="palette-chip-item" draggable="true" data-type="mesh" data-category="objetos" data-name="Esfera" data-model="sphere">
+                <span class="chip-dot dot-mesh">●</span>
+                <span class="chip-label">Esfera</span>
+              </div>
+            </div>
           </div>
-          <div class="accordion-body grid-2col">
-            <div class="palette-chip-item" draggable="true" data-type="planet" data-category="mecanica" data-name="Andar" data-moons='[{"name":"Velocidade","color":"#ffffff","val":5},{"name":"Frente/Trás","color":"#4cd964","val":1}]'>
-              <span class="chip-dot dot-mechanic">●</span>
-              <span class="chip-label">Andar</span>
+
+          <!-- Section 3: MECÂNICA -->
+          <div class="catalog-accordion-group" data-group="mecanica">
+            <div class="accordion-header">
+              <span><i class="ti ti-settings"></i> MECÂNICA</span>
+              <span class="accordion-arrow">▾</span>
             </div>
-            <div class="palette-chip-item" draggable="true" data-type="planet" data-category="mecanica" data-name="Correr" data-moons='[{"name":"Multiplicador","color":"#ffcc00","val":1.8}]'>
-              <span class="chip-dot dot-mechanic">●</span>
-              <span class="chip-label">Correr</span>
-            </div>
-            <div class="palette-chip-item" draggable="true" data-type="planet" data-category="mecanica" data-name="Pular" data-moons='[{"name":"Força do Pulo","color":"#ff3b30","val":8}]'>
-              <span class="chip-dot dot-mechanic">●</span>
-              <span class="chip-label">Pular</span>
-            </div>
-            <div class="palette-chip-item" draggable="true" data-type="planet" data-category="mecanica" data-name="Colisao" data-moons='[{"name":"Estatico","color":"#5856d6","val":true},{"name":"Solido","color":"#ffffff","val":true}]'>
-              <span class="chip-dot dot-mechanic">●</span>
-              <span class="chip-label">COLISAO</span>
-            </div>
-            <div class="palette-chip-item" draggable="true" data-type="planet" data-category="mecanica" data-name="Fisica" data-moons='[{"name":"Massa","color":"#ff9500","val":1},{"name":"Atrito","color":"#34aadc","val":0.8}]'>
-              <span class="chip-dot dot-mechanic">●</span>
-              <span class="chip-label">Fisica</span>
-            </div>
-            <div class="palette-chip-item" draggable="true" data-type="planet" data-category="mecanica" data-name="Animacao" data-moons='[{"name":"Idle","color":"#ffffff","val":1},{"name":"Walk","color":"#ffcc00","val":2},{"name":"Run","color":"#4cd964","val":3},{"name":"Jump","color":"#ff3b30","val":4},{"name":"Die","color":"#333333","val":5}]'>
-              <span class="chip-dot dot-mechanic">●</span>
-              <span class="chip-label">Animacao</span>
+            <div class="accordion-body grid-2col">
+              <div class="palette-chip-item" draggable="true" data-type="planet" data-category="mecanica" data-name="Andar" data-moons='[{"name":"Velocidade","color":"#ffffff","val":6},{"name":"Frente/Trás","color":"#4cd964","val":1}]'>
+                <span class="chip-dot dot-mechanic">●</span>
+                <span class="chip-label">Andar</span>
+              </div>
+              <div class="palette-chip-item" draggable="true" data-type="planet" data-category="mecanica" data-name="Correr" data-moons='[{"name":"Multiplicador","color":"#ffcc00","val":1.8}]'>
+                <span class="chip-dot dot-mechanic">●</span>
+                <span class="chip-label">Correr</span>
+              </div>
+              <div class="palette-chip-item" draggable="true" data-type="planet" data-category="mecanica" data-name="Pular" data-moons='[{"name":"Força do Pulo","color":"#ff3b30","val":7.5}]'>
+                <span class="chip-dot dot-mechanic">●</span>
+                <span class="chip-label">Pular</span>
+              </div>
+              <div class="palette-chip-item" draggable="true" data-type="planet" data-category="mecanica" data-name="Colisao" data-moons='[{"name":"Estatico","color":"#5856d6","val":true},{"name":"Solido","color":"#ffffff","val":true}]'>
+                <span class="chip-dot dot-mechanic">●</span>
+                <span class="chip-label">COLISAO</span>
+              </div>
+              <div class="palette-chip-item" draggable="true" data-type="planet" data-category="mecanica" data-name="Fisica" data-moons='[{"name":"Massa","color":"#ff9500","val":1},{"name":"Atrito","color":"#34aadc","val":0.8}]'>
+                <span class="chip-dot dot-mechanic">●</span>
+                <span class="chip-label">Fisica</span>
+              </div>
+              <div class="palette-chip-item" draggable="true" data-type="planet" data-category="mecanica" data-name="Animacao" data-moons='[{"name":"Idle","color":"#ffffff","val":1},{"name":"Walk","color":"#ffcc00","val":2},{"name":"Run","color":"#4cd964","val":3},{"name":"Jump","color":"#ff3b30","val":4},{"name":"Die","color":"#333333","val":5}]'>
+                <span class="chip-dot dot-mechanic">●</span>
+                <span class="chip-label">Animacao</span>
+              </div>
             </div>
           </div>
         </div>

@@ -1,8 +1,10 @@
 export class OrbitalGraph {
-  constructor(canvas, onSelectionChange) {
+  constructor(canvas, onSelectionChange, onGraphChange, historyManager) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.onSelectionChange = onSelectionChange;
+    this.onGraphChange = onGraphChange;
+    this.historyManager = historyManager;
 
     // Viewport transform
     this.panX = 0;
@@ -11,13 +13,14 @@ export class OrbitalGraph {
     this.isPanning = false;
     this.lastMouse = { x: 0, y: 0 };
 
-    // Active drag object
-    this.draggedEntity = null; // { type: 'sun' | 'planet', entity: obj, offset: { x, y } }
+    // Active state
+    this.isOrbitAnimationActive = true;
+    this.draggedEntity = null;
     this.selectedEntity = null;
     this.hoveredEntity = null;
 
     // Active Gravitational Energy Beams
-    this.activeBeams = []; // [ { from: PlanetA, to: PlanetB, progress: 0..1, color: '#ff7700' } ]
+    this.activeBeams = [];
 
     // Initial Systems (Exact matching user mockup)
     this.suns = [
@@ -114,6 +117,11 @@ export class OrbitalGraph {
     this.initCanvas();
     this.initEvents();
     this.animate();
+
+    // Push initial history snapshot
+    if (this.historyManager) {
+      this.historyManager.pushState(this.suns);
+    }
   }
 
   initCanvas() {
@@ -122,10 +130,12 @@ export class OrbitalGraph {
   }
 
   resize() {
+    if (!this.canvas.parentElement) return;
     const parent = this.canvas.parentElement;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const width = parent.clientWidth;
     const height = parent.clientHeight;
+    if (width === 0 || height === 0) return;
 
     this.canvas.width = width * dpr;
     this.canvas.height = height * dpr;
@@ -138,7 +148,7 @@ export class OrbitalGraph {
   }
 
   initEvents() {
-    // Pan & Drag
+    // Pointerdown on Canvas
     this.canvas.addEventListener('pointerdown', (e) => {
       const mouse = this.getCanvasPos(e);
       const hit = this.hitTest(mouse.x, mouse.y);
@@ -154,7 +164,6 @@ export class OrbitalGraph {
         };
         if (this.onSelectionChange) this.onSelectionChange(hit);
       } else {
-        // Start Canvas Panning
         this.isPanning = true;
         this.canvas.parentElement.classList.add('is-panning');
         this.selectedEntity = null;
@@ -181,7 +190,6 @@ export class OrbitalGraph {
             const dx = mouse.x - sun.x;
             const dy = mouse.y - sun.y;
             planet.angle = Math.atan2(dy, dx);
-            // Snap to closest orbit
             const dist = Math.hypot(dx, dy);
             let closestOrbit = sun.orbits[0].radius;
             let minDiff = Infinity;
@@ -203,17 +211,65 @@ export class OrbitalGraph {
     });
 
     window.addEventListener('pointerup', () => {
+      if (this.draggedEntity && this.historyManager) {
+        this.historyManager.pushState(this.suns);
+        this.notifyGraphChange();
+      }
       this.isPanning = false;
       this.draggedEntity = null;
       this.canvas.parentElement.classList.remove('is-panning');
     });
 
-    // Zoom
+    // Zoom on wheel
     this.canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
       const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
       this.zoom = Math.max(0.4, Math.min(2.5, this.zoom * zoomFactor));
     }, { passive: false });
+
+    // Keyboard Shortcuts (Delete, Backspace)
+    window.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT') return;
+      if (e.key === 'Delete' || e.key === 'Backspace' || e.key === 'x' || e.key === 'X') {
+        if (this.selectedEntity) {
+          this.deleteEntity(this.selectedEntity);
+        }
+      }
+    });
+  }
+
+  notifyGraphChange() {
+    if (this.onGraphChange) {
+      this.onGraphChange(this.suns);
+    }
+  }
+
+  deleteEntity(entity) {
+    if (!entity) return;
+
+    if (this.historyManager) {
+      this.historyManager.pushState(this.suns);
+    }
+
+    if (entity.type === 'sun') {
+      this.suns = this.suns.filter(s => s.id !== entity.id);
+    } else if (entity.type === 'planet') {
+      this.suns.forEach(sun => {
+        sun.planets = sun.planets.filter(p => p.id !== entity.id);
+      });
+    } else if (entity.type === 'moon') {
+      this.suns.forEach(sun => {
+        sun.planets.forEach(planet => {
+          if (planet.moons) {
+            planet.moons = planet.moons.filter(m => m.name !== entity.name);
+          }
+        });
+      });
+    }
+
+    this.selectedEntity = null;
+    if (this.onSelectionChange) this.onSelectionChange(null);
+    this.notifyGraphChange();
   }
 
   getCanvasPos(e) {
@@ -274,10 +330,9 @@ export class OrbitalGraph {
     return null;
   }
 
-  // Trigger glowing gravitational energy beam between systems
   triggerEnergyBeam(fromSunName, toSunName, color = '#ff7700') {
-    const fromSun = this.suns.find(s => s.name.toUpperCase() === fromSunName.toUpperCase());
-    const toSun = this.suns.find(s => s.name.toUpperCase() === toSunName.toUpperCase());
+    const fromSun = this.suns.find(s => s.name.toUpperCase().includes(fromSunName.toUpperCase()));
+    const toSun = this.suns.find(s => s.name.toUpperCase().includes(toSunName.toUpperCase()));
 
     if (fromSun && toSun) {
       this.activeBeams.push({
@@ -291,8 +346,11 @@ export class OrbitalGraph {
     }
   }
 
-  // Add new Sun / Planet from drop
   addEntityFromPalette(data, mousePos) {
+    if (this.historyManager) {
+      this.historyManager.pushState(this.suns);
+    }
+
     if (data.type === 'sun') {
       const newSun = {
         id: `sun-${Date.now()}`,
@@ -324,7 +382,6 @@ export class OrbitalGraph {
       this.suns.push(newSun);
       this.selectedEntity = newSun;
     } else if (data.type === 'planet' || data.type === 'mesh') {
-      // Find closest sun to attach planet
       let closestSun = this.suns[0];
       let minDist = Infinity;
       this.suns.forEach(sun => {
@@ -341,7 +398,6 @@ export class OrbitalGraph {
         const angle = Math.atan2(dy, dx);
         const dist = Math.hypot(dx, dy);
 
-        // Find or create orbit
         let orbitR = 115;
         if (dist > 140) {
           orbitR = dist;
@@ -383,36 +439,40 @@ export class OrbitalGraph {
     }
 
     if (this.onSelectionChange) this.onSelectionChange(this.selectedEntity);
+    this.notifyGraphChange();
   }
 
   update(delta) {
-    // 1. Rotate planets & moons
-    this.suns.forEach(sun => {
-      sun.planets.forEach(planet => {
-        planet.angle += planet.speed * delta;
-        if (planet.moons) {
-          planet.moons.forEach(moon => {
-            moon.angle += moon.speed * delta;
-          });
-        }
+    if (this.isOrbitAnimationActive) {
+      this.suns.forEach(sun => {
+        sun.planets.forEach(planet => {
+          planet.angle += planet.speed * delta;
+          if (planet.moons) {
+            planet.moons.forEach(moon => {
+              moon.angle += moon.speed * delta;
+            });
+          }
+        });
       });
-    });
+    }
 
-    // 2. Decay energy beams
     this.activeBeams.forEach(b => b.life -= delta * 1.5);
     this.activeBeams = this.activeBeams.filter(b => b.life > 0);
   }
 
   draw() {
+    if (!this.canvas.parentElement) return;
     const w = this.canvas.parentElement.clientWidth;
     const h = this.canvas.parentElement.clientHeight;
+    if (w === 0 || h === 0) return;
+
     this.ctx.clearRect(0, 0, w, h);
 
     this.ctx.save();
     this.ctx.translate(this.panX, this.panY);
     this.ctx.scale(this.zoom, this.zoom);
 
-    // 1. Draw Active Gravitational Energy Beams
+    // 1. Draw Active Energy Beams
     this.activeBeams.forEach(beam => {
       this.ctx.save();
       this.ctx.beginPath();
@@ -426,7 +486,7 @@ export class OrbitalGraph {
       this.ctx.restore();
     });
 
-    // 2. Draw Solar Systems (Suns, Orbits, Planets, Moons)
+    // 2. Draw Solar Systems
     this.suns.forEach(sun => {
       // 2.1 Draw Concentric Dashed Orbits
       sun.orbits.forEach(orbit => {
@@ -445,7 +505,6 @@ export class OrbitalGraph {
         const pX = sun.x + Math.cos(planet.angle) * planet.orbitRadius;
         const pY = sun.y + Math.sin(planet.angle) * planet.orbitRadius;
 
-        // Sub-orbit dashed circle for moons
         if (planet.moons && planet.moons.length > 0) {
           const subR = planet.subOrbitRadius || 34;
           this.ctx.save();
@@ -457,7 +516,6 @@ export class OrbitalGraph {
           this.ctx.stroke();
           this.ctx.restore();
 
-          // Draw Moons
           planet.moons.forEach(moon => {
             const mX = pX + Math.cos(moon.angle) * subR;
             const mY = pY + Math.sin(moon.angle) * subR;
@@ -470,7 +528,6 @@ export class OrbitalGraph {
             this.ctx.shadowBlur = 6;
             this.ctx.fill();
 
-            // Minus icon '-' on moon
             this.ctx.fillStyle = '#000000';
             this.ctx.font = 'bold 10px sans-serif';
             this.ctx.textAlign = 'center';
@@ -490,7 +547,6 @@ export class OrbitalGraph {
         this.ctx.lineWidth = this.selectedEntity?.id === planet.id ? 2.5 : 1.2;
         this.ctx.stroke();
 
-        // Planet Label
         this.ctx.fillStyle = planet.textColor || '#ffffff';
         this.ctx.font = '10px sans-serif';
         this.ctx.textAlign = 'center';
@@ -511,7 +567,6 @@ export class OrbitalGraph {
       this.ctx.lineWidth = this.selectedEntity?.id === sun.id ? 3 : 1.5;
       this.ctx.stroke();
 
-      // Sun Label on Black Box (Exact matching user mockup)
       const labelText = sun.name;
       this.ctx.font = 'bold 13px sans-serif';
       const textWidth = this.ctx.measureText(labelText).width;
