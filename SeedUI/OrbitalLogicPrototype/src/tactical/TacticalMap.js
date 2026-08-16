@@ -34,18 +34,18 @@ export class TacticalMap {
 
     // Blueprint Rooms / Zones (Rectangles, Circles, Triangles)
     this.rooms = [
-      { id: 'room-armory-1', shape: 'rect', name: 'Armory A', x: -10, z: -7, w: 6.0, h: 4.5, color: '#1a1d24' },
-      { id: 'room-armory-2', shape: 'rect', name: 'Armory B', x: -10, z: 2.5, w: 6.0, h: 4.5, color: '#1a1d24' },
-      { id: 'corridor-main', shape: 'rect', name: 'Corredor Central', x: -3.0, z: -2.0, w: 8.0, h: 4.0, color: '#15171d' },
-      { id: 'room-main-hall', shape: 'rect', name: 'Main Hall', x: 6.0, z: -5.5, w: 8.5, h: 11.0, color: '#1a1d24' }
+      { id: 'room-armory-1', shape: 'rect', name: 'Armory A', x: -11, z: -7, w: 6.0, h: 4.5, color: '#1a1d24' },
+      { id: 'room-armory-2', shape: 'rect', name: 'Armory B', x: -11, z: 2.5, w: 6.0, h: 4.5, color: '#1a1d24' },
+      { id: 'corridor-main', shape: 'rect', name: 'Corredor Central', x: -3.5, z: -2.0, w: 8.0, h: 4.0, color: '#14161c' },
+      { id: 'room-main-hall', shape: 'rect', name: 'Main Hall', x: 6.5, z: -5.5, w: 8.5, h: 11.0, color: '#1a1d24' }
     ];
 
     // Blueprint Routes (Dashed arrows showing navigation paths)
     this.routes = [
-      { from: { x: -7, z: 0 }, to: { x: 1.0, z: 0 } },
-      { from: { x: 1.0, z: 0 }, to: { x: 1.0, z: -4.5 } },
-      { from: { x: 1.0, z: 0 }, to: { x: 1.0, z: 4.5 } },
-      { from: { x: 1.0, z: 0 }, to: { x: 10, z: 0 } }
+      { from: { x: -8, z: 0 }, to: { x: 0.5, z: 0 } },
+      { from: { x: 0.5, z: 0 }, to: { x: 0.5, z: -4.5 } },
+      { from: { x: 0.5, z: 0 }, to: { x: 0.5, z: 4.5 } },
+      { from: { x: 0.5, z: 0 }, to: { x: 10.5, z: 0 } }
     ];
 
     this.initCanvas();
@@ -101,7 +101,7 @@ export class TacticalMap {
       if (this.onSelectRoom) this.onSelectRoom(null);
       return;
     }
-    // Bring selected room to front of rooms list
+    // Elevate selected room to end of rooms array so it draws on top
     this.rooms = this.rooms.filter(r => r.id !== room.id);
     this.rooms.push(room);
     this.selectedRoom = room;
@@ -241,7 +241,7 @@ export class TacticalMap {
         return;
       }
 
-      // 2. Check Resize Handles on Selected Room (18px tolerance)
+      // 2. Priority 1: Check Resize Handles on currently Selected Room (20px tolerance)
       if (this.selectedRoom) {
         const handle = this.hitTestHandles(this.selectedRoom, mouse);
         if (handle) {
@@ -252,7 +252,7 @@ export class TacticalMap {
         }
       }
 
-      // 3. Check Blueprint Rooms (Direct Selection & Dragging)
+      // 3. Priority 2: Check Blueprint Rooms (Smallest Area First to prevent parent overlap)
       const hitRoom = this.hitTestRooms(mouse.x, mouse.y);
       if (hitRoom) {
         const now = Date.now();
@@ -269,7 +269,7 @@ export class TacticalMap {
         return;
       }
 
-      // 4. Check 3D Entities on Map
+      // 4. Priority 3: Check 3D Entities on Map
       const hitEntity = this.hitTestEntities(mouse.x, mouse.y);
       if (hitEntity) {
         this.selectedEntity = hitEntity;
@@ -423,28 +423,59 @@ export class TacticalMap {
   }
 
   isPointInsideRoom(r, worldX, worldZ) {
-    const pad = 0.4;
+    const pad = 0.5;
     if (r.shape === 'circle') {
       return Math.hypot(worldX - r.x, worldZ - r.z) <= (r.radius + pad);
+    } else if (r.shape === 'triangle') {
+      // Precise Barycentric Point-In-Triangle Check with padding
+      const ax = r.x + r.w / 2, az = r.z;
+      const bx = r.x + r.w,     bz = r.z + r.h;
+      const cx = r.x,           cz = r.z + r.h;
+      
+      const v0x = cx - ax, v0z = cz - az;
+      const v1x = bx - ax, v1z = bz - az;
+      const v2x = worldX - ax, v2z = worldZ - az;
+
+      const dot00 = v0x * v0x + v0z * v0z;
+      const dot01 = v0x * v1x + v0z * v1z;
+      const dot02 = v0x * v2x + v0z * v2z;
+      const dot11 = v1x * v1x + v1z * v1z;
+      const dot12 = v1x * v2x + v1z * v2z;
+
+      const invDenom = 1 / (dot00 * dot11 - dot01 * dot01);
+      const u = (dot11 * dot02 - dot01 * dot12) * invDenom;
+      const v = (dot00 * dot12 - dot01 * dot02) * invDenom;
+
+      return (u >= -0.15) && (v >= -0.15) && (u + v <= 1.15);
     } else {
       return worldX >= r.x - pad && worldX <= r.x + r.w + pad && worldZ >= r.z - pad && worldZ <= r.z + r.h + pad;
     }
   }
 
   hitTestRooms(worldX, worldZ) {
-    // 1. Give active selected room highest priority!
+    // 1. If currently selected room is hit, prioritize it
     if (this.selectedRoom && this.isPointInsideRoom(this.selectedRoom, worldX, worldZ)) {
       return this.selectedRoom;
     }
 
-    // 2. Test other rooms in reverse (top-most first)
-    for (let i = this.rooms.length - 1; i >= 0; i--) {
-      const r = this.rooms[i];
-      if (r === this.selectedRoom) continue;
+    // 2. Collect all rooms that contain the clicked point
+    const hits = [];
+    for (const r of this.rooms) {
       if (this.isPointInsideRoom(r, worldX, worldZ)) {
-        return r;
+        let area = r.w * r.h;
+        if (r.shape === 'circle') area = Math.PI * r.radius * r.radius;
+        else if (r.shape === 'triangle') area = (r.w * r.h) / 2;
+        hits.push({ room: r, area });
       }
     }
+
+    // 3. Sort by SMALLEST AREA FIRST!
+    // This guarantees that a 5x5 zone inside an 80x80 corridor is ALWAYS selected first!
+    if (hits.length > 0) {
+      hits.sort((a, b) => a.area - b.area);
+      return hits[0].room;
+    }
+
     return null;
   }
 
@@ -466,7 +497,7 @@ export class TacticalMap {
   }
 
   hitTestHandles(room, mouse) {
-    const hitTolerancePx = 18; // 18 CSS pixels radius for effortless grabbing!
+    const hitTolerancePx = 20; // Generous 20 CSS pixels radius for effortless grabbing!
 
     const toScreen = (wx, wz) => ({
       x: this.panX + (wx * this.meterToPx) * this.zoom,
@@ -599,7 +630,7 @@ export class TacticalMap {
         const rad = room.radius * this.meterToPx;
         this.ctx.beginPath();
         this.ctx.arc(rx, rz, rad, 0, Math.PI * 2);
-        this.ctx.fillStyle = isSel ? 'rgba(56, 189, 248, 0.16)' : room.color;
+        this.ctx.fillStyle = isSel ? 'rgba(56, 189, 248, 0.18)' : room.color;
         this.ctx.fill();
 
         this.ctx.strokeStyle = isSel ? '#38bdf8' : (isHov ? '#0284c7' : '#333742');
@@ -623,7 +654,7 @@ export class TacticalMap {
         this.ctx.lineTo(rx, rz + rh);
         this.ctx.closePath();
 
-        this.ctx.fillStyle = isSel ? 'rgba(56, 189, 248, 0.16)' : room.color;
+        this.ctx.fillStyle = isSel ? 'rgba(56, 189, 248, 0.18)' : room.color;
         this.ctx.fill();
 
         this.ctx.strokeStyle = isSel ? '#38bdf8' : (isHov ? '#0284c7' : '#333742');
@@ -641,7 +672,7 @@ export class TacticalMap {
         const rw = room.w * this.meterToPx;
         const rh = room.h * this.meterToPx;
 
-        this.ctx.fillStyle = isSel ? 'rgba(56, 189, 248, 0.16)' : room.color;
+        this.ctx.fillStyle = isSel ? 'rgba(56, 189, 248, 0.18)' : room.color;
         this.ctx.fillRect(rx, rz, rw, rh);
 
         // Internal blueprint crosshatch lines
