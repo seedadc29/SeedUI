@@ -185,6 +185,9 @@
                 </button>
               </div>
 
+              <button class="pane-action-btn" id="btn-toggle-diagnostic" title="Abrir Painel de Diagnóstico de Cliques" style="color:#ffcc00;border-color:rgba(255,204,0,0.3);">
+                <i class="ti ti-bug"></i> <span>Diagnóstico</span>
+              </button>
               <button class="pane-action-btn" id="btn-reset-tactical-zoom" title="Centralizar Mapa">
                 <i class="ti ti-crosshair"></i>
               </button>
@@ -197,6 +200,50 @@
             <canvas id="canvas-tactical"></canvas>
             <!-- Floating Inline Rename Input -->
             <input type="text" id="tactical-inline-name-input" class="tactical-inline-name-input hidden" placeholder="Nome da sala..." />
+
+            <!-- Live Interactive Diagnostic Overlay / Drawer -->
+            <div class="tactical-diagnostic-drawer" id="tactical-diagnostic-drawer">
+              <div class="diagnostic-drawer-header">
+                <div class="diagnostic-title">
+                  <i class="ti ti-bug"></i> <span>DIAGNÓSTICO AO VIVO DE CLIQUES E SELEÇÃO</span>
+                </div>
+                <div class="diagnostic-actions">
+                  <button class="diagnostic-btn-copy" id="btn-copy-diagnostic" title="Copiar diagnóstico para colar no chat">
+                    <i class="ti ti-clipboard"></i> <span>Copiar Diagnóstico</span>
+                  </button>
+                  <button class="diagnostic-btn-clear" id="btn-clear-diagnostic" title="Limpar logs">
+                    <i class="ti ti-trash"></i> <span>Limpar</span>
+                  </button>
+                  <button class="diagnostic-btn-close" id="btn-close-diagnostic" title="Fechar Diagnóstico">
+                    <i class="ti ti-x"></i>
+                  </button>
+                </div>
+              </div>
+              <div class="diagnostic-drawer-body" id="diagnostic-body">
+                <div class="diagnostic-hud-grid">
+                  <div class="diag-card">
+                    <span class="diag-label">Canvas & Resolução:</span>
+                    <span class="diag-val" id="diag-canvas-info">Width: 0, Height: 0, DPR: 1</span>
+                  </div>
+                  <div class="diag-card">
+                    <span class="diag-label">Câmera / Pan & Zoom:</span>
+                    <span class="diag-val" id="diag-cam-info">Pan: (0, 0), Zoom: 1.0</span>
+                  </div>
+                  <div class="diag-card">
+                    <span class="diag-label">Último Clique Mouse:</span>
+                    <span class="diag-val" id="diag-mouse-info">X: 0, Y: 0 (Mundo: 0m, 0m)</span>
+                  </div>
+                  <div class="diag-card">
+                    <span class="diag-label">Forma Selecionada:</span>
+                    <span class="diag-val" id="diag-selected-info" style="color:#38bdf8;font-weight:bold;">NENHUMA</span>
+                  </div>
+                </div>
+                <div class="diagnostic-log-container">
+                  <span class="diag-label">Histórico Detalhado de Eventos & Cálculos de Clique (Clique nas formas para ver o log aqui):</span>
+                  <pre class="diagnostic-pre" id="diagnostic-log-text">Pronto. Clique nas formas no mapa para registrar o diagnóstico completo...</pre>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
       </div>

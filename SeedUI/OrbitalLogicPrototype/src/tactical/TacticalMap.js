@@ -30,6 +30,10 @@ export class TacticalMap {
     this.roomInitialState = null;
     this.animTime = 0;
 
+    // Diagnostic logging system
+    this.diagnosticLogs = [];
+    this.isDiagnosticOpen = false;
+
     // Scale conversion: 1 meter in 3D = 22 pixels on Tactical Map
     this.meterToPx = 22;
 
@@ -52,7 +56,10 @@ export class TacticalMap {
     this.initCanvas();
     this.initEvents();
     this.initInlineEditor();
+    this.initDiagnosticUI();
     this.animate();
+
+    this.logDiag('INIT', 'TacticalMap inicializado com sucesso.');
   }
 
   initCanvas() {
@@ -78,6 +85,7 @@ export class TacticalMap {
       this.panX = width / 2;
       this.panY = height / 2;
     }
+    this.updateDiagnosticHUD();
   }
 
   setTool(toolName) {
@@ -96,12 +104,14 @@ export class TacticalMap {
     } else {
       this.canvas.style.cursor = 'default';
     }
+    this.logDiag('FERRAMENTA', `Ferramenta ativa alterada para: [${toolName.toUpperCase()}]`);
   }
 
   selectRoom(room) {
     if (!room) {
       this.selectedRoom = null;
       if (this.onSelectRoom) this.onSelectRoom(null);
+      this.updateDiagnosticHUD();
       return;
     }
     // Elevate selected room to end of rooms array so it draws on top
@@ -110,6 +120,8 @@ export class TacticalMap {
     this.selectedRoom = room;
     this.selectedEntity = null;
     if (this.onSelectRoom) this.onSelectRoom(room);
+    this.updateDiagnosticHUD();
+    this.logDiag('SELEÇÃO_SALA', `Sala selecionada: "${room.name}" (${room.shape}) em X=${room.x}m, Z=${room.z}m`);
   }
 
   initInlineEditor() {
@@ -219,6 +231,7 @@ export class TacticalMap {
 
     this.selectRoom(newRoom);
     this.setTool('select');
+    this.logDiag('CRIAR_FORMA', `Forma criada: [${shapeType.toUpperCase()}] em X=${newRoom.x}m, Z=${newRoom.z}m`);
     return newRoom;
   }
 
@@ -236,6 +249,7 @@ export class TacticalMap {
       this.lastMouse = { x: e.clientX, y: e.clientY };
 
       const mouse = this.getMapPos(e);
+      this.logDiag('MOUSEDOWN', `Clique no Canvas: Tela(${e.clientX}, ${e.clientY}) -> Mundo(X=${mouse.x.toFixed(2)}m, Z=${mouse.z.toFixed(2)}m), Tool=${this.currentTool}`);
 
       // 1. Pan Tool or Middle Click -> Pan only
       if (this.currentTool === 'pan' || e.button === 1 || e.spaceKey) {
@@ -251,6 +265,7 @@ export class TacticalMap {
           this.activeDragHandle = handle;
           this.roomInitialState = { ...this.selectedRoom };
           this.isPanning = false;
+          this.logDiag('HIT_ALÇA', `Alça de redimensionamento [${handle}] clicada na sala "${this.selectedRoom.name}"`);
           return;
         }
       }
@@ -270,6 +285,7 @@ export class TacticalMap {
         this.isPanning = false;
         this.startRoomPos = { x: hitRoom.x, z: hitRoom.z };
         this.startMousePos = { x: mouse.x, z: mouse.z };
+        this.logDiag('HIT_SALA', `Sala atingida e selecionada com sucesso: "${hitRoom.name}"`);
         return;
       }
 
@@ -280,6 +296,7 @@ export class TacticalMap {
         this.selectRoom(null);
         this.isPanning = false;
         if (this.onSelectEntity) this.onSelectEntity(hitEntity);
+        this.logDiag('HIT_ENTIDADE_3D', `Entidade 3D atingida: "${hitEntity.sunName || hitEntity.type}"`);
         return;
       }
 
@@ -287,6 +304,7 @@ export class TacticalMap {
       this.selectRoom(null);
       this.isPanning = true;
       this.cancelInlineRename();
+      this.logDiag('CLIQUE_VAZIO', `Clique em espaço vazio -> Nenhuma forma selecionada.`);
     });
 
     window.addEventListener('mousemove', (e) => {
@@ -376,6 +394,7 @@ export class TacticalMap {
       if (this.isDraggingRoom || this.activeDragHandle) {
         if (this.selectedRoom && this.onSelectRoom) {
           this.onSelectRoom(this.selectedRoom);
+          this.logDiag('MOUSEUP', `Operação concluída na sala "${this.selectedRoom.name}". Nova Pos: (${this.selectedRoom.x}m, ${this.selectedRoom.z}m), Dim: W=${this.selectedRoom.w || this.selectedRoom.radius*2}, H=${this.selectedRoom.h || this.selectedRoom.radius*2}`);
         }
       }
       isMouseDown = false;
@@ -385,6 +404,7 @@ export class TacticalMap {
       this.activeDragHandle = null;
       this.canvas.parentElement?.classList.remove('is-panning');
       this.updateCursor(null);
+      this.updateDiagnosticHUD();
     });
 
     // Zoom on wheel
@@ -392,6 +412,7 @@ export class TacticalMap {
       e.preventDefault();
       const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
       this.zoom = Math.max(0.4, Math.min(2.5, this.zoom * zoomFactor));
+      this.updateDiagnosticHUD();
     }, { passive: false });
 
     // Keyboard Shortcuts
@@ -399,8 +420,10 @@ export class TacticalMap {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (this.selectedRoom) {
+          const name = this.selectedRoom.name;
           this.rooms = this.rooms.filter(r => r.id !== this.selectedRoom.id);
           this.selectRoom(null);
+          this.logDiag('EXCLUIR', `Sala "${name}" excluída.`);
         }
       } else if (e.code === 'KeyV') this.setTool('select');
       else if (e.code === 'KeyG' || e.code === 'KeyW') this.setTool('move');
@@ -547,6 +570,122 @@ export class TacticalMap {
     }
 
     return null;
+  }
+
+  // --- Diagnostic System Implementation ---
+  initDiagnosticUI() {
+    const btnToggle = document.getElementById('btn-toggle-diagnostic');
+    const btnClose = document.getElementById('btn-close-diagnostic');
+    const btnCopy = document.getElementById('btn-copy-diagnostic');
+    const btnClear = document.getElementById('btn-clear-diagnostic');
+    const drawer = document.getElementById('tactical-diagnostic-drawer');
+
+    btnToggle?.addEventListener('click', () => {
+      this.isDiagnosticOpen = !this.isDiagnosticOpen;
+      drawer?.classList.toggle('hidden', !this.isDiagnosticOpen);
+    });
+
+    btnClose?.addEventListener('click', () => {
+      this.isDiagnosticOpen = false;
+      drawer?.classList.add('hidden');
+    });
+
+    btnClear?.addEventListener('click', () => {
+      this.diagnosticLogs = [];
+      const logEl = document.getElementById('diagnostic-log-text');
+      if (logEl) logEl.textContent = 'Logs limpos. Clique nas formas para registrar novos eventos...';
+    });
+
+    btnCopy?.addEventListener('click', () => {
+      const fullReport = this.getDiagnosticReport();
+      navigator.clipboard.writeText(fullReport).then(() => {
+        const origText = btnCopy.innerHTML;
+        btnCopy.innerHTML = '<i class="ti ti-check"></i> <span>Copiado com Sucesso!</span>';
+        btnCopy.style.background = '#34c759';
+        btnCopy.style.color = '#ffffff';
+        setTimeout(() => {
+          btnCopy.innerHTML = origText;
+          btnCopy.style.background = '#ffcc00';
+          btnCopy.style.color = '#0b0f19';
+        }, 2500);
+      });
+    });
+
+    this.updateDiagnosticHUD();
+  }
+
+  logDiag(category, message) {
+    const time = new Date().toTimeString().split(' ')[0];
+    const logLine = `[${time}] [${category}] ${message}`;
+    this.diagnosticLogs.push(logLine);
+    if (this.diagnosticLogs.length > 50) this.diagnosticLogs.shift();
+
+    const logEl = document.getElementById('diagnostic-log-text');
+    if (logEl) {
+      logEl.textContent = this.diagnosticLogs.slice(-15).join('\n');
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+    this.updateDiagnosticHUD();
+  }
+
+  updateDiagnosticHUD() {
+    const rect = this.canvas.getBoundingClientRect();
+    const canvasInfo = document.getElementById('diag-canvas-info');
+    const camInfo = document.getElementById('diag-cam-info');
+    const mouseInfo = document.getElementById('diag-mouse-info');
+    const selectedInfo = document.getElementById('diag-selected-info');
+
+    if (canvasInfo) {
+      canvasInfo.textContent = `W:${Math.round(rect.width)}px, H:${Math.round(rect.height)}px (DPR:${this.dpr})`;
+    }
+    if (camInfo) {
+      camInfo.textContent = `Pan:(${Math.round(this.panX)}, ${Math.round(this.panY)}), Zoom:${this.zoom.toFixed(2)}x`;
+    }
+    if (mouseInfo) {
+      const wx = ((this.lastMouse.x - rect.left - this.panX) / this.zoom) / this.meterToPx;
+      const wz = ((this.lastMouse.y - rect.top - this.panY) / this.zoom) / this.meterToPx;
+      mouseInfo.textContent = `Tela:(${Math.round(this.lastMouse.x)}, ${Math.round(this.lastMouse.y)}) | Mundo:(${wx.toFixed(1)}m, ${wz.toFixed(1)}m)`;
+    }
+    if (selectedInfo) {
+      selectedInfo.textContent = this.selectedRoom ? `"${this.selectedRoom.name}" (${this.selectedRoom.shape})` : 'NENHUMA';
+    }
+  }
+
+  getDiagnosticReport() {
+    const rect = this.canvas.getBoundingClientRect();
+    return JSON.stringify({
+      timestamp: new Date().toISOString(),
+      canvas: {
+        widthCss: rect.width,
+        heightCss: rect.height,
+        widthInternal: this.canvas.width,
+        heightInternal: this.canvas.height,
+        dpr: this.dpr,
+        devicePixelRatio: window.devicePixelRatio
+      },
+      viewport: {
+        panX: this.panX,
+        panY: this.panY,
+        zoom: this.zoom,
+        meterToPx: this.meterToPx
+      },
+      state: {
+        activeTool: this.currentTool,
+        selectedRoom: this.selectedRoom,
+        roomsCount: this.rooms.length,
+        roomsList: this.rooms.map(r => ({
+          id: r.id,
+          name: r.name,
+          shape: r.shape,
+          x: r.x,
+          z: r.z,
+          w: r.w,
+          h: r.h,
+          radius: r.radius
+        }))
+      },
+      recentLogs: this.diagnosticLogs
+    }, null, 2);
   }
 
   update(delta) {
@@ -776,7 +915,7 @@ export class TacticalMap {
     // Cross lines
     this.ctx.beginPath();
     this.ctx.moveTo(cx - size, cy); this.ctx.lineTo(cx + size, cy);
-    this.ctx.moveTo(cx, cy - size); this.ctx.lineTo(cx, cy + size);
+    this.ctx.moveTo(cx, cy - size); this.ctx.lineTo(cx + size, cy);
     this.ctx.stroke();
 
     // 4 Arrow Heads

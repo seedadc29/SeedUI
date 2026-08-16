@@ -604,6 +604,156 @@ html, body {
   display: none !important;
 }
 
+/* Tactical Diagnostic Drawer */
+.tactical-diagnostic-drawer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 220px;
+  background: rgba(13, 15, 20, 0.96);
+  border-top: 2px solid #ffcc00;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  z-index: 150;
+  transition: transform 0.25s ease-in-out;
+  backdrop-filter: blur(8px);
+}
+
+.tactical-diagnostic-drawer.hidden {
+  transform: translateY(100%);
+  pointer-events: none;
+}
+
+.diagnostic-drawer-header {
+  height: 32px;
+  background: #171a22;
+  border-bottom: 1px solid var(--seed-border-dark);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+}
+
+.diagnostic-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #ffcc00;
+  letter-spacing: 0.5px;
+}
+
+.diagnostic-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.diagnostic-btn-copy {
+  background: #ffcc00;
+  color: #0b0f19;
+  border: none;
+  padding: 2px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s;
+}
+
+.diagnostic-btn-copy:hover {
+  background: #ffe066;
+  box-shadow: 0 0 10px rgba(255, 204, 0, 0.5);
+}
+
+.diagnostic-btn-clear, .diagnostic-btn-close {
+  background: #222631;
+  border: 1px solid var(--seed-border-dark);
+  color: var(--seed-text-muted);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.diagnostic-btn-clear:hover, .diagnostic-btn-close:hover {
+  color: #fff;
+  background: #2d3342;
+}
+
+.diagnostic-drawer-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.diagnostic-hud-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.diag-card {
+  background: #151821;
+  border: 1px solid var(--seed-border-dark);
+  border-radius: 4px;
+  padding: 4px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.diag-label {
+  font-size: 10px;
+  color: var(--seed-text-muted);
+  font-weight: 600;
+}
+
+.diag-val {
+  font-size: 11px;
+  color: #ffffff;
+  font-family: monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.diagnostic-log-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.diagnostic-pre {
+  flex: 1;
+  background: #090a0e;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin: 0;
+  font-family: 'Fira Code', Consolas, Monaco, monospace;
+  font-size: 10.5px;
+  color: #a5f3fc;
+  line-height: 1.4;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
 /* 2.3 Center Orbital Graph Pane */
 .seed-orbital-graph-pane {
   flex: 1.5 1 45%;
