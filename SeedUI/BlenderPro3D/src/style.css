@@ -244,6 +244,17 @@ body.blender-body {
   background: var(--b-bg-viewport);
 }
 
+/* Blender Box Select Marquee */
+.selection-marquee-box {
+  position: absolute;
+  border: 1px dashed #ffffff;
+  background: rgba(234, 118, 0, 0.16);
+  outline: 1px solid rgba(234, 118, 0, 0.7);
+  pointer-events: none;
+  z-index: 100;
+  display: none;
+}
+
 /* Viewport Header (Blender 4.1 Mode dropdown & Shading) */
 .viewport-header {
   height: 26px;

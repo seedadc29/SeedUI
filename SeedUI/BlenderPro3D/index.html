@@ -46,7 +46,7 @@
       <!-- 2.1 Left Vertical Tool Shelf (T-Panel) -->
       <aside class="blender-toolshelf" id="toolshelf">
         <button class="shelf-tool-btn active" id="tool-select" data-tool="select" title="Seleção de Caixa (W)">
-          <i class="ti ti-cursor-text"></i>
+          <i class="ti ti-pointer"></i>
         </button>
         <button class="shelf-tool-btn" id="tool-cursor" data-tool="cursor" title="Cursor 3D (Shift+S)">
           <i class="ti ti-target"></i>
@@ -160,6 +160,9 @@
 
         <!-- 3D Canvas -->
         <canvas id="viewport-canvas"></canvas>
+
+        <!-- Blender Live Box Select Marquee Overlay -->
+        <div class="selection-marquee-box" id="selection-marquee-box"></div>
 
         <!-- Blender Camera View Safe Frame (16:9 Passepartout) -->
         <div class="camera-frame-overlay hidden" id="camera-frame-overlay">

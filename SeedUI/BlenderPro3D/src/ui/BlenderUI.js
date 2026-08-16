@@ -736,16 +736,150 @@ export class BlenderUI {
     }
   }
 
-  // 12. Raycasting / 3D Selection
+  // 12. Raycasting & Live Box Selection (Marquee Select)
   initRaycasting() {
     const canvas = this.engine.canvas;
+    const marquee = document.getElementById('selection-marquee-box');
+    const container = document.getElementById('viewport-container');
+
+    let isPointerDown = false;
+    let isBoxSelecting = false;
+    let startX = 0;
+    let startY = 0;
 
     canvas.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return; // Left mouse only
+      if (this.transformManager.isTransforming) return;
+
       this.lastScreenMouse = { x: e.clientX, y: e.clientY };
+      isPointerDown = true;
+      startX = e.clientX;
+      startY = e.clientY;
     });
 
+    window.addEventListener('pointermove', (e) => {
+      if (!isPointerDown || this.transformManager.isTransforming) return;
+
+      const dx = Math.abs(e.clientX - startX);
+      const dy = Math.abs(e.clientY - startY);
+
+      if (dx > 4 || dy > 4) {
+        isBoxSelecting = true;
+        this.engine.controls.enabled = false;
+
+        if (marquee && container) {
+          const rect = container.getBoundingClientRect();
+          const left = Math.min(startX, e.clientX) - rect.left;
+          const top = Math.min(startY, e.clientY) - rect.top;
+          const width = Math.abs(e.clientX - startX);
+          const height = Math.abs(e.clientY - startY);
+
+          marquee.style.display = 'block';
+          marquee.style.left = `${left}px`;
+          marquee.style.top = `${top}px`;
+          marquee.style.width = `${width}px`;
+          marquee.style.height = `${height}px`;
+        }
+      }
+    });
+
+    window.addEventListener('pointerup', (e) => {
+      if (!isPointerDown) return;
+      isPointerDown = false;
+      this.engine.controls.enabled = true;
+
+      if (isBoxSelecting) {
+        isBoxSelecting = false;
+        if (marquee) marquee.style.display = 'none';
+
+        const minX = Math.min(startX, e.clientX);
+        const maxX = Math.max(startX, e.clientX);
+        const minY = Math.min(startY, e.clientY);
+        const maxY = Math.max(startY, e.clientY);
+        const isSubtract = e.ctrlKey || e.altKey;
+        const isAdd = e.shiftKey;
+
+        if (this.currentMode === 'edit') {
+          const activeMesh = this.meshEditor.activeMesh;
+          const qm = activeMesh?.userData?.quadMesh;
+
+          if (activeMesh && qm) {
+            activeMesh.updateMatrixWorld(true);
+            if (!isAdd && !isSubtract) {
+              this.meshEditor.selectedVertices.clear();
+              this.meshEditor.selectedEdges.clear();
+              this.meshEditor.selectedFaces.clear();
+            }
+
+            const cam = this.engine.activeCamera;
+            const matWorld = activeMesh.matrixWorld;
+
+            // Box select vertices
+            for (let i = 0; i < qm.vertices.length; i++) {
+              const vWorld = qm.vertices[i].clone().applyMatrix4(matWorld);
+              const vNDC = vWorld.project(cam);
+
+              if (vNDC.z < 1.0) {
+                const screenX = (vNDC.x * 0.5 + 0.5) * window.innerWidth;
+                const screenY = (-vNDC.y * 0.5 + 0.5) * window.innerHeight;
+
+                if (screenX >= minX && screenX <= maxX && screenY >= minY && screenY <= maxY) {
+                  if (isSubtract) this.meshEditor.selectedVertices.delete(i);
+                  else this.meshEditor.selectedVertices.add(i);
+                }
+              }
+            }
+
+            // Sync edges & faces
+            if (this.currentSubmode === 'edge') {
+              qm.edges.forEach((edge, eIdx) => {
+                if (this.meshEditor.selectedVertices.has(edge[0]) && this.meshEditor.selectedVertices.has(edge[1])) {
+                  this.meshEditor.selectedEdges.add(eIdx);
+                }
+              });
+            } else if (this.currentSubmode === 'face') {
+              qm.quads.forEach((quad, qIdx) => {
+                const unique = Array.from(new Set(quad));
+                if (unique.every(v => this.meshEditor.selectedVertices.has(v))) {
+                  this.meshEditor.selectedFaces.add(qIdx);
+                }
+              });
+            }
+
+            this.meshEditor.rebuildEditHelpers();
+            this.meshEditor.updateTransformAnchor();
+          }
+        } else {
+          // Object Mode Box Select
+          const objects = this.sceneManager.getAllMeshes().filter(m => m.visible);
+          const cam = this.engine.activeCamera;
+
+          if (!isAdd && !isSubtract) {
+            this.sceneManager.deselectAll();
+          }
+
+          objects.forEach((obj) => {
+            const pos = new THREE.Vector3();
+            obj.getWorldPosition(pos);
+            const vNDC = pos.project(cam);
+
+            if (vNDC.z < 1.0) {
+              const screenX = (vNDC.x * 0.5 + 0.5) * window.innerWidth;
+              const screenY = (-vNDC.y * 0.5 + 0.5) * window.innerHeight;
+
+              if (screenX >= minX && screenX <= maxX && screenY >= minY && screenY <= maxY) {
+                if (isSubtract) this.sceneManager.deselectObject(obj);
+                else this.sceneManager.selectObject(obj, true);
+              }
+            }
+          });
+        }
+      }
+    });
+
+    // Single Click Raycast Selection Fallback
     canvas.addEventListener('click', (e) => {
-      if (this.transformManager.isTransforming) return;
+      if (this.transformManager.isTransforming || isBoxSelecting) return;
 
       const rect = canvas.getBoundingClientRect();
       this.mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
