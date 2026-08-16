@@ -15,7 +15,7 @@ export class TacticalMap {
     this.isPanning = false;
     this.lastMouse = { x: 0, y: 0 };
 
-    // Active Tool: 'select' | 'rect' | 'circle' | 'triangle' | 'pan'
+    // Active Tool: 'select' | 'pan'
     this.currentTool = 'select';
 
     // Interactive selection & manipulation
@@ -143,7 +143,7 @@ export class TacticalMap {
   getRoomCenterCanvasPx(room) {
     let wx = room.x;
     let wz = room.z;
-    if (room.shape === 'rect') {
+    if (room.shape === 'rect' || room.shape === 'triangle') {
       wx += room.w / 2;
       wz += room.h / 2;
     }
@@ -153,6 +153,7 @@ export class TacticalMap {
     };
   }
 
+  // Instant Shape Creation at Center of View (or clicked coordinate)
   addShape(shapeType, worldX = null, worldZ = null) {
     if (worldX === null || worldZ === null) {
       const parent = this.canvas.parentElement;
@@ -224,21 +225,14 @@ export class TacticalMap {
 
       const mouse = this.getMapPos(e);
 
-      // 1. Tool-Specific Actions (Creation Tools)
-      if (this.currentTool === 'rect' || this.currentTool === 'circle' || this.currentTool === 'triangle') {
-        this.addShape(this.currentTool, mouse.x, mouse.y);
-        return;
-      }
-
-      // 2. Pan Tool
+      // Pan Tool or Middle Click -> Pan only
       if (this.currentTool === 'pan' || e.button === 1 || e.spaceKey) {
         this.isPanning = true;
         this.canvas.parentElement?.classList.add('is-panning');
         return;
       }
 
-      // 3. Select & Move Tool
-      // Check Resize Handles on Selected Room (16px screen tolerance)
+      // 1. Check Resize Handles on Selected Room (16px screen tolerance)
       if (this.selectedRoom) {
         const handle = this.hitTestHandles(this.selectedRoom, mouse);
         if (handle) {
@@ -248,17 +242,7 @@ export class TacticalMap {
         }
       }
 
-      // Check 3D Entities on Map
-      const hitEntity = this.hitTestEntities(mouse.x, mouse.y);
-      if (hitEntity) {
-        this.selectedEntity = hitEntity;
-        this.selectedRoom = null;
-        if (this.onSelectEntity) this.onSelectEntity(hitEntity);
-        if (this.onSelectRoom) this.onSelectRoom(null);
-        return;
-      }
-
-      // Check Blueprint Rooms
+      // 2. Check Blueprint Rooms (Direct Click on Room)
       const hitRoom = this.hitTestRooms(mouse.x, mouse.y);
       if (hitRoom) {
         const now = Date.now();
@@ -276,7 +260,17 @@ export class TacticalMap {
         return;
       }
 
-      // Clicked on empty canvas -> Deselect room & allow gentle pan if user drags
+      // 3. Check 3D Entities on Map
+      const hitEntity = this.hitTestEntities(mouse.x, mouse.y);
+      if (hitEntity) {
+        this.selectedEntity = hitEntity;
+        this.selectedRoom = null;
+        if (this.onSelectEntity) this.onSelectEntity(hitEntity);
+        if (this.onSelectRoom) this.onSelectRoom(null);
+        return;
+      }
+
+      // Clicked on empty space -> Deselect & allow gentle pan if user drags
       this.selectedRoom = null;
       this.selectedEntity = null;
       if (this.onSelectRoom) this.onSelectRoom(null);
@@ -291,16 +285,16 @@ export class TacticalMap {
         if (this.currentTool === 'select') {
           if (this.selectedRoom) {
             this.hoveredHandle = this.hitTestHandles(this.selectedRoom, mouse);
-            this.updateCursor(this.hoveredHandle);
-          } else {
-            this.hoveredHandle = null;
-            this.hoveredRoom = this.hitTestRooms(mouse.x, mouse.y);
-            this.canvas.style.cursor = this.hoveredRoom ? 'pointer' : 'default';
+            if (this.hoveredHandle) {
+              this.updateCursor(this.hoveredHandle);
+              return;
+            }
           }
+          this.hoveredHandle = null;
+          this.hoveredRoom = this.hitTestRooms(mouse.x, mouse.y);
+          this.canvas.style.cursor = this.hoveredRoom ? 'move' : 'default';
         } else if (this.currentTool === 'pan') {
           this.canvas.style.cursor = 'grab';
-        } else {
-          this.canvas.style.cursor = 'crosshair';
         }
         this.lastMouse = { x: e.clientX, y: e.clientY };
         return;
@@ -391,16 +385,13 @@ export class TacticalMap {
           if (this.onSelectRoom) this.onSelectRoom(null);
         }
       } else if (e.code === 'KeyV') this.setTool('select');
-      else if (e.code === 'KeyR') this.setTool('rect');
-      else if (e.code === 'KeyC') this.setTool('circle');
-      else if (e.code === 'KeyT') this.setTool('triangle');
       else if (e.code === 'KeyH') this.setTool('pan');
     });
   }
 
   updateCursor(handle) {
     if (!handle) {
-      this.canvas.style.cursor = this.currentTool === 'pan' ? 'grab' : (this.currentTool === 'select' ? 'default' : 'crosshair');
+      this.canvas.style.cursor = this.currentTool === 'pan' ? 'grab' : (this.hoveredRoom ? 'move' : 'default');
       return;
     }
     if (handle === 'n' || handle === 's') this.canvas.style.cursor = 'ns-resize';
@@ -454,7 +445,7 @@ export class TacticalMap {
   }
 
   hitTestHandles(room, mouse) {
-    const hitTolerancePx = 16;
+    const hitTolerancePx = 18; // 18 CSS pixels radius for effortless grabbing!
 
     const toScreen = (wx, wz) => ({
       x: this.panX + (wx * this.meterToPx) * this.zoom,
@@ -587,7 +578,7 @@ export class TacticalMap {
         const rad = room.radius * this.meterToPx;
         this.ctx.beginPath();
         this.ctx.arc(rx, rz, rad, 0, Math.PI * 2);
-        this.ctx.fillStyle = room.color;
+        this.ctx.fillStyle = isSel ? 'rgba(56, 189, 248, 0.16)' : room.color;
         this.ctx.fill();
 
         this.ctx.strokeStyle = isSel ? '#38bdf8' : (isHov ? '#0284c7' : '#333742');
@@ -611,7 +602,7 @@ export class TacticalMap {
         this.ctx.lineTo(rx, rz + rh);
         this.ctx.closePath();
 
-        this.ctx.fillStyle = room.color;
+        this.ctx.fillStyle = isSel ? 'rgba(56, 189, 248, 0.16)' : room.color;
         this.ctx.fill();
 
         this.ctx.strokeStyle = isSel ? '#38bdf8' : (isHov ? '#0284c7' : '#333742');
@@ -629,7 +620,7 @@ export class TacticalMap {
         const rw = room.w * this.meterToPx;
         const rh = room.h * this.meterToPx;
 
-        this.ctx.fillStyle = room.color;
+        this.ctx.fillStyle = isSel ? 'rgba(56, 189, 248, 0.16)' : room.color;
         this.ctx.fillRect(rx, rz, rw, rh);
 
         // Internal blueprint crosshatch lines
@@ -704,17 +695,17 @@ export class TacticalMap {
   drawHandleBox(x, y) {
     this.ctx.fillStyle = '#38bdf8';
     this.ctx.strokeStyle = '#ffffff';
-    this.ctx.lineWidth = 1.5;
-    this.ctx.fillRect(x - 5, y - 5, 10, 10);
-    this.ctx.strokeRect(x - 5, y - 5, 10, 10);
+    this.ctx.lineWidth = 2;
+    this.ctx.fillRect(x - 6, y - 6, 12, 12);
+    this.ctx.strokeRect(x - 6, y - 6, 12, 12);
   }
 
   drawHandleCircle(x, y) {
     this.ctx.beginPath();
-    this.ctx.arc(x, y, 5, 0, Math.PI * 2);
+    this.ctx.arc(x, y, 6, 0, Math.PI * 2);
     this.ctx.fillStyle = '#ffffff';
     this.ctx.strokeStyle = '#38bdf8';
-    this.ctx.lineWidth = 2;
+    this.ctx.lineWidth = 2.5;
     this.ctx.fill();
     this.ctx.stroke();
   }

@@ -174,11 +174,24 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // 9. Tactical Map Tool Selector Buttons (Mover, Quadrado, Círculo, Triângulo, Pan)
-  document.querySelectorAll('.tactical-tool-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const toolName = btn.dataset.ttool;
-      if (toolName) tacticalMap.setTool(toolName);
-    });
+  document.getElementById('tool-tactical-select')?.addEventListener('click', () => {
+    tacticalMap.setTool('select');
+  });
+
+  document.getElementById('tool-tactical-rect')?.addEventListener('click', () => {
+    tacticalMap.addShape('rect');
+  });
+
+  document.getElementById('tool-tactical-circle')?.addEventListener('click', () => {
+    tacticalMap.addShape('circle');
+  });
+
+  document.getElementById('tool-tactical-triangle')?.addEventListener('click', () => {
+    tacticalMap.addShape('triangle');
+  });
+
+  document.getElementById('tool-tactical-pan')?.addEventListener('click', () => {
+    tacticalMap.setTool('pan');
   });
 
   // Reset tactical zoom button
