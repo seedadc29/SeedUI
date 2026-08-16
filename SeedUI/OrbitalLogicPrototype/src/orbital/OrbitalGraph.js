@@ -206,74 +206,71 @@ export class OrbitalGraph {
   }
 
   initEvents() {
-    let isPointerDown = false;
-    let downScreenPos = { x: 0, y: 0 };
+    let isMouseDown = false;
+    let downPos = { x: 0, y: 0 };
     let downMousePos = { x: 0, y: 0 };
-    let potentialDrag = null;
     let startSunPos = { x: 0, y: 0 };
-    let activePointerId = null;
+    let activeDragTarget = null;
+    let isDragging = false;
 
-    // Pointerdown on Canvas
-    this.canvas.addEventListener('pointerdown', (e) => {
+    // Mouse Down
+    this.canvas.addEventListener('mousedown', (e) => {
       if (e.button !== 0 && e.button !== 1) return;
 
-      isPointerDown = true;
-      activePointerId = e.pointerId;
-      downScreenPos = { x: e.clientX, y: e.clientY };
-      downMousePos = this.getCanvasPos(e);
+      isMouseDown = true;
+      isDragging = false;
+      downPos = { x: e.clientX, y: e.clientY };
       this.lastMouse = { x: e.clientX, y: e.clientY };
-
-      try {
-        this.canvas.setPointerCapture(e.pointerId);
-      } catch (err) {}
+      downMousePos = this.getCanvasPos(e);
 
       const hit = this.hitTest(downMousePos.x, downMousePos.y);
 
       if (hit) {
-        potentialDrag = hit;
+        activeDragTarget = hit;
         if (hit.type === 'sun') {
           startSunPos = { x: hit.x, y: hit.y };
         }
       } else {
-        potentialDrag = null;
+        activeDragTarget = null;
         this.isPanning = true;
         this.canvas.parentElement?.classList.add('is-panning');
       }
     });
 
-    // Pointermove on Canvas & Window
-    const handleMove = (e) => {
+    // Mouse Move
+    window.addEventListener('mousemove', (e) => {
       const mouse = this.getCanvasPos(e);
 
-      if (!isPointerDown) {
+      if (!isMouseDown) {
         this.hoveredEntity = this.hitTest(mouse.x, mouse.y);
         this.lastMouse = { x: e.clientX, y: e.clientY };
         return;
       }
 
-      const dist = Math.hypot(e.clientX - downScreenPos.x, e.clientY - downScreenPos.y);
+      const moveDist = Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y);
 
-      if (potentialDrag) {
-        if (dist > 3) {
-          this.draggedEntity = potentialDrag;
+      if (activeDragTarget) {
+        if (moveDist > 4) {
+          isDragging = true;
+          this.draggedEntity = activeDragTarget;
 
-          if (potentialDrag.type === 'sun') {
-            potentialDrag.x = startSunPos.x + (mouse.x - downMousePos.x);
-            potentialDrag.y = startSunPos.y + (mouse.y - downMousePos.y);
-          } else if (potentialDrag.type === 'planet') {
-            const planet = potentialDrag;
+          if (activeDragTarget.type === 'sun') {
+            activeDragTarget.x = startSunPos.x + (mouse.x - downMousePos.x);
+            activeDragTarget.y = startSunPos.y + (mouse.y - downMousePos.y);
+          } else if (activeDragTarget.type === 'planet') {
+            const planet = activeDragTarget;
             const sun = planet.parentSun || this.getPlanetParentSun(planet);
             if (sun && sun.orbits && sun.orbits.length > 0) {
               const dx = mouse.x - sun.x;
               const dy = mouse.y - sun.y;
               planet.angle = Math.atan2(dy, dx);
-              const orbitDist = Math.hypot(dx, dy);
+              const dist = Math.hypot(dx, dy);
 
               let closestOrbit = sun.orbits[0].radius;
               let minDiff = Infinity;
               sun.orbits.forEach((o) => {
                 if (o && o.radius) {
-                  const diff = Math.abs(o.radius - orbitDist);
+                  const diff = Math.abs(o.radius - dist);
                   if (diff < minDiff) {
                     minDiff = diff;
                     closestOrbit = o.radius;
@@ -290,57 +287,49 @@ export class OrbitalGraph {
       }
 
       this.lastMouse = { x: e.clientX, y: e.clientY };
-    };
+    });
 
-    this.canvas.addEventListener('pointermove', handleMove);
-    window.addEventListener('pointermove', handleMove);
+    // Mouse Up / Release
+    window.addEventListener('mouseup', () => {
+      if (!isMouseDown) return;
 
-    // Pointerup / Release - Guaranteed cleanup
-    const handleUp = (e) => {
-      if (!isPointerDown) return;
-
-      if (activePointerId !== null) {
-        try {
-          this.canvas.releasePointerCapture(activePointerId);
-        } catch (err) {}
-      }
-
-      if (!this.draggedEntity && potentialDrag) {
-        // It was a click! Select entity
-        this.selectedEntity = potentialDrag;
+      if (!isDragging && activeDragTarget) {
+        // Selection Click
+        this.selectedEntity = activeDragTarget;
         if (this.onSelectionChange) {
-          this.onSelectionChange(potentialDrag);
+          this.onSelectionChange(activeDragTarget);
         }
-      } else if (!this.draggedEntity && !potentialDrag) {
-        // Click on empty canvas
+      } else if (!isDragging && !activeDragTarget) {
+        // Click on empty space
         this.selectedEntity = null;
         if (this.onSelectionChange) {
           this.onSelectionChange(null);
         }
       }
 
-      if (this.draggedEntity) {
+      if (isDragging) {
         if (this.historyManager) {
           this.historyManager.pushState(this.suns);
         }
         this.notifyGraphChange();
       }
 
-      // Reset all drag & pan states
-      isPointerDown = false;
-      potentialDrag = null;
+      isMouseDown = false;
+      isDragging = false;
+      activeDragTarget = null;
       this.draggedEntity = null;
       this.isPanning = false;
-      activePointerId = null;
       this.canvas.parentElement?.classList.remove('is-panning');
-    };
+    });
 
-    this.canvas.addEventListener('pointerup', handleUp);
-    this.canvas.addEventListener('pointercancel', handleUp);
-    window.addEventListener('pointerup', handleUp);
-    window.addEventListener('pointercancel', handleUp);
-    window.addEventListener('mouseup', handleUp);
-    window.addEventListener('blur', handleUp);
+    window.addEventListener('blur', () => {
+      isMouseDown = false;
+      isDragging = false;
+      activeDragTarget = null;
+      this.draggedEntity = null;
+      this.isPanning = false;
+      this.canvas.parentElement?.classList.remove('is-panning');
+    });
 
     // Zoom on wheel
     this.canvas.addEventListener('wheel', (e) => {
@@ -571,6 +560,7 @@ export class OrbitalGraph {
     if (this.isOrbitAnimationActive) {
       this.suns.forEach(sun => {
         sun.planets.forEach(planet => {
+          if (this.draggedEntity && this.draggedEntity.id === planet.id) return;
           planet.angle += planet.speed * delta;
           if (planet.moons) {
             planet.moons.forEach(moon => {
