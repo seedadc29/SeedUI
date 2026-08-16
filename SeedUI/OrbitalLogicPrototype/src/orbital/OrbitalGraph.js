@@ -22,19 +22,20 @@ export class OrbitalGraph {
     // Active Gravitational Energy Beams
     this.activeBeams = [];
 
-    // Initial Systems (Exact matching user mockup)
+    // Initial Systems with Real Functional Capabilities
     this.suns = [
       {
         id: 'sun-player',
         name: 'PLAYER',
         type: 'sun',
         x: 0,
-        y: -100,
+        y: -110,
         radius: 36,
         color: '#ff7700',
         orbits: [
           { radius: 65, dash: [4, 4] },
-          { radius: 115, dash: [3, 4] }
+          { radius: 115, dash: [3, 4] },
+          { radius: 165, dash: [3, 5] }
         ],
         planets: [
           {
@@ -50,12 +51,69 @@ export class OrbitalGraph {
             moons: []
           },
           {
+            id: 'planet-andar',
+            name: 'Andar',
+            type: 'planet',
+            orbitRadius: 65,
+            angle: 1.8,
+            speed: 0.3,
+            radius: 20,
+            color: '#2b2368',
+            textColor: '#ffffff',
+            subOrbitRadius: 28,
+            moons: [
+              { name: 'Velocidade', color: '#ffffff', angle: 0, speed: 1.0, val: 6.0 }
+            ]
+          },
+          {
+            id: 'planet-pular',
+            name: 'Pular',
+            type: 'planet',
+            orbitRadius: 65,
+            angle: 3.6,
+            speed: 0.3,
+            radius: 20,
+            color: '#2b2368',
+            textColor: '#ffffff',
+            subOrbitRadius: 28,
+            moons: [
+              { name: 'Força do Pulo', color: '#ff3b30', angle: 0, speed: 1.0, val: 7.5 }
+            ]
+          },
+          {
+            id: 'planet-fisica',
+            name: 'Fisica',
+            type: 'planet',
+            orbitRadius: 115,
+            angle: 0.8,
+            speed: 0.25,
+            radius: 20,
+            color: '#2b2368',
+            textColor: '#ffffff',
+            subOrbitRadius: 28,
+            moons: [
+              { name: 'Massa', color: '#ff9500', angle: 0, speed: 1.0, val: 1.0 }
+            ]
+          },
+          {
+            id: 'planet-colisao-p',
+            name: 'Colisao',
+            type: 'planet',
+            orbitRadius: 115,
+            angle: 2.2,
+            speed: 0.25,
+            radius: 20,
+            color: '#2b2368',
+            textColor: '#ffffff',
+            moons: []
+          },
+          {
             id: 'planet-animacao',
             name: 'Animacao',
             type: 'planet',
-            orbitRadius: 115,
+            orbitRadius: 165,
             angle: 3.4,
-            speed: 0.4,
+            speed: 0.2,
             radius: 24,
             color: '#2b2368',
             textColor: '#ffffff',
@@ -75,7 +133,7 @@ export class OrbitalGraph {
         name: 'Objeto',
         type: 'sun',
         x: 0,
-        y: 110,
+        y: 120,
         radius: 36,
         color: '#ff7700',
         orbits: [
