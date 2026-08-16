@@ -444,28 +444,33 @@ export class IconBrowser {
       el.dataset.defaultHtml = el.innerHTML;
     }
 
-    // Check if element has an existing icon tag, dot, or SVG
-    const existingIconEl = el.querySelector('i.ti, svg, span.icon, span.nav-icon, span.mode-dot, span.blender-icon');
-    
-    if (existingIconEl) {
-      existingIconEl.outerHTML = `<i class="ti ti-${iconName}"></i>`;
-    } else {
-      // Check if it is an icon-only button
-      const rawText = el.textContent.trim();
-      const isIconOnly = el.classList.contains('shelf-tool-btn') || el.classList.contains('nav-circle-btn') || el.classList.contains('shading-sphere-btn') || el.classList.contains('win-ctrl-btn') || el.classList.contains('submode-btn') || el.classList.contains('prop-edit-btn') || !rawText;
-
-      if (isIconOnly) {
-        el.innerHTML = `<i class="ti ti-${iconName}"></i>`;
+    // 1. If element has a dedicated item-label span
+    const labelSpan = el.querySelector('.item-label');
+    if (labelSpan) {
+      const cleanText = labelSpan.textContent.replace(/^[\p{Emoji}\p{Symbol}\p{Punctuation}\s]+/u, '').trim();
+      labelSpan.innerHTML = `<i class="ti ti-${iconName}"></i> ${cleanText}`;
+    }
+    // 2. If element has a submenu (has-sub) or is a composite container
+    else if (el.classList.contains('has-sub') || el.querySelector('.popup-sub-menu')) {
+      const firstSpan = el.querySelector('span:first-child');
+      if (firstSpan) {
+        const cleanText = firstSpan.textContent.replace(/^[\p{Emoji}\p{Symbol}\p{Punctuation}\s]+/u, '').trim();
+        firstSpan.innerHTML = `<i class="ti ti-${iconName}"></i> ${cleanText}`;
+      }
+    }
+    // 3. If element already has an <i> or <svg> or dot/icon element
+    else {
+      const existingIconEl = el.querySelector('i.ti, svg, span.icon, span.nav-icon, span.mode-dot, span.blender-icon');
+      if (existingIconEl) {
+        existingIconEl.outerHTML = `<i class="ti ti-${iconName}"></i>`;
       } else {
-        // Has text (like menus "Mesh", "Camera", "Light", "Arquivo", "Layout", etc.)
-        const cleanText = rawText.replace(/^[\p{Emoji}\p{Symbol}\p{Punctuation}\s]+/u, '').trim();
-        const subArrow = el.querySelector('span:last-child');
-        const hasSubArrow = subArrow && (subArrow.textContent.includes('▶') || subArrow.textContent.includes('▾') || subArrow.classList.contains('key-tag'));
+        const rawText = el.textContent.trim();
+        const isIconOnly = el.classList.contains('shelf-tool-btn') || el.classList.contains('nav-circle-btn') || el.classList.contains('shading-sphere-btn') || el.classList.contains('win-ctrl-btn') || el.classList.contains('submode-btn') || el.classList.contains('prop-edit-btn') || !rawText;
 
-        if (hasSubArrow && subArrow !== el) {
-          const arrowHtml = subArrow.outerHTML;
-          el.innerHTML = `<span><i class="ti ti-${iconName}"></i> ${cleanText}</span> ${arrowHtml}`;
+        if (isIconOnly) {
+          el.innerHTML = `<i class="ti ti-${iconName}"></i>`;
         } else {
+          const cleanText = rawText.replace(/^[\p{Emoji}\p{Symbol}\p{Punctuation}\s]+/u, '').trim();
           el.innerHTML = `<i class="ti ti-${iconName}"></i> <span>${cleanText || rawText}</span>`;
         }
       }
