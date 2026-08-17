@@ -1,6 +1,8 @@
 #ifndef SEEDUI_APP_H
 #define SEEDUI_APP_H
 
+#include <vector>
+
 #include "Annotations.h"
 #include "Icons.h"
 #include "Project.h"
@@ -374,6 +376,9 @@ namespace seedui
         int mColorPickerTarget = 0;    // 0 = cor_fundo (preenchimento), 1 = cor_borda (contorno)
                                       // 2 = cor_texto, 3 = cor do balde (sem elemento)
         std::string mBucketColorHex = "#2b2b2b"; // cor atual do balde/conta-gotas
+        std::vector<std::string> mCustomPalette;  // coleção de cores personalizadas (hex)
+        int mCustomPaletteDragIndex = -1;         // índice da cor sendo arrastada para descartar
+        bool mColorDropAcceptedByCanvas = false;  // true se o drop foi aceito pelo canvas (não descarta)
         float mCanvasZoom = 1.0f;
         float mCanvasPanX = 0.0f;
         float mCanvasPanY = 0.0f;

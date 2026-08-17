@@ -86,6 +86,14 @@ namespace seedui
         constexpr float kStatusBarHeight = 30.0f;
         constexpr float kColorBarHeight = 32.0f; // paleta de cores inferior (CorelDRAW)
         constexpr float kToolButtonSize = 32.0f;
+
+        // Payload do drag-and-drop de cor (paleta → canvas): hex + alvo.
+        // Alvo: "cor_fundo" (preenchimento) ou "cor_borda" (contorno).
+        struct ColorDropPayload
+        {
+            char hex[16];
+            char target[16];
+        };
         constexpr float kRightPanelMinWidth = 260.0f;
         constexpr float kRightPanelMaxWidth = 520.0f;
         constexpr float kRightRailWidth = 50.0f;
@@ -6641,6 +6649,62 @@ namespace seedui
                 ImGui::InvisibleButton("##canvas_surface", canvasSurface);
                 const ImVec2 canvasDropMin = ImGui::GetItemRectMin();
                 const ImVec2 canvasDropMax = ImGui::GetItemRectMax();
+                // SOLTAR uma cor arrastada da paleta sobre o canvas: aplica a
+                // cor ao elemento sob o cursor (preenchimento ou contorno,
+                // conforme o payload — botão esquerdo = fundo, direito = borda).
+                mColorDropAcceptedByCanvas = false;
+                if (PossuiModoAtivo() && ImGui::BeginDragDropTarget())
+                {
+                    const ImGuiPayload* payload =
+                        ImGui::AcceptDragDropPayload("SEEDUI_COLOR");
+                    if (payload && payload->DataSize == sizeof(ColorDropPayload))
+                    {
+                        const ColorDropPayload* drop =
+                            (const ColorDropPayload*)payload->Data;
+                        Modo& dropMode =
+                            mProject.telas[mTelaAtiva].modos[mModoAtivo];
+                        const ImVec2 dropMouse = ImGui::GetMousePos();
+                        float dropX = 0.0f, dropY = 0.0f;
+                        CanvasScreenToProject(&mProject, dropMouse.x, dropMouse.y,
+                                              dropX, dropY, false,
+                                              mCanvasZoom, mCanvasPanX, mCanvasPanY);
+                        Element* hit = Project::ElementoNoPonto(
+                            dropMode, dropX, dropY,
+                            mSelecionarInteriorSemPreenchimento);
+                        if (hit)
+                        {
+                            if (!hit->bloqueado)
+                            {
+                                bool blocked = false;
+                                int applied = ApplyStyleToSelection(
+                                    dropMode, { hit->id }, drop->target,
+                                    drop->hex, blocked);
+                                if (applied)
+                                {
+                                    mProjectDirty = true;
+                                    CapturarHistorico();
+                                    mColorDropAcceptedByCanvas = true;
+                                    mStatusMsg = std::string(
+                                        drop->target[4] == 'b' ? "Contorno: "
+                                                               : "Preenchimento: ") +
+                                                 drop->hex;
+                                    mStatusMsgUntil = GetTime() + 4.0;
+                                }
+                            }
+                            else
+                            {
+                                mStatusMsg = "Elemento bloqueado — desbloqueie para colorir";
+                                mStatusMsgUntil = GetTime() + 4.0;
+                            }
+                        }
+                        else
+                        {
+                            mStatusMsg = "Solte sobre um objeto para aplicar a cor";
+                            mStatusMsgUntil = GetTime() + 4.0;
+                        }
+                    }
+                    ImGui::EndDragDropTarget();
+                }
                 const bool canvasHovered = ImGui::IsItemHovered(
                     ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
                 // A navegação do PowerClip fica sobre o item invisível que
@@ -9823,10 +9887,21 @@ namespace seedui
                                ImGuiColorEditFlags_NoBorder,
                                ImVec2(18.0f, 18.0f));
             const bool hovered = ImGui::IsItemHovered();
-            const bool leftClick = hovered && ImGui::IsMouseClicked(0);
-            const bool rightClick = hovered && ImGui::IsMouseClicked(1);
-            if (hovered)
-                ImGui::SetTooltip("%s  (esq. preenche · dir. contorno)",
+            const bool colorDragActive = ImGui::GetDragDropPayload() != nullptr;
+            // Aplica ao SOLTAR sem arrastar: se o usuário arrastar a cor até
+            // o canvas, o release acontece fora do swatch e não aplica na
+            // seleção — a cor vai apenas para o objeto solto (drop target).
+            const bool leftClick = hovered && ImGui::IsMouseReleased(0) &&
+                                   !ImGui::IsMouseDragging(0, 4.0f);
+            const bool rightClick = hovered && ImGui::IsMouseReleased(1) &&
+                                    !ImGui::IsMouseDragging(1, 4.0f);
+            // Tooltip apenas quando NÃO há drag-drop ativo: durante o arrasto
+            // o BeginDragDropSource abre a tooltip do preview, e um SetTooltip
+            // com OverridePrevious no mesmo frame a substituiria — deixando o
+            // EndDragDropSource com EndTooltip órfão (assert do ImGui). Isso
+            // também vale para os swatches vizinhos sob o cursor no arrasto.
+            if (hovered && !colorDragActive)
+                ImGui::SetTooltip("%s  (esq. preenche · dir. contorno · arraste p/ objeto)",
                                    ColorUtils::ToHex(col.x, col.y, col.z).c_str());
             if (leftClick || rightClick)
             {
@@ -9863,6 +9938,27 @@ namespace seedui
                     mStatusMsgUntil = GetTime() + 4.0;
                 }
             }
+            // ARRASTAR a cor até um objeto no canvas e soltar: o objeto sob o
+            // cursor recebe a cor (arrastar com o botão ESQUERDO = preenchimento,
+            // com o DIREITO = contorno). O payload leva o hex + o alvo (fundo/borda).
+            // Usa o mesmo padrão do restante do app (hierarquia, biblioteca):
+            // SourceAllowNullID + SetDragDropPayload — o ImGui abre a tooltip do
+            // preview internamente (BeginTooltip/EndTooltip balanceados).
+            if (ImGui::BeginDragDropSource(
+                    ImGuiDragDropFlags_SourceAllowNullID |
+                    ImGuiDragDropFlags_SourceNoHoldToOpenOthers))
+            {
+                const char* target = ImGui::GetIO().MouseDown[ImGuiMouseButton_Right]
+                                         ? "cor_borda" : "cor_fundo";
+                ColorDropPayload drop;
+                snprintf(drop.hex, sizeof(drop.hex), "%s",
+                         ColorUtils::ToHex(col.x, col.y, col.z).c_str());
+                snprintf(drop.target, sizeof(drop.target), "%s", target);
+                ImGui::SetDragDropPayload("SEEDUI_COLOR", &drop, sizeof(drop));
+                ImGui::Text("%s  → soltar sobre o objeto",
+                            ColorUtils::ToHex(col.x, col.y, col.z).c_str());
+                ImGui::EndDragDropSource();
+            }
             ImGui::SameLine(0, 3);
             ImGui::PopID();
         }
@@ -9871,6 +9967,127 @@ namespace seedui
         ImGui::SetCursorPosY((kColorBarHeight - 22.0f) * 0.5f);
         if (ImGui::Button("Seletor de cor...##open_picker", ImVec2(118, 22)))
             mColorPickerOpen = true;
+
+        // COLETA PERSONALIZADA: à direita do botão, um separador e a área de
+        // cores guardadas pelo usuário ("Guardar na paleta" no seletor).
+        // Clique esquerdo preenche, direito define contorno; ARRASTAR para fora
+        // do container remove a cor da coleção.
+        if (!mCustomPalette.empty())
+        {
+            ImGui::SameLine(0, 8);
+            ImGui::SetCursorPosY(centerY);
+            ImGui::TextColored(Theme::TextSecondary, "|");
+            ImGui::SameLine(0, 8);
+            ImGui::SetCursorPosY(centerY + 1.0f);
+            ImGui::TextColored(Theme::TextSecondary, "Minhas cores:");
+
+            const ImVec2 containerStart = ImGui::GetCursorScreenPos();
+            for (int i = 0; i < (int)mCustomPalette.size(); ++i)
+            {
+                ImGui::SameLine(0, 3);
+                ImGui::SetCursorPosY(centerY);
+                ImGui::PushID(("custom" + std::to_string(i)).c_str());
+                float rgbArr[3] = { 0.2f, 0.2f, 0.2f };
+                ColorUtils::ParseHex(mCustomPalette[i], rgbArr);
+                ImVec4 col(rgbArr[0], rgbArr[1], rgbArr[2], 1.0f);
+                ImGui::ColorButton("##sw", col,
+                                   ImGuiColorEditFlags_NoTooltip |
+                                   ImGuiColorEditFlags_NoPicker |
+                                   ImGuiColorEditFlags_NoBorder,
+                                   ImVec2(18.0f, 18.0f));
+                const bool hovered = ImGui::IsItemHovered();
+                const bool customDrag = ImGui::GetDragDropPayload() != nullptr;
+                if (hovered && !customDrag)
+                    ImGui::SetTooltip("%s  (esq. preenche · dir. contorno · arraste p/ fora p/ descartar)",
+                                      mCustomPalette[i].c_str());
+                const bool leftClick = hovered && ImGui::IsMouseReleased(0) &&
+                                       !ImGui::IsMouseDragging(0, 4.0f);
+                const bool rightClick = hovered && ImGui::IsMouseReleased(1) &&
+                                        !ImGui::IsMouseDragging(1, 4.0f);
+                if (leftClick || rightClick)
+                {
+                    if (PossuiModoAtivo() && !mSelectedElementIds.empty())
+                    {
+                        Modo& mode = mProject.telas[mTelaAtiva].modos[mModoAtivo];
+                        const bool border = rightClick;
+                        const std::string hex = mCustomPalette[i];
+                        bool blocked = false;
+                        const int applied = ApplyStyleToSelection(
+                            mode, mSelectedElementIds,
+                            border ? "cor_borda" : "cor_fundo", hex, blocked);
+                        if (applied)
+                        {
+                            mProjectDirty = true;
+                            mStatusMsg = std::string(border ? "Contorno: "
+                                                            : "Preenchimento: ") + hex;
+                            mStatusMsgUntil = GetTime() + 4.0;
+                        }
+                        else if (blocked)
+                        {
+                            mStatusMsg = "Elemento bloqueado — desbloqueie para colorir";
+                            mStatusMsgUntil = GetTime() + 4.0;
+                        }
+                    }
+                    else
+                    {
+                        mStatusMsg = "Selecione um elemento para aplicar a cor";
+                        mStatusMsgUntil = GetTime() + 4.0;
+                    }
+                }
+                // Arrastar a cor personalizada: mesmo payload das cores da
+                // paleta padrão (aplica no objeto solto). Marca o índice para
+                // o descarte quando soltar fora do container.
+                if (ImGui::BeginDragDropSource(
+                        ImGuiDragDropFlags_SourceAllowNullID |
+                        ImGuiDragDropFlags_SourceNoHoldToOpenOthers))
+                {
+                    const char* target = ImGui::GetIO().MouseDown[ImGuiMouseButton_Right]
+                                             ? "cor_borda" : "cor_fundo";
+                    ColorDropPayload drop;
+                    snprintf(drop.hex, sizeof(drop.hex), "%s", mCustomPalette[i].c_str());
+                    snprintf(drop.target, sizeof(drop.target), "%s", target);
+                    ImGui::SetDragDropPayload("SEEDUI_COLOR", &drop, sizeof(drop));
+                    mCustomPaletteDragIndex = i;
+                    ImGui::Text("%s  → soltar sobre o objeto (fora do container descarta)",
+                                mCustomPalette[i].c_str());
+                    ImGui::EndDragDropSource();
+                }
+                ImGui::PopID();
+            }
+
+            // Descarte: terminou o arrasto de uma cor personalizada. Se o
+            // canvas NÃO aceitou o drop (nenhum objeto sob o cursor) e o mouse
+            // soltou FORA do container → remove a cor da coleção.
+            // O drag-drop do ImGui usa o botão esquerdo (ColorButton), então o
+            // release do arrasto é sempre IsMouseReleased(0).
+            if (mCustomPaletteDragIndex >= 0 &&
+                (int)mCustomPalette.size() > mCustomPaletteDragIndex &&
+                (ImGui::IsMouseReleased(0) || ImGui::IsMouseReleased(1)))
+            {
+                const int droppedIndex = mCustomPaletteDragIndex;
+                mCustomPaletteDragIndex = -1; // sempre reseta após o release
+                if (!mColorDropAcceptedByCanvas)
+                {
+                    const ImVec2 mouse = ImGui::GetMousePos();
+                    const ImVec2 containerEnd = ImGui::GetItemRectMax();
+                    const bool inside = mouse.x >= containerStart.x &&
+                                        mouse.x <= containerEnd.x &&
+                                        mouse.y >= containerStart.y - 6.0f &&
+                                        mouse.y <= containerEnd.y + 6.0f;
+                    if (!inside)
+                    {
+                        mCustomPalette.erase(
+                            mCustomPalette.begin() + droppedIndex);
+                        mStatusMsg = "Cor removida da paleta personalizada";
+                        mStatusMsgUntil = GetTime() + 4.0;
+                    }
+                }
+            }
+        }
+        else
+        {
+            mCustomPaletteDragIndex = -1;
+        }
         ImGui::EndChild();
         ImGui::PopStyleVar();
     }
@@ -9896,6 +10113,24 @@ namespace seedui
             if (ColorPicker::Widget("##bucket_picker", rgb))
             {
                 mBucketColorHex = ColorUtils::ToHex(rgb[0], rgb[1], rgb[2]);
+            }
+            const std::string bucketHex = ColorUtils::ToHex(rgb[0], rgb[1], rgb[2]);
+            if (ImGui::Button("Guardar na paleta", ImVec2(260, 28)))
+            {
+                bool found = false;
+                for (const std::string& c : mCustomPalette)
+                    if (c == bucketHex) { found = true; break; }
+                if (!found)
+                {
+                    mCustomPalette.push_back(bucketHex);
+                    mStatusMsg = "Cor guardada na paleta personalizada: " + bucketHex;
+                    mStatusMsgUntil = GetTime() + 4.0;
+                }
+                else
+                {
+                    mStatusMsg = "Essa cor já está na paleta personalizada";
+                    mStatusMsgUntil = GetTime() + 4.0;
+                }
             }
             ImGui::End();
             return;
@@ -9946,6 +10181,26 @@ namespace seedui
             if (applied)
             {
                 mProjectDirty = true;
+            }
+        }
+        // Guardar a cor atual na coleção personalizada (área da paleta à
+        // direita na barra de cores). Evita duplicatas.
+        const std::string currentHex = ColorUtils::ToHex(rgb[0], rgb[1], rgb[2]);
+        if (ImGui::Button("Guardar na paleta", ImVec2(260, 28)))
+        {
+            bool found = false;
+            for (const std::string& c : mCustomPalette)
+                if (c == currentHex) { found = true; break; }
+            if (!found)
+            {
+                mCustomPalette.push_back(currentHex);
+                mStatusMsg = "Cor guardada na paleta personalizada: " + currentHex;
+                mStatusMsgUntil = GetTime() + 4.0;
+            }
+            else
+            {
+                mStatusMsg = "Essa cor já está na paleta personalizada";
+                mStatusMsgUntil = GetTime() + 4.0;
             }
         }
         ImGui::End();

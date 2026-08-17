@@ -297,7 +297,10 @@ namespace seedui
                 ImGui::SetCursorScreenPos(min);
                 ImGui::InvisibleButton("##wheel", ImVec2(width, height));
                 bool changed = false;
-                if (ImGui::IsItemActive() || (ImGui::IsItemHovered() && ImGui::IsMouseDown(0)))
+                // Só reposiciona o nó (e a família harmônica) com ARRASTO
+                // deliberado — um clique simples mantém a harmonia estática,
+                // sem "pular" a tríade/complementar/analoga para a cor clicada.
+                if (ImGui::IsItemActive() && ImGui::IsMouseDragging(0, 4.0f))
                 {
                     const ImVec2 mouse = ImGui::GetMousePos();
                     const float dx = mouse.x - center.x;
