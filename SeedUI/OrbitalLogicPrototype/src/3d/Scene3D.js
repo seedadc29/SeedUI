@@ -1481,21 +1481,55 @@ export class Scene3D {
       if (ent.type === 'player') {
         if (ent.hasMove && ent.walkSpeed > 0) {
           const moveDir = new THREE.Vector3();
-          if (this.keys.w) moveDir.z -= 1;
-          if (this.keys.s) moveDir.z += 1;
-          if (this.keys.a) moveDir.x -= 1;
-          if (this.keys.d) moveDir.x += 1;
+          const isPlatformer2D = this.cameraConfig.preset === 'platformer' || this.cameraConfig.mouseLook?.lockMouse;
 
-          if (moveDir.lengthSq() > 0) {
-            moveDir.normalize();
-            const activeSpeed = ent.walkSpeed * (this.keys.shift && ent.hasRun ? ent.runMultiplier : 1.0);
-            ent.velocity.x = moveDir.x * activeSpeed;
-            ent.velocity.z = moveDir.z * activeSpeed;
+          if (isPlatformer2D) {
+            // 2D Lateral movement (A = Left, D = Right)
+            if (this.keys.a) moveDir.x -= 1;
+            if (this.keys.d) moveDir.x += 1;
 
-            ent.mesh.rotation.y = Math.atan2(-moveDir.z, moveDir.x) + Math.PI / 2;
+            if (moveDir.lengthSq() > 0) {
+              moveDir.normalize();
+              const activeSpeed = ent.walkSpeed * (this.keys.shift && ent.hasRun ? ent.runMultiplier : 1.0);
+              ent.velocity.x = moveDir.x * activeSpeed;
+              ent.velocity.z = 0;
+
+              ent.mesh.rotation.y = moveDir.x > 0 ? Math.PI / 2 : -Math.PI / 2;
+            } else {
+              ent.velocity.x *= 0.75;
+              ent.velocity.z = 0;
+            }
           } else {
-            ent.velocity.x *= 0.75;
-            ent.velocity.z *= 0.75;
+            // 3D Camera-Relative Movement & Mouse Heading
+            const camYaw = (this.cameraConfig.mouseLook && this.cameraConfig.mouseLook.enabled)
+              ? this.cameraConfig.mouseLook.yaw
+              : 0;
+
+            const fwd = new THREE.Vector3(-Math.sin(camYaw), 0, -Math.cos(camYaw));
+            const right = new THREE.Vector3(Math.cos(camYaw), 0, -Math.sin(camYaw));
+
+            if (this.keys.w) moveDir.add(fwd);
+            if (this.keys.s) moveDir.sub(fwd);
+            if (this.keys.d) moveDir.add(right);
+            if (this.keys.a) moveDir.sub(right);
+
+            if (moveDir.lengthSq() > 0) {
+              moveDir.normalize();
+              const activeSpeed = ent.walkSpeed * (this.keys.shift && ent.hasRun ? ent.runMultiplier : 1.0);
+              ent.velocity.x = moveDir.x * activeSpeed;
+              ent.velocity.z = moveDir.z * activeSpeed;
+
+              // Smoothly rotate character to face composite movement direction
+              const targetRot = Math.atan2(-moveDir.z, moveDir.x) + Math.PI / 2;
+              ent.mesh.rotation.y = THREE.MathUtils.lerp(ent.mesh.rotation.y, targetRot, Math.min(1.0, 18.0 * delta));
+            } else {
+              ent.velocity.x *= 0.75;
+              ent.velocity.z *= 0.75;
+
+              // When standing, player smoothly follows camera / mouse orientation!
+              const idleTargetRot = -camYaw + Math.PI;
+              ent.mesh.rotation.y = THREE.MathUtils.lerp(ent.mesh.rotation.y, idleTargetRot, Math.min(1.0, 10.0 * delta));
+            }
           }
         } else {
           ent.velocity.x = 0;
