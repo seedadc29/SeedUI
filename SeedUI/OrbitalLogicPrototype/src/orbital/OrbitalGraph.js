@@ -541,11 +541,68 @@ export class OrbitalGraph {
       } else if (upperName.includes('PLATAFORMA')) {
         sunColor = '#32ade6';
         defaultModel = 'Plano';
+      } else if (upperName.includes('CAMERA') || upperName.includes('CÂMERA')) {
+        sunColor = '#38bdf8';
+        defaultModel = 'Câmera';
       }
 
-      // BAREBONES MODULAR SETUP: Only the shape planet on orbit 65. All other orbits empty!
+      // Modular Setup for Sun
+      const newSunId = `sun-${Date.now()}`;
+      let defaultPlanets = [
+        {
+          id: `planet-${Date.now()}-mesh`,
+          name: defaultModel,
+          type: 'planet',
+          orbitRadius: 65,
+          angle: -0.6,
+          speed: 0.3,
+          radius: 18,
+          color: '#382f7e',
+          textColor: '#ffffff',
+          moons: [],
+          sunId: newSunId
+        }
+      ];
+
+      if (defaultModel === 'Câmera') {
+        defaultPlanets = [
+          {
+            id: `planet-${Date.now()}-mode`,
+            name: 'Seguir',
+            type: 'planet',
+            orbitRadius: 65,
+            angle: -0.6,
+            speed: 0.25,
+            radius: 18,
+            color: '#0284c7',
+            textColor: '#ffffff',
+            moons: [
+              { name: 'Preset', val: 'Plataforma 2.5D', color: '#38bdf8' }
+            ],
+            sunId: newSunId
+          },
+          {
+            id: `planet-${Date.now()}-optics`,
+            name: 'Lente',
+            type: 'planet',
+            orbitRadius: 115,
+            angle: 1.2,
+            speed: 0.18,
+            radius: 18,
+            color: '#382f7e',
+            textColor: '#ffffff',
+            moons: [
+              { name: 'FOV (°)', val: 48, color: '#38bdf8' },
+              { name: 'Distância Z (m)', val: 14.0, color: '#38bdf8' },
+              { name: 'Altura Y (m)', val: 3.2, color: '#38bdf8' }
+            ],
+            sunId: newSunId
+          }
+        ];
+      }
+
       const newSun = {
-        id: `sun-${Date.now()}`,
+        id: newSunId,
         name: data.name,
         type: 'sun',
         x: spawnX,
@@ -557,24 +614,9 @@ export class OrbitalGraph {
           { radius: 115, dash: [3, 4] },
           { radius: 165, dash: [3, 5] }
         ],
-        planets: [
-          {
-            id: `planet-${Date.now()}-mesh`,
-            name: defaultModel,
-            type: 'planet',
-            orbitRadius: 65,
-            angle: -0.6,
-            speed: 0.3,
-            radius: 18,
-            color: '#382f7e',
-            textColor: '#ffffff',
-            moons: [],
-            sunId: null
-          }
-        ]
+        planets: defaultPlanets
       };
 
-      newSun.planets[0].sunId = newSun.id;
       this.suns.push(newSun);
       this.selectedEntity = newSun;
       this.triggerEnergyBeam(newSun.name, this.suns[0]?.name || newSun.name, '#32ade6');

@@ -209,7 +209,7 @@ export class PaletteUI {
     });
   }
 
-  renderCameraInspector() {
+  renderCameraInspector(targetEntity = null) {
     const titleEl = document.getElementById('inspector-node-title');
     const typeEl = document.getElementById('inspector-node-type');
     const bodyEl = document.getElementById('inspector-body');
@@ -217,9 +217,10 @@ export class PaletteUI {
 
     const camCfg = this.scene3D.cameraConfig;
     const camMesh = this.scene3D.cameraHelperMesh;
+    const cameraSun = this.orbitalGraph.suns.find(s => s.name.toUpperCase().includes('CAMERA') || s.name.toUpperCase().includes('CÂMERA'));
 
-    titleEl.textContent = 'Câmera de Jogo';
-    typeEl.textContent = 'VISÃO DO JOGADOR (GAME CAMERA)';
+    titleEl.textContent = cameraSun?.name || 'Câmera de Jogo';
+    typeEl.textContent = 'ENTIDADE / FAMÍLIA ORBITAL';
 
     const posX = camMesh ? camMesh.position.x.toFixed(1) : '0.0';
     const posY = camMesh ? camMesh.position.y.toFixed(1) : '3.5';
@@ -248,6 +249,11 @@ export class PaletteUI {
             <i class="ti ti-eye"></i> ${this.scene3D.isPilotingGameCamera ? 'Sair da Visão' : 'Ver Visão (C)'}
           </button>
         </div>
+      </div>
+
+      <div class="inspector-row">
+        <span class="inspector-label">Nome da Família:</span>
+        <input type="text" class="inspector-input" value="${cameraSun?.name || 'Câmera de Jogo'}" id="inp-cam-sun-name" />
       </div>
 
       <div class="scenery-transform-box">
@@ -332,38 +338,80 @@ export class PaletteUI {
           <span class="dim-unit">°</span>
         </div>
       </div>
+
+      <button class="btn-delete-node" id="btn-del-camera-node" style="margin-top: 14px;"><i class="ti ti-trash"></i> Excluir Entidade Câmera</button>
     `;
 
     bodyEl.innerHTML = html;
 
+    const syncCameraSunMoons = () => {
+      const cSun = this.orbitalGraph.suns.find(s => s.name.toUpperCase().includes('CAMERA') || s.name.toUpperCase().includes('CÂMERA'));
+      if (!cSun) return;
+
+      const modePlanet = cSun.planets.find(p => p.name.toLowerCase().includes('seguir') || p.name.toLowerCase().includes('estatica') || p.name.toLowerCase().includes('modo'));
+      if (modePlanet) {
+        modePlanet.name = camCfg.mode === 'follow' ? 'Seguir' : 'Estática';
+        const presetMoon = modePlanet.moons?.find(m => m.name.toLowerCase().includes('preset'));
+        if (presetMoon) presetMoon.val = camCfg.preset;
+      }
+
+      const opticsPlanet = cSun.planets.find(p => p.name.toLowerCase().includes('lente') || p.name.toLowerCase().includes('optica') || p.name.toLowerCase().includes('óptica'));
+      if (opticsPlanet) {
+        const fovMoon = opticsPlanet.moons?.find(m => m.name.toLowerCase().includes('fov'));
+        if (fovMoon) fovMoon.val = camCfg.fov;
+        const distMoon = opticsPlanet.moons?.find(m => m.name.toLowerCase().includes('distancia') || m.name.toLowerCase().includes('distância'));
+        if (distMoon) distMoon.val = camCfg.offset.z;
+        const altMoon = opticsPlanet.moons?.find(m => m.name.toLowerCase().includes('altura'));
+        if (altMoon) altMoon.val = camCfg.offset.y;
+      }
+    };
+
+    // Rename camera sun
+    document.getElementById('inp-cam-sun-name')?.addEventListener('input', (e) => {
+      if (cameraSun) {
+        cameraSun.name = e.target.value;
+        const camEnt = this.scene3D.entities.get('game-camera-1');
+        if (camEnt) {
+          camEnt.name = e.target.value;
+          camEnt.familyName = e.target.value;
+        }
+      }
+    });
+
     // Mode Selector Handler
     document.getElementById('sel-cam-mode')?.addEventListener('change', (e) => {
       this.scene3D.setGameCameraMode(e.target.value);
+      syncCameraSunMoons();
     });
 
     // Preset Handlers
     document.getElementById('preset-cam-platformer')?.addEventListener('click', () => {
       this.scene3D.setGameCameraPreset('platformer');
+      syncCameraSunMoons();
       this.renderCameraInspector();
     });
 
     document.getElementById('preset-cam-third')?.addEventListener('click', () => {
       this.scene3D.setGameCameraPreset('third_person');
+      syncCameraSunMoons();
       this.renderCameraInspector();
     });
 
     document.getElementById('preset-cam-topdown')?.addEventListener('click', () => {
       this.scene3D.setGameCameraPreset('top_down');
+      syncCameraSunMoons();
       this.renderCameraInspector();
     });
 
     document.getElementById('preset-cam-first')?.addEventListener('click', () => {
       this.scene3D.setGameCameraPreset('first_person');
+      syncCameraSunMoons();
       this.renderCameraInspector();
     });
 
     document.getElementById('preset-cam-static')?.addEventListener('click', () => {
       this.scene3D.setGameCameraPreset('static');
+      syncCameraSunMoons();
       this.renderCameraInspector();
     });
 
@@ -387,6 +435,7 @@ export class PaletteUI {
         else if (axis === 'y') this.scene3D.setEntityPosition('game-camera-1', curX, val, curZ);
         else this.scene3D.setEntityPosition('game-camera-1', curX, curY, val);
 
+        syncCameraSunMoons();
         if (slider && document.activeElement !== slider) slider.value = val;
         if (num && document.activeElement !== num) num.value = val;
       };
@@ -430,11 +479,21 @@ export class PaletteUI {
       this.scene3D.gameCamera.fov = fovVal;
       this.scene3D.gameCamera.updateProjectionMatrix();
       if (this.scene3D.cameraHelper) this.scene3D.cameraHelper.update();
+      syncCameraSunMoons();
       if (sliderFov && document.activeElement !== sliderFov) sliderFov.value = fovVal;
       if (inpFov && document.activeElement !== inpFov) inpFov.value = fovVal;
     };
     sliderFov?.addEventListener('input', (e) => onFovChange(parseFloat(e.target.value) || 48));
     inpFov?.addEventListener('input', (e) => onFovChange(parseFloat(e.target.value) || 48));
+
+    // Delete Button
+    document.getElementById('btn-del-camera-node')?.addEventListener('click', () => {
+      const cSun = this.orbitalGraph.suns.find(s => s.name.toUpperCase().includes('CAMERA') || s.name.toUpperCase().includes('CÂMERA'));
+      if (cSun) {
+        this.orbitalGraph.deleteEntity(cSun);
+      }
+      this.renderInspector(null);
+    });
   }
 
   renderInspector(entity) {
@@ -450,8 +509,8 @@ export class PaletteUI {
       return;
     }
 
-    if (entity.type === 'camera') {
-      this.renderCameraInspector();
+    if (entity.type === 'camera' || (entity.type === 'sun' && (entity.name.toUpperCase().includes('CAMERA') || entity.name.toUpperCase().includes('CÂMERA')))) {
+      this.renderCameraInspector(entity);
       return;
     }
 

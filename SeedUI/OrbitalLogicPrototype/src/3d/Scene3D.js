@@ -148,34 +148,10 @@ export class Scene3D {
     this.cameraHelper = new THREE.CameraHelper(this.gameCamera);
     this.cameraHelper.material.opacity = 0.4;
     this.cameraHelper.material.transparent = true;
-    this.scene.add(this.cameraHelper);
 
     camGroup.position.copy(this.gameCamera.position);
-    this.scene.add(camGroup);
     this.cameraHelperMesh = camGroup;
-
-    // Register as an interactive 3D entity in the world
-    const camEntity = {
-      id: 'game-camera-1',
-      name: 'Câmera de Jogo',
-      familyId: 'camera-family',
-      familyName: 'Câmera de Jogo',
-      type: 'camera',
-      shape: 'box',
-      mesh: camGroup,
-      baseSize: { x: 1.0, y: 0.7, z: 1.4 },
-      scale: { x: 1, y: 1, z: 1 },
-      dimensions: { x: 1.0, y: 0.7, z: 1.4 },
-      initialPos: camGroup.position.clone(),
-      velocity: new THREE.Vector3(),
-      isGrounded: true,
-      currentGroundY: 1.1,
-      animTime: 0,
-      hasCollision: false,
-      isSolid: false
-    };
-
-    this.entities.set('game-camera-1', camEntity);
+    this.hasCameraInScene = false;
   }
 
   initControls() {
@@ -800,6 +776,94 @@ export class Scene3D {
     }
 
     const activeFamilyIds = new Set(suns.map(s => s.id));
+
+    // 0. Synchronize Game Camera Sun
+    const cameraSun = suns.find(s => s.name.toUpperCase().includes('CAMERA') || s.name.toUpperCase().includes('CÂMERA'));
+
+    if (cameraSun) {
+      this.hasCameraInScene = true;
+      if (this.cameraHelperMesh && !this.scene.children.includes(this.cameraHelperMesh)) {
+        this.scene.add(this.cameraHelperMesh);
+      }
+      if (this.cameraHelper && !this.scene.children.includes(this.cameraHelper)) {
+        this.scene.add(this.cameraHelper);
+      }
+
+      let camEnt = this.entities.get('game-camera-1');
+      if (!camEnt) {
+        camEnt = {
+          id: 'game-camera-1',
+          name: cameraSun.name || 'Câmera de Jogo',
+          familyId: cameraSun.id,
+          familyName: cameraSun.name || 'Câmera de Jogo',
+          type: 'camera',
+          shape: 'box',
+          mesh: this.cameraHelperMesh,
+          baseSize: { x: 1.0, y: 0.7, z: 1.4 },
+          scale: { x: 1, y: 1, z: 1 },
+          dimensions: { x: 1.0, y: 0.7, z: 1.4 },
+          initialPos: this.cameraHelperMesh.position.clone(),
+          velocity: new THREE.Vector3(),
+          isGrounded: true,
+          currentGroundY: 1.1,
+          animTime: 0,
+          hasCollision: false,
+          isSolid: false
+        };
+        this.entities.set('game-camera-1', camEnt);
+      } else {
+        camEnt.familyId = cameraSun.id;
+        camEnt.name = cameraSun.name;
+        camEnt.familyName = cameraSun.name;
+      }
+
+      // Read planets and moons of the Camera Sun
+      cameraSun.planets.forEach(planet => {
+        const pName = planet.name.toLowerCase();
+        if (pName.includes('seguir')) {
+          this.cameraConfig.mode = 'follow';
+        } else if (pName.includes('estatica') || pName.includes('estática') || pName.includes('fixa')) {
+          this.cameraConfig.mode = 'static';
+        }
+
+        planet.moons?.forEach(moon => {
+          const mName = moon.name.toLowerCase();
+          if (mName.includes('preset')) {
+            const valLower = (moon.val || '').toString().toLowerCase();
+            if (valLower.includes('plataforma') || valLower.includes('2.5d')) this.cameraConfig.preset = 'platformer';
+            else if (valLower.includes('3') || valLower.includes('terceira')) this.cameraConfig.preset = 'third_person';
+            else if (valLower.includes('top') || valLower.includes('aerea') || valLower.includes('aérea')) this.cameraConfig.preset = 'top_down';
+            else if (valLower.includes('1') || valLower.includes('primeira')) this.cameraConfig.preset = 'first_person';
+            else if (valLower.includes('fixa') || valLower.includes('estatica')) this.cameraConfig.preset = 'static';
+          } else if (mName.includes('fov')) {
+            const fov = parseFloat(moon.val) || 48;
+            this.cameraConfig.fov = fov;
+            this.gameCamera.fov = fov;
+            this.gameCamera.updateProjectionMatrix();
+          } else if (mName.includes('distancia') || mName.includes('distância')) {
+            this.cameraConfig.offset.z = parseFloat(moon.val) || 14.0;
+          } else if (mName.includes('altura')) {
+            this.cameraConfig.offset.y = parseFloat(moon.val) || 3.2;
+          }
+        });
+      });
+
+      if (this.cameraHelper) this.cameraHelper.update();
+    } else {
+      this.hasCameraInScene = false;
+      if (this.cameraHelperMesh && this.scene.children.includes(this.cameraHelperMesh)) {
+        this.scene.remove(this.cameraHelperMesh);
+      }
+      if (this.cameraHelper && this.scene.children.includes(this.cameraHelper)) {
+        this.scene.remove(this.cameraHelper);
+      }
+      if (this.entities.has('game-camera-1')) {
+        this.entities.delete('game-camera-1');
+      }
+      if (this.isPilotingGameCamera) {
+        this.toggleGameCameraView();
+      }
+    }
 
     // 1. Remove deleted families' instances (except camera)
     this.entities.forEach((ent, instanceId) => {
