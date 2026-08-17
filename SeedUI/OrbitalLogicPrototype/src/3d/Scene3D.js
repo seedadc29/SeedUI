@@ -40,6 +40,7 @@ export class Scene3D {
       trackRotation: false,
       mouseLook: {
         enabled: true,
+        lockMouse: false, // Set to true for fixed 2D / platformer games
         sensitivityX: 0.003,
         sensitivityY: 0.003,
         invertY: false,
@@ -208,6 +209,10 @@ export class Scene3D {
       if (this.isPlaying) {
         if (e.button === 0 && !e.altKey) this.controls.enabled = false;
         else this.controls.enabled = true;
+
+        if (this.cameraConfig.mouseLook?.enabled && !this.cameraConfig.mouseLook?.lockMouse) {
+          try { this.canvas.requestPointerLock?.(); } catch (err) {}
+        }
       } else if (this.isPilotingGameCamera) {
         this.controls.enabled = false;
       } else {
@@ -223,34 +228,52 @@ export class Scene3D {
       isPointerDown = false;
     });
 
-    // Mouse Look / Pointer Rotation when in Camera View or Playing
+    // Player Mouse Look: Free look without clicking when playing, or on drag in editor camera
     window.addEventListener('pointermove', (e) => {
-      if (!isPointerDown) return;
       const isCameraView = this.isPilotingGameCamera || this.isPlaying;
-      if (isCameraView && this.cameraConfig.mouseLook?.enabled) {
-        const dx = e.clientX - prevMouse.x;
-        const dy = e.clientY - prevMouse.y;
+      const mLook = this.cameraConfig.mouseLook;
+      if (!isCameraView || !mLook?.enabled || mLook?.lockMouse) {
         prevMouse = { x: e.clientX, y: e.clientY };
+        return;
+      }
 
-        const cfg = this.cameraConfig.mouseLook;
-        cfg.targetYaw -= dx * cfg.sensitivityX;
-        if (cfg.invertY) {
-          cfg.targetPitch -= dy * cfg.sensitivityY;
-        } else {
-          cfg.targetPitch += dy * cfg.sensitivityY;
-        }
+      const isLocked = document.pointerLockElement === this.canvas;
+      let dx = 0;
+      let dy = 0;
 
-        // Clamp Pitch (Vertical)
-        const minPitchRad = (cfg.minPitchDeg * Math.PI) / 180;
-        const maxPitchRad = (cfg.maxPitchDeg * Math.PI) / 180;
-        cfg.targetPitch = Math.max(minPitchRad, Math.min(maxPitchRad, cfg.targetPitch));
+      if (isLocked) {
+        dx = e.movementX || 0;
+        dy = e.movementY || 0;
+      } else if (this.isPlaying || isPointerDown) {
+        // Free mouse look during play mode without holding buttons!
+        dx = e.movementX !== undefined && Math.abs(e.movementX) < 150 ? e.movementX : (e.clientX - prevMouse.x);
+        dy = e.movementY !== undefined && Math.abs(e.movementY) < 150 ? e.movementY : (e.clientY - prevMouse.y);
+      } else {
+        prevMouse = { x: e.clientX, y: e.clientY };
+        return;
+      }
 
-        // Clamp Yaw (Horizontal) if enabled
-        if (cfg.enableYawLimit) {
-          const minYawRad = (cfg.minYawDeg * Math.PI) / 180;
-          const maxYawRad = (cfg.maxYawDeg * Math.PI) / 180;
-          cfg.targetYaw = Math.max(minYawRad, Math.min(maxYawRad, cfg.targetYaw));
-        }
+      prevMouse = { x: e.clientX, y: e.clientY };
+
+      if (dx === 0 && dy === 0) return;
+
+      mLook.targetYaw -= dx * mLook.sensitivityX;
+      if (mLook.invertY) {
+        mLook.targetPitch -= dy * mLook.sensitivityY;
+      } else {
+        mLook.targetPitch += dy * mLook.sensitivityY;
+      }
+
+      // Clamp Pitch (Vertical)
+      const minPitchRad = (mLook.minPitchDeg * Math.PI) / 180;
+      const maxPitchRad = (mLook.maxPitchDeg * Math.PI) / 180;
+      mLook.targetPitch = Math.max(minPitchRad, Math.min(maxPitchRad, mLook.targetPitch));
+
+      // Clamp Yaw (Horizontal) if enabled
+      if (mLook.enableYawLimit) {
+        const minYawRad = (mLook.minYawDeg * Math.PI) / 180;
+        const maxYawRad = (mLook.maxYawDeg * Math.PI) / 180;
+        mLook.targetYaw = Math.max(minYawRad, Math.min(maxYawRad, mLook.targetYaw));
       }
     });
 
@@ -451,23 +474,28 @@ export class Scene3D {
       this.cameraConfig.offset.set(0, 3.0, 14.0);
       this.cameraConfig.lookAtOffset.set(0, 1.2, 0);
       this.cameraConfig.fov = 46;
+      if (this.cameraConfig.mouseLook) this.cameraConfig.mouseLook.lockMouse = true;
     } else if (preset === 'third_person') {
       this.cameraConfig.mode = 'follow';
       this.cameraConfig.offset.set(0, 4.5, 9.5);
       this.cameraConfig.lookAtOffset.set(0, 1.2, 0);
       this.cameraConfig.fov = 52;
+      if (this.cameraConfig.mouseLook) this.cameraConfig.mouseLook.lockMouse = false;
     } else if (preset === 'top_down') {
       this.cameraConfig.mode = 'follow';
       this.cameraConfig.offset.set(0, 16.0, 0.1);
       this.cameraConfig.lookAtOffset.set(0, 0, 0);
       this.cameraConfig.fov = 48;
+      if (this.cameraConfig.mouseLook) this.cameraConfig.mouseLook.lockMouse = true;
     } else if (preset === 'first_person') {
       this.cameraConfig.mode = 'follow';
       this.cameraConfig.offset.set(0, 1.7, 0.3);
       this.cameraConfig.lookAtOffset.set(0, 1.7, -5.0);
       this.cameraConfig.fov = 65;
+      if (this.cameraConfig.mouseLook) this.cameraConfig.mouseLook.lockMouse = false;
     } else if (preset === 'static') {
       this.cameraConfig.mode = 'static';
+      if (this.cameraConfig.mouseLook) this.cameraConfig.mouseLook.lockMouse = true;
     }
 
     this.gameCamera.fov = this.cameraConfig.fov;

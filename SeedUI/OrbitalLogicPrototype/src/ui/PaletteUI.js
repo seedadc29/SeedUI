@@ -338,17 +338,23 @@ export class PaletteUI {
           <span class="dim-unit">°</span>
         </div>
 
-        <!-- 4. MOUSE LOOK & MOVIMENTO DO MOUSE -->
+        <!-- 4. MOUSE LOOK & MOVIMENTO DO MOUSE (EXPERIÊNCIA DE JOGADOR) -->
         <div class="scenery-box-header" style="margin-top: 12px;">
-          <i class="ti ti-mouse"></i> <span>🖱️ CONTROLE POR MOVIMENTO DO MOUSE</span>
+          <i class="ti ti-mouse"></i> <span>🖱️ MOVIMENTAÇÃO DO MOUSE (SEM PRECISAR CLICAR)</span>
         </div>
         <div class="inspector-row" style="margin-top: 4px;">
           <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#f1f5f9; cursor:pointer;">
             <input type="checkbox" id="chk-cam-mouselook" ${camCfg.mouseLook?.enabled ? 'checked' : ''} />
-            <b>Ativar Olhar com Mouse (Mouse Look)</b>
+            <b>Ativar Rotação com Mouse (Mouse Look Livre)</b>
           </label>
         </div>
-        <div class="dim-row">
+        <div class="inspector-row" style="margin-top: 4px; background: rgba(255, 204, 0, 0.08); padding: 6px 8px; border-radius: 4px; border: 1px solid rgba(255, 204, 0, 0.25);">
+          <label style="display:flex; align-items:center; gap:6px; font-size:11px; color:#ffcc00; cursor:pointer;">
+            <input type="checkbox" id="chk-cam-lock-mouse" ${camCfg.mouseLook?.lockMouse ? 'checked' : ''} />
+            <b>🔒 Travar Mouse (Visão 2D / Plataforma Estática)</b>
+          </label>
+        </div>
+        <div class="dim-row" style="margin-top: 6px;">
           <span class="dim-label" style="width: 110px;">Sensibilidade:</span>
           <input type="range" min="0.5" max="4.0" step="0.1" value="${((camCfg.mouseLook?.sensitivityX || 0.003) * 1000).toFixed(1)}" class="dim-slider" id="slider-cam-mousesens" />
           <input type="number" min="0.5" max="4.0" step="0.1" value="${((camCfg.mouseLook?.sensitivityX || 0.003) * 1000).toFixed(1)}" class="dim-number" id="inp-cam-mousesens" />
@@ -493,6 +499,10 @@ export class PaletteUI {
     // Mouse Look Handlers
     document.getElementById('chk-cam-mouselook')?.addEventListener('change', (e) => {
       this.scene3D.setGameCameraMouseLook({ enabled: e.target.checked });
+    });
+
+    document.getElementById('chk-cam-lock-mouse')?.addEventListener('change', (e) => {
+      this.scene3D.setGameCameraMouseLook({ lockMouse: e.target.checked });
     });
 
     const onSensChange = (val) => {
