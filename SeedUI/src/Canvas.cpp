@@ -1424,24 +1424,33 @@ namespace seedui
                                             ctr.y + sinf(ta0) * glyphR);
                             const ImVec2 pb(ctr.x + cosf(ta1) * glyphR,
                                             ctr.y + sinf(ta1) * glyphR);
-                            dl->AddLine(pa, pb, rotGlow, 5.0f);
-                            dl->AddLine(pa, pb, rotCol, 2.0f);
+                            dl->AddLine(pa, pb, rotGlow, 4.0f);
+                            dl->AddLine(pa, pb, rotCol, 1.6f);
                         }
-                        auto arrowHead = [&](float ang)
+                        auto arrowHead = [&](float ang, float dir)
                         {
                             const float tipX = ctr.x + cosf(ang) * glyphR;
                             const float tipY = ctr.y + sinf(ang) * glyphR;
-                            const float tx = -sinf(ang), ty = cosf(ang);
+                            // dir = +1: sentido anti-horário (início do arco),
+                            // dir = -1: sentido horário (fim do arco) — as duas
+                            // pontas ficam opostas, indicando rotação nos dois
+                            // sentidos (estilo CorelDRAW).
+                            const float tx = -sinf(ang) * dir, ty = cosf(ang) * dir;
                             const float nx = cosf(ang), ny = sinf(ang);
-                            const ImVec2 p0(tipX + tx * 5.5f, tipY + ty * 5.5f);
-                            const ImVec2 p1(tipX - tx * 2.5f + nx * 3.5f,
-                                            tipY - ty * 2.5f + ny * 3.5f);
-                            const ImVec2 p2(tipX - tx * 2.5f - nx * 3.5f,
-                                            tipY - ty * 2.5f - ny * 3.5f);
+                            // Base NO TIP do arco e ponta para FORA: o
+                            // triângulo fica inteiro além do arco — antes a
+                            // base ficava 2.6px DENTRO do arco, então o arco
+                            // cortava a seta e uma das pontas parecia menor.
+                            const ImVec2 p0(tipX + tx * 7.5f, tipY + ty * 7.5f);
+                            const ImVec2 p1(tipX + nx * 2.4f, tipY + ny * 2.4f);
+                            const ImVec2 p2(tipX - nx * 2.4f, tipY - ny * 2.4f);
                             dl->AddTriangleFilled(p0, p1, p2, rotCol);
                         };
-                        arrowHead(a0);
-                        arrowHead(a1);
+                        // Pontas de COSTAS uma para a outra (apontando para
+                        // fora do arco): a do início gira no sentido horário,
+                        // a do fim no anti-horário.
+                        arrowHead(a0, -1.0f);
+                        arrowHead(a1, 1.0f);
                     }
                 }
                 else

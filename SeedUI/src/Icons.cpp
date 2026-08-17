@@ -35,6 +35,7 @@ namespace seedui
             { IconId::Ruler,     "ruler" },
             { IconId::Pan,       "hand" },
             { IconId::Color,     "eyedropper" },
+            { IconId::Bucket,    "paint-bucket" },
             { IconId::Grid,      "grid-four" },
             { IconId::Guide,     "guide" },
             { IconId::New,       "file-plus" },
@@ -240,16 +241,21 @@ namespace seedui
 
     void DrawIconAt(IconId id, float x, float y, float size, ImU32 tint)
     {
+        DrawIconOnList(ImGui::GetWindowDrawList(), id, x, y, size, tint);
+    }
+
+    void DrawIconOnList(ImDrawList* dl, IconId id, float x, float y,
+                        float size, ImU32 tint)
+    {
         const ImTextureID tex = Tex(id);
         if (!tex)
         {
-            ImGui::GetWindowDrawList()->AddText(ImVec2(x, y), IM_COL32(236, 236, 236, 255), "?");
+            dl->AddText(ImVec2(x, y), IM_COL32(236, 236, 236, 255), "?");
             return;
         }
 
-        ImGui::GetWindowDrawList()->AddImage(tex, ImVec2(x, y),
-                                             ImVec2(x + size, y + size),
-                                             ImVec2(0, 0), ImVec2(1, 1), tint);
+        dl->AddImage(tex, ImVec2(x, y), ImVec2(x + size, y + size),
+                     ImVec2(0, 0), ImVec2(1, 1), tint);
     }
 
     bool IconButton(IconId id, const char* tooltip, float buttonSize, ImU32 tint)

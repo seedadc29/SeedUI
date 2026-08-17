@@ -228,6 +228,7 @@ namespace seedui
             case IconId::Slash:  return Tool::Line;
             case IconId::PenTool: return Tool::Pen;
             case IconId::Color:  return Tool::Color;
+            case IconId::Bucket: return Tool::Bucket;
             case IconId::Grid:   return Tool::Grid;
             case IconId::Ruler:  return Tool::Measure;
             case IconId::Annotate: return Tool::Annotate;
@@ -3860,7 +3861,8 @@ namespace seedui
             return;
         }
 
-        const bool editTool = mCurrentTool == Tool::Select || mCurrentTool == Tool::Move;
+        const bool editTool = mCurrentTool == Tool::Select || mCurrentTool == Tool::Move ||
+                              mCurrentTool == Tool::Color || mCurrentTool == Tool::Bucket;
         if (!PossuiModoAtivo() || (!editTool && !ctrlTemporary))
         {
             if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
@@ -4295,7 +4297,22 @@ namespace seedui
         mCustomCursorActive = false;
         if (canvasHovered && mouseOnFrame && mCanvasDragMode == 0 && !mCanvasMarquee)
         {
-            if (Element* selected = Project::ResolverId(mode, mSelectedElementId))
+            // Cursor customizado das ferramentas de cor: com o conta-gotas o
+            // mouse vira o ícone do conta-gotas; ao capturar a cor a ferramenta
+            // vira o balde de tinta e o cursor acompanha (ícone do balde),
+            // até transferir a cor para o próximo objeto.
+            if (mCurrentTool == Tool::Color || mCurrentTool == Tool::Bucket)
+            {
+                ImGui::SetMouseCursor(ImGuiMouseCursor_None);
+                const IconId cursorIcon = (mCurrentTool == Tool::Color)
+                                              ? IconId::Color : IconId::Bucket;
+                // Ponta do bico (conta-gotas) / boca (balde) no ponto do clique.
+                DrawIconOnList(ImGui::GetForegroundDrawList(), cursorIcon,
+                               mouse.x - 13.0f, mouse.y - 24.0f, 26.0f,
+                               IM_COL32(240, 240, 240, 255));
+                mCustomCursorActive = true;
+            }
+            else if (Element* selected = Project::ResolverId(mode, mSelectedElementId))
                 if (!selected->bloqueado)
                 {
                     const int hoverMode = dragModeAt(*selected, mouseX, mouseY);
@@ -4473,6 +4490,70 @@ namespace seedui
         if (canvasHovered && mouseOnFrame &&
             ImGui::IsMouseClicked(ImGuiMouseButton_Left))
         {
+            // BALDE DE TINTA (K): clique sobre um elemento aplica a cor atual
+            // do balde (mBucketColorHex) ao preenchimento dele.
+            if (mCurrentTool == Tool::Bucket)
+            {
+                Element* target = elementAtPoint(mouseX, mouseY);
+                if (!target)
+                {
+                    mStatusMsg = "Clique sobre um elemento para preencher";
+                    mStatusMsgUntil = GetTime() + 4.0;
+                    return;
+                }
+                if (target->bloqueado)
+                {
+                    mStatusMsg = "Elemento bloqueado — desbloqueie para preencher";
+                    mStatusMsgUntil = GetTime() + 4.0;
+                    return;
+                }
+                bool blocked = false;
+                ApplyStyleToSelection(mode, { target->id }, "cor_fundo",
+                                      mBucketColorHex, blocked);
+                mProjectDirty = true;
+                CapturarHistorico();
+                mSelectedCornerMask = 0;
+                mCanvasCornerDragMask = 0;
+                mSelectedElementIds.clear();
+                mSelectedElementIds.push_back(target->id);
+                mSelectedElementId = target->id;
+                mStatusMsg = "Preenchido: " + mBucketColorHex;
+                mStatusMsgUntil = GetTime() + 4.0;
+                return;
+            }
+            // CONTA-GOTAS (I): clique num elemento captura a cor e a ferramenta
+            // vira automaticamente o BALDE DE TINTA — o clique seguinte aplica
+            // a cor capturada em outro objeto, sem precisar trocar de ferramenta.
+            if (mCurrentTool == Tool::Color)
+            {
+                Element* picked = elementAtPoint(mouseX, mouseY);
+                if (!picked)
+                {
+                    mStatusMsg = "Clique sobre um elemento para capturar a cor";
+                    mStatusMsgUntil = GetTime() + 4.0;
+                    return;
+                }
+                std::string hex = picked->estilos.value("cor_fundo", "");
+                if (hex.empty() || hex == "none")
+                {
+                    hex = "#00000000";
+                    mStatusMsg = "Sem preenchimento — cor transparente capturada";
+                }
+                else
+                {
+                    if (hex[0] != '#') hex = "#" + hex;
+                    mStatusMsg = "Cor capturada: " + hex + " — virou balde de tinta!";
+                }
+                mBucketColorHex = hex;
+                mCurrentTool = Tool::Bucket; // transforma a ferramenta no balde
+                mSelectedCornerMask = 0;
+                mCanvasCornerDragMask = 0;
+                mSelectedElementIds.clear();
+                mSelectedElementIds.push_back(picked->id);
+                mSelectedElementId = picked->id;
+                mStatusMsgUntil = GetTime() + 4.0;
+                return;
+            }
             Element* current = Project::ResolverId(mode, mSelectedElementId);
             const bool multiSel = current && mSelectedElementIds.size() > 1;
             float cRectX = 0.0f, cRectY = 0.0f, cRectW = 0.0f, cRectH = 0.0f;
@@ -4674,7 +4755,7 @@ namespace seedui
             mShiftGuidesLabels.clear();
             mCloneForked = false;
             mCanvasDragPastThreshold = false;
-            mCanvasDragMaterializedPivot = false;
+            mCanvasDragAnchorActive = false;
             if (hit && keepHitForDrag && !hit->bloqueado)
             {
                 if (multiSel && currentHandle >= 2)
@@ -4707,25 +4788,46 @@ namespace seedui
                     mCanvasDragH = hit->transformacao.value("altura", 32.0f);
                     mCanvasDragRotation = Geo::ElementRotation(*hit);
                     Geo::ElementPivot(*hit, mCanvasDragPivotX, mCanvasDragPivotY);
-                    // Objeto ROTACIONADO sem pivô explícito: materializa o
-                    // pivô (centro atual) em centro_rotacao no início do
-                    // RESIZE. O render usa ElementPivot — que cai no CENTRO
-                    // da caixa quando não há centro_rotacao e muda a cada
-                    // frame do resize, fazendo a âncora (canto oposto à
-                    // alça) deslizar no mundo e o objeto "andar"/deformar.
-                    // Com o pivô materializado ele fica FIXO no arrasto
-                    // inteiro (a matemática do resize já assume isso) e o
-                    // redimensionamento fica ancorado.
+                    // Objeto ROTACIONADO sem pivô explícito: captura a
+                    // posição NO MUNDO da âncora (aresta/canto OPOSTO à alça
+                    // arrastada) no início do RESIZE. Durante o arrasto a
+                    // caixa é reposicionada para manter a âncora fixa no
+                    // mundo com o pivô SEMPRE no CENTRO — a origem acompanha
+                    // o objeto (a antiga "materialização" fixava o pivô na
+                    // posição antiga e o resize travava o objeto na origem).
+                    // O pivô explícito do usuário (centro_rotacao) fica
+                    // parado e não passa por aqui.
+                    mCanvasDragAnchorActive = false;
                     if (mCanvasDragMode >= 2 && mCanvasDragMode <= 9 &&
                         mCanvasDragRotation != 0.0f &&
                         hit->transformacao.is_object() &&
                         !hit->transformacao.contains("centro_rotacao"))
                     {
-                        hit->transformacao["centro_rotacao"] = {
-                            { "x", mCanvasDragPivotX },
-                            { "y", mCanvasDragPivotY }
-                        };
-                        mCanvasDragMaterializedPivot = true;
+                        float ax = mCanvasDragX;
+                        float ay = mCanvasDragY;
+                        switch (mCanvasDragMode)
+                        {
+                            case 2: ax = mCanvasDragX + mCanvasDragW; break;
+                            case 3: ax = mCanvasDragX; break;
+                            case 4: ay = mCanvasDragY + mCanvasDragH; break;
+                            case 5: ay = mCanvasDragY; break;
+                            case 6: ax = mCanvasDragX + mCanvasDragW;
+                                    ay = mCanvasDragY + mCanvasDragH; break;
+                            case 7: ax = mCanvasDragX;
+                                    ay = mCanvasDragY + mCanvasDragH; break;
+                            case 8: ax = mCanvasDragX + mCanvasDragW;
+                                    ay = mCanvasDragY; break;
+                            default: ax = mCanvasDragX; ay = mCanvasDragY; break;
+                        }
+                        // Âncora no mundo: pivô (centro) + rotação do
+                        // deslocamento local.
+                        const float rotRad = Geo::DegToRad(mCanvasDragRotation);
+                        float wx = ax, wy = ay;
+                        Geo::RotatePoint(wx, wy, mCanvasDragPivotX,
+                                         mCanvasDragPivotY, rotRad);
+                        mCanvasDragAnchorWorldX = wx;
+                        mCanvasDragAnchorWorldY = wy;
+                        mCanvasDragAnchorActive = true;
                     }
                     // Guarda os pontos ORIGINAIS do caminho (resize
                     // individual) — o RescalePath re-mapeia a partir deles.
@@ -5081,19 +5183,38 @@ namespace seedui
                         mCanvasDragH = clone->transformacao.value("altura", 32.0f);
                         mCanvasDragRotation = Geo::ElementRotation(*clone);
                         Geo::ElementPivot(*clone, mCanvasDragPivotX, mCanvasDragPivotY);
-                        // Mesma materialização do pivô do resize: clone de um
+                        // Mesma captura da âncora do resize: clone de um
                         // objeto girado (sem centro_rotacao) redimensionado
-                        // na sequência precisa do pivô fixo no arrasto.
+                        // na sequência precisa da âncora fixa no mundo.
+                        mCanvasDragAnchorActive = false;
                         if (mCanvasDragMode >= 2 && mCanvasDragMode <= 9 &&
                             mCanvasDragRotation != 0.0f &&
                             clone->transformacao.is_object() &&
                             !clone->transformacao.contains("centro_rotacao"))
                         {
-                            clone->transformacao["centro_rotacao"] = {
-                                { "x", mCanvasDragPivotX },
-                                { "y", mCanvasDragPivotY }
-                            };
-                            mCanvasDragMaterializedPivot = true;
+                            float ax = mCanvasDragX;
+                            float ay = mCanvasDragY;
+                            switch (mCanvasDragMode)
+                            {
+                                case 2: ax = mCanvasDragX + mCanvasDragW; break;
+                                case 3: ax = mCanvasDragX; break;
+                                case 4: ay = mCanvasDragY + mCanvasDragH; break;
+                                case 5: ay = mCanvasDragY; break;
+                                case 6: ax = mCanvasDragX + mCanvasDragW;
+                                        ay = mCanvasDragY + mCanvasDragH; break;
+                                case 7: ax = mCanvasDragX;
+                                        ay = mCanvasDragY + mCanvasDragH; break;
+                                case 8: ax = mCanvasDragX + mCanvasDragW;
+                                        ay = mCanvasDragY; break;
+                                default: ax = mCanvasDragX; ay = mCanvasDragY; break;
+                            }
+                            const float rotRad = Geo::DegToRad(mCanvasDragRotation);
+                            float wx = ax, wy = ay;
+                            Geo::RotatePoint(wx, wy, mCanvasDragPivotX,
+                                             mCanvasDragPivotY, rotRad);
+                            mCanvasDragAnchorWorldX = wx;
+                            mCanvasDragAnchorWorldY = wy;
+                            mCanvasDragAnchorActive = true;
                         }
                         // Pontos originais do caminho clonado (resize).
                         mCanvasPathOrigValid = false;
@@ -5457,23 +5578,6 @@ namespace seedui
                 // Sem Shift, o comportamento livre (deformar) permanece.
                 // Ao redimensionar, o ponto de origem acompanha a forma
                 // mantendo a posição relativa (o pivô "viaja" com o objeto).
-                auto RescalePivot = [](Element* el, float ol, float ot,
-                                       float ow, float oh,
-                                       float nl, float nt, float nw, float nh)
-                {
-                    if (!el || !el->transformacao.is_object() ||
-                        !el->transformacao.contains("centro_rotacao") ||
-                        !el->transformacao["centro_rotacao"].is_object())
-                        return;
-                    const float px = el->transformacao["centro_rotacao"].value("x", 0.0f);
-                    const float py = el->transformacao["centro_rotacao"].value("y", 0.0f);
-                    const float sx = (ow > 0.01f) ? (nw / ow) : 1.0f;
-                    const float sy = (oh > 0.01f) ? (nh / oh) : 1.0f;
-                    el->transformacao["centro_rotacao"] = {
-                        { "x", nl + (px - ol) * sx },
-                        { "y", nt + (py - ot) * sy }
-                    };
-                };
                 // Redimensiona os PONTOS do caminho (caneta) junto com a
                 // caixa. Os pontos são LOCAIS (relativos à origem x,y do
                 // elemento). Ao arrastar a alça ESQUERDA/SUPERIOR, a origem
@@ -5546,6 +5650,41 @@ namespace seedui
                                       !ImGui::GetIO().KeyAlt &&
                                       mCanvasDragMode >= 2 &&
                                       mCanvasDragMode <= 9;
+                // Objeto ROTACIONADO sem pivô explícito (âncora capturada no
+                // início do arrasto): reposiciona a caixa para manter a
+                // âncora FIXA no mundo com o pivô SEMPRE no CENTRO — a origem
+                // acompanha o objeto. O caminho (caneta) é LOCAL à caixa e
+                // acompanha o deslocamento. Pivô explícito do usuário
+                // (centro_rotacao) fica parado e o espelhado (Shift) gira em
+                // torno do pivô — nenhum dos dois passa por aqui.
+                auto AjustarAncoraRotacionada = [&](float finalW, float finalH,
+                                                     float signedW, float signedH)
+                {
+                    if (!mCanvasDragAnchorActive || mirrored)
+                        return;
+                    // Offset da âncora em relação ao centro da NOVA caixa
+                    // (com SINAL — o flip espelha a âncora para o lado
+                    // oposto junto com a caixa).
+                    float ax = 0.0f, ay = 0.0f;
+                    switch (mCanvasDragMode)
+                    {
+                        case 2: ax = signedW * 0.5f;  ay = -signedH * 0.5f; break;
+                        case 3: ax = -signedW * 0.5f; ay = -signedH * 0.5f; break;
+                        case 4: ax = -signedW * 0.5f; ay = signedH * 0.5f; break;
+                        case 5: ax = -signedW * 0.5f; ay = -signedH * 0.5f; break;
+                        case 6: ax = signedW * 0.5f;  ay = signedH * 0.5f; break;
+                        case 7: ax = -signedW * 0.5f; ay = signedH * 0.5f; break;
+                        case 8: ax = signedW * 0.5f;  ay = -signedH * 0.5f; break;
+                        default: ax = -signedW * 0.5f; ay = -signedH * 0.5f; break;
+                    }
+                    const float rotRad = Geo::DegToRad(mCanvasDragRotation);
+                    float wx = ax, wy = ay;
+                    Geo::RotatePoint(wx, wy, 0.0f, 0.0f, rotRad);
+                    const float cx = mCanvasDragAnchorWorldX - wx;
+                    const float cy = mCanvasDragAnchorWorldY - wy;
+                    selected->transformacao["x"] = cx - finalW * 0.5f;
+                    selected->transformacao["y"] = cy - finalH * 0.5f;
+                };
                 float propScale = 1.0f;
                 float anchorX = 0.0f, anchorY = 0.0f;
                 if (proportional)
@@ -5780,19 +5919,13 @@ namespace seedui
                     selected->transformacao["largura"] = finalW;
                     selected->transformacao["altura"] = finalH;
                     ClampElementCornerRadii(*selected);
-                    // Pivô MATERIALIZADO (objeto girado sem centro_rotacao):
-                    // fica FIXO durante o resize — a âncora (canto oposto à
-                    // alça) não pode deslizar. Pivô explícito do usuário
-                    // continua proporcional (acompanha a posição relativa).
-                    if (!mCanvasDragMaterializedPivot)
-                        RescalePivot(selected, mCanvasDragX, mCanvasDragY,
-                                     mCanvasDragW, mCanvasDragH,
-                                     finalLeft, finalTop, finalW, finalH);
                     RescalePath(selected, mCanvasPathOrigPts,
                                 mCanvasDragX, mCanvasDragY,
                                 mCanvasDragW, mCanvasDragH,
                                 finalLeft, finalTop, finalW, finalH,
                                 anchorX, anchorY, false);
+                    AjustarAncoraRotacionada(finalW, finalH,
+                                             (right - left), (bottom - top));
                 }
                 else
                 {
@@ -5808,14 +5941,6 @@ namespace seedui
                     selected->transformacao["largura"] = finalW;
                     selected->transformacao["altura"] = finalH;
                     ClampElementCornerRadii(*selected);
-                    // Pivô MATERIALIZADO (objeto girado sem centro_rotacao):
-                    // fica FIXO durante o resize — a âncora (canto oposto à
-                    // alça) não pode deslizar. Pivô explícito do usuário
-                    // continua proporcional (acompanha a posição relativa).
-                    if (!mCanvasDragMaterializedPivot)
-                        RescalePivot(selected, mCanvasDragX, mCanvasDragY,
-                                     mCanvasDragW, mCanvasDragH,
-                                     finalLeft, finalTop, finalW, finalH);
                     // Âncora = aresta fixa (oposta à alça arrastada) ou o
                     // pivô no resize espelhado (Shift isolado).
                     float pathAnchorX = mCanvasDragX;
@@ -5847,6 +5972,8 @@ namespace seedui
                                 finalLeft, finalTop,
                                 (right - left), (bottom - top),
                                 pathAnchorX, pathAnchorY, false);
+                    AjustarAncoraRotacionada(finalW, finalH,
+                                             (right - left), (bottom - top));
                 }
             }
 
@@ -5996,30 +6123,6 @@ namespace seedui
                 mStatusMsgUntil = GetTime() + 4.0;
                 TraceLog(LOG_INFO, "M05 selecao: transformacao alterada (%s)",
                          mSelectedElementId.c_str());
-            }
-            // Objeto girado sem pivô explícito: devolve o pivô ao modo
-            // "centro da caixa" sem deslocar a forma — reposiciona a caixa
-            // para ter o centro exatamente no pivô fixo usado no arrasto (a
-            // geometria renderizada não muda: a rotação continua em torno do
-            // mesmo ponto) e remove o centro_rotacao materializado.
-            if (mCanvasDragMaterializedPivot)
-            {
-                if (Element* el = Project::ResolverId(mode, mSelectedElementId))
-                {
-                    if (el->transformacao.is_object() &&
-                        el->transformacao.contains("centro_rotacao") &&
-                        el->transformacao["centro_rotacao"].is_object())
-                    {
-                        const float pw = el->transformacao["centro_rotacao"].value("x", 0.0f);
-                        const float ph = el->transformacao["centro_rotacao"].value("y", 0.0f);
-                        const float cw = el->transformacao.value("largura", 160.0f);
-                        const float ch = el->transformacao.value("altura", 32.0f);
-                        el->transformacao["x"] = pw - cw * 0.5f;
-                        el->transformacao["y"] = ph - ch * 0.5f;
-                        el->transformacao.erase("centro_rotacao");
-                    }
-                }
-                mCanvasDragMaterializedPivot = false;
             }
             // Após transformações, a caixa dos GRUPOS deve voltar a envolver
             // os filhos (mover/redimensionar/rotacionar um grupo altera os
@@ -6247,6 +6350,8 @@ namespace seedui
             if (ImGui::IsKeyPressed(ImGuiKey_M, false)) mCurrentTool = Tool::Rectangle;
             if (ImGui::IsKeyPressed(ImGuiKey_L, false)) mCurrentTool = Tool::Ellipse;
             if (ImGui::IsKeyPressed(ImGuiKey_Z, false)) mCurrentTool = Tool::Zoom;
+            if (ImGui::IsKeyPressed(ImGuiKey_I, false)) mCurrentTool = Tool::Color;
+            if (ImGui::IsKeyPressed(ImGuiKey_K, false)) mCurrentTool = Tool::Bucket;
 
             // Shift+C: Converter Ponto de Ancoragem (estilo Illustrator)
             if (ImGui::GetIO().KeyShift && ImGui::IsKeyPressed(ImGuiKey_C, false))
@@ -8428,6 +8533,30 @@ namespace seedui
         DrawToolFamilySeparator(kFamilyCreate);
 
         ToolButton(IconId::Color, "Aparência · Conta-gotas (I)", kFamilyAppearance);
+        ToolButton(IconId::Bucket,
+                   "Balde de tinta · preencher elemento (K) — clica no canvas sobre o elemento",
+                   kFamilyAppearance);
+        // Swatch da cor atual do balde: mostra a cor capturada pelo conta-gotas
+        // e permite escolher a cor diretamente (abre o seletor no modo balde).
+        ImGui::SetCursorPosX((kToolbarWidth - 22.0f) * 0.5f);
+        {
+            float rgb[3] = { 43.0f / 255.0f, 43.0f / 255.0f, 43.0f / 255.0f };
+            ColorUtils::ParseHex(mBucketColorHex, rgb);
+            ImGui::ColorButton("##bucket_swatch",
+                               ImVec4(rgb[0], rgb[1], rgb[2], 1.0f),
+                               ImGuiColorEditFlags_NoTooltip |
+                               ImGuiColorEditFlags_NoPicker |
+                               ImGuiColorEditFlags_NoBorder,
+                               ImVec2(22.0f, 22.0f));
+            if (ImGui::IsItemClicked(0))
+            {
+                mColorPickerTarget = 3;
+                mColorPickerOpen = true;
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Cor do balde: %s — clique para escolher",
+                                   mBucketColorHex.c_str());
+        }
         ImGui::SetCursorPosX((kToolbarWidth - kToolButtonSize) * 0.5f);
         if (IconButton(IconId::Contour, "Espessura do contorno selecionado",
                        kToolButtonSize, kFamilyAppearance))
@@ -9753,6 +9882,21 @@ namespace seedui
         if (!ImGui::Begin("Seletor de Cor", &mColorPickerOpen,
                           ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse))
         {
+            ImGui::End();
+            return;
+        }
+        // Modo BALDE (target 3): o seletor edita a COR ATUAL do balde, sem
+        // precisar de elemento selecionado.
+        if (mColorPickerTarget == 3)
+        {
+            float rgb[3] = { 43.0f / 255.0f, 43.0f / 255.0f, 43.0f / 255.0f };
+            ColorUtils::ParseHex(mBucketColorHex, rgb);
+            ImGui::TextColored(Theme::AccentOrange, "● Cor do balde");
+            ImGui::Separator();
+            if (ColorPicker::Widget("##bucket_picker", rgb))
+            {
+                mBucketColorHex = ColorUtils::ToHex(rgb[0], rgb[1], rgb[2]);
+            }
             ImGui::End();
             return;
         }

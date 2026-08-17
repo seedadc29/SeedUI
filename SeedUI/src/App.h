@@ -16,6 +16,7 @@ namespace seedui
         Zoom,
         Pan,
         Color,
+        Bucket,
         Grid,
         Rectangle,
         Ellipse,
@@ -256,11 +257,15 @@ namespace seedui
         float mCanvasDragRotation = 0.0f;
         float mCanvasDragPivotX = 0.0f;
         float mCanvasDragPivotY = 0.0f;
-        // Objeto girado sem centro_rotacao: o pivô (centro) foi MATERIALIZADO
-        // no início do resize para ficar FIXO durante o arrasto (senão o
-        // render gira em torno do centro da caixa, que muda a cada frame, e
-        // a âncora desliza). Restaurado para o modo "centro da caixa" no fim.
-        bool mCanvasDragMaterializedPivot = false;
+        // Objeto GIrado sem centro_rotacao: posição NO MUNDO da âncora (ponto
+        // OPOSTO à alça arrastada) capturada no início do resize. Durante o
+        // arrasto a caixa é reposicionada para manter a âncora fixa no mundo
+        // com o pivô SEMPRE no CENTRO da caixa — assim a origem acompanha o
+        // objeto (a antiga "materialização" fixava o pivô na posição antiga
+        // e o resize parecia travar o objeto na origem).
+        bool mCanvasDragAnchorActive = false;
+        float mCanvasDragAnchorWorldX = 0.0f;
+        float mCanvasDragAnchorWorldY = 0.0f;
         // Cursor de resize CUSTOMIZADO (direção exata da alça, sem o snapping
         // de 45° dos glifos do SO): true enquanto o cursor do SO está oculto
         // e a seta dupla é desenhada sobre o canvas.
@@ -367,6 +372,8 @@ namespace seedui
         bool mMarqueeContainOnly = true; // seleção exige cobertura TOTAL do elemento
         bool mColorPickerOpen = false; // janela do seletor de cor (3 modelos)
         int mColorPickerTarget = 0;    // 0 = cor_fundo (preenchimento), 1 = cor_borda (contorno)
+                                      // 2 = cor_texto, 3 = cor do balde (sem elemento)
+        std::string mBucketColorHex = "#2b2b2b"; // cor atual do balde/conta-gotas
         float mCanvasZoom = 1.0f;
         float mCanvasPanX = 0.0f;
         float mCanvasPanY = 0.0f;

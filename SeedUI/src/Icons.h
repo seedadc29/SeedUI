@@ -19,6 +19,7 @@ namespace seedui
         Ruler,
         Pan,
         Color,
+        Bucket,
         Grid,
         Guide,
         New,
@@ -86,6 +87,8 @@ namespace seedui
     void DrawIcon(IconId id, float size = 16.0f, ImU32 tint = kIconTintDefault);
     void DrawIconAt(IconId id, float x, float y, float size = 16.0f,
                     ImU32 tint = kIconTintDefault);
+    void DrawIconOnList(ImDrawList* dl, IconId id, float x, float y,
+                        float size = 16.0f, ImU32 tint = kIconTintDefault);
     bool IconButton(IconId id, const char* tooltip, float buttonSize = 34.0f,
                     ImU32 tint = kIconTintDefault);
 }
