@@ -1481,10 +1481,8 @@ export class Scene3D {
       if (ent.type === 'player') {
         if (ent.hasMove && ent.walkSpeed > 0) {
           const moveDir = new THREE.Vector3();
-          const isPlatformer2D = this.cameraConfig.preset === 'platformer' || this.cameraConfig.mouseLook?.lockMouse;
-
-          if (isPlatformer2D) {
-            // 2D Lateral movement (A = Left, D = Right)
+          if (this.cameraConfig.preset === 'platformer') {
+            // 2.5D Lateral platformer movement (A = Left, D = Right)
             if (this.keys.a) moveDir.x -= 1;
             if (this.keys.d) moveDir.x += 1;
 
@@ -1498,6 +1496,25 @@ export class Scene3D {
             } else {
               ent.velocity.x *= 0.75;
               ent.velocity.z = 0;
+            }
+          } else if (this.cameraConfig.preset === 'top_down') {
+            // Top-Down Aerial View: Full 8-directional planar movement (W = Up/North, S = Down/South, A = Left, D = Right)
+            if (this.keys.w) moveDir.z -= 1;
+            if (this.keys.s) moveDir.z += 1;
+            if (this.keys.a) moveDir.x -= 1;
+            if (this.keys.d) moveDir.x += 1;
+
+            if (moveDir.lengthSq() > 0) {
+              moveDir.normalize();
+              const activeSpeed = ent.walkSpeed * (this.keys.shift && ent.hasRun ? ent.runMultiplier : 1.0);
+              ent.velocity.x = moveDir.x * activeSpeed;
+              ent.velocity.z = moveDir.z * activeSpeed;
+
+              const targetRot = Math.atan2(-moveDir.z, moveDir.x) + Math.PI / 2;
+              ent.mesh.rotation.y = THREE.MathUtils.lerp(ent.mesh.rotation.y, targetRot, Math.min(1.0, 18.0 * delta));
+            } else {
+              ent.velocity.x *= 0.75;
+              ent.velocity.z *= 0.75;
             }
           } else {
             // 3D Camera-Relative Movement & Mouse Heading
