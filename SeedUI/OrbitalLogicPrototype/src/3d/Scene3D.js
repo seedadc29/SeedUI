@@ -295,6 +295,14 @@ export class Scene3D {
     if (this.onTransformChange) this.onTransformChange(ent);
   }
 
+  setEntityCollisionConfig(sunId, { padding = 0, walkableTop = true, isSolid = true }) {
+    const ent = this.entities.get(sunId);
+    if (!ent) return;
+    ent.collisionPadding = padding;
+    ent.walkableTop = walkableTop;
+    ent.isSolid = isSolid;
+  }
+
   // --- Complete Viewport Shortcuts ---
   initShortcuts() {
     window.addEventListener('keydown', (e) => {
@@ -475,12 +483,12 @@ export class Scene3D {
         } else if (pName === 'pular') {
           hasJump = true;
           const jumpMoon = planet.moons?.find(m => m.name.toLowerCase().includes('força') || m.name.toLowerCase().includes('forca'));
-          jumpForce = jumpMoon && jumpMoon.val !== undefined ? Math.max(0, parseFloat(jumpMoon.val) || 7.5) : 7.5;
+          jumpForce = jumpMoon && jumpMoon.val !== undefined ? Math.max(0, parseFloat(jumpMoon.val) || 8.5) : 8.5;
         } else if (pName === 'fisica') {
           hasPhysics = true;
           const massMoon = planet.moons?.find(m => m.name.toLowerCase().includes('massa'));
           mass = massMoon && massMoon.val !== undefined ? Math.max(0.1, parseFloat(massMoon.val) || 1.0) : 1.0;
-          gravity = 18.0 * mass;
+          gravity = 20.0 * mass;
         } else if (pName === 'colisao') {
           hasCollision = true;
           isSolid = true;
@@ -524,6 +532,8 @@ export class Scene3D {
           baseSize,
           scale: { x: 1, y: 1, z: 1 },
           dimensions: { x: baseSize.x, y: baseSize.y, z: baseSize.z },
+          collisionPadding: 0.0,
+          walkableTop: true,
           hasMove, walkSpeed,
           hasRun, runMultiplier,
           hasJump, jumpForce,
@@ -533,6 +543,7 @@ export class Scene3D {
           hasAttract, attractForce, attractRadius,
           velocity: new THREE.Vector3(),
           isGrounded: true,
+          currentGroundY: 1.1,
           animTime: Math.random() * 10,
           initialPos: mesh.position.clone()
         };
@@ -690,6 +701,7 @@ export class Scene3D {
       if (ent.mesh) ent.initialPos.copy(ent.mesh.position);
       ent.velocity.set(0, 0, 0);
       ent.isGrounded = true;
+      ent.currentGroundY = 1.1;
     });
 
     this.initKeyboardControls();
@@ -731,7 +743,7 @@ export class Scene3D {
         this.keys.space = true;
         const p = this.getPlayerEntity();
         if (p && p.hasJump && p.isGrounded) {
-          p.velocity.y = p.jumpForce || 7.5;
+          p.velocity.y = p.jumpForce || 8.5;
           p.isGrounded = false;
         }
       }
@@ -782,12 +794,13 @@ export class Scene3D {
 
     const playerEnt = this.getPlayerEntity();
 
+    // 1. Calculate dynamic ground height for entities (Standing on obstacles/platforms)
     this.entities.forEach((ent) => {
       if (!ent.mesh || ent.shape === 'plane') return;
 
       ent.animTime += delta;
 
-      // 1. KINEMATICS & MOVEMENT
+      // 1.1 KINEMATICS & HORIZONTAL MOVEMENT
       if (ent.type === 'player') {
         if (ent.hasMove && ent.walkSpeed > 0) {
           const moveDir = new THREE.Vector3();
@@ -839,31 +852,81 @@ export class Scene3D {
         }
       }
 
-      // 2. GRAVITY & VERTICAL PHYSICS
+      // Horizontal displacement
+      ent.mesh.position.x += ent.velocity.x * delta;
+      ent.mesh.position.z += ent.velocity.z * delta;
+
+      // 1.2 DYNAMIC PLATFORM & OBSTACLE GROUND LEVEL (Stand on top of obstacles)
+      let targetFloorY = 1.1; // Default floor
+
+      this.entities.forEach((otherEnt) => {
+        if (otherEnt === ent || !otherEnt.mesh || otherEnt.shape === 'plane' || !otherEnt.hasCollision || !otherEnt.isSolid) return;
+
+        const oPos = otherEnt.mesh.position;
+        const sx = otherEnt.mesh.scale.x;
+        const sy = otherEnt.mesh.scale.y;
+        const sz = otherEnt.mesh.scale.z;
+        const baseW = otherEnt.baseSize?.x || 1.8;
+        const baseH = otherEnt.baseSize?.y || 2.2;
+        const baseD = otherEnt.baseSize?.z || 1.8;
+
+        const padding = otherEnt.collisionPadding || 0;
+        const halfW = ((baseW * sx) / 2) + padding;
+        const halfH = (baseH * sy) / 2;
+        const halfD = ((baseD * sz) / 2) + padding;
+        const rotY = otherEnt.mesh.rotation.y;
+
+        const topY = oPos.y + halfH;
+        const entFeetY = ent.mesh.position.y - 1.1;
+
+        // Check if entity is horizontally inside obstacle's footprint
+        const dx = ent.mesh.position.x - oPos.x;
+        const dz = ent.mesh.position.z - oPos.z;
+        const cosR = Math.cos(-rotY);
+        const sinR = Math.sin(-rotY);
+        const localX = dx * cosR - dz * sinR;
+        const localZ = dx * sinR + dz * cosR;
+
+        const entRadius = 0.7;
+        const isInsideFootprint = Math.abs(localX) <= (halfW + entRadius * 0.4) && Math.abs(localZ) <= (halfD + entRadius * 0.4);
+
+        if (isInsideFootprint && otherEnt.walkableTop !== false) {
+          // If feet are above or close to the top surface
+          if (entFeetY >= topY - 0.4) {
+            const platformFloorY = topY + 1.1;
+            if (platformFloorY > targetFloorY) {
+              targetFloorY = platformFloorY;
+            }
+          }
+        }
+      });
+
+      ent.currentGroundY = targetFloorY;
+
+      // 1.3 GRAVITY & VERTICAL PHYSICS
       if (ent.hasPhysics && ent.gravity > 0) {
         ent.velocity.y -= ent.gravity * delta;
         ent.mesh.position.y += ent.velocity.y * delta;
 
-        if (ent.mesh.position.y <= 1.1) {
-          ent.mesh.position.y = 1.1;
+        if (ent.mesh.position.y <= targetFloorY) {
+          ent.mesh.position.y = targetFloorY;
           ent.velocity.y = 0;
           ent.isGrounded = true;
+        } else if (ent.mesh.position.y > targetFloorY + 0.08) {
+          ent.isGrounded = false;
         }
       }
 
-      ent.mesh.position.x += ent.velocity.x * delta;
-      ent.mesh.position.z += ent.velocity.z * delta;
-
-      // 3. PROCEDURAL ANIMATION (Applied only to characters/animated actors)
+      // 1.4 PROCEDURAL ANIMATION (Applied only to characters/animated actors)
       if (ent.hasAnimation) {
         const speed2D = Math.hypot(ent.velocity.x, ent.velocity.z);
         const baseSx = ent.scale?.x || 1.0;
         const baseSy = ent.scale?.y || 1.0;
         const baseSz = ent.scale?.z || 1.0;
 
-        if (speed2D > 0.1) {
+        if (speed2D > 0.1 && ent.isGrounded) {
           const bob = Math.abs(Math.sin(ent.animTime * (speed2D * 1.5))) * 0.15;
-          ent.mesh.position.y = (ent.hasPhysics ? ent.mesh.position.y : 1.1) + bob;
+          ent.mesh.position.y = ent.currentGroundY + bob;
           ent.mesh.scale.set(baseSx * (1.0 + bob * 0.5), baseSy * (1.0 - bob * 0.5), baseSz * (1.0 + bob * 0.5));
         } else {
           const breath = Math.sin(ent.animTime * 3) * 0.03;
@@ -872,7 +935,7 @@ export class Scene3D {
       }
     });
 
-    // 4. GRAVITATIONAL ATTRACTION (ATRAIR MECÂNICA)
+    // 2. GRAVITATIONAL ATTRACTION (ATRAIR MECÂNICA)
     if (playerEnt && playerEnt.mesh && playerEnt.hasAttract) {
       this.entities.forEach((otherEnt) => {
         if (otherEnt === playerEnt || !otherEnt.mesh || otherEnt.shape === 'plane') return;
@@ -897,7 +960,7 @@ export class Scene3D {
       });
     }
 
-    // 5. RIGID BODY COLLISION & TRIGGER DETECTION
+    // 3. RIGID BODY LATERAL COLLISION & TRIGGER DETECTION
     if (playerEnt && playerEnt.mesh) {
       this.entities.forEach((otherEnt) => {
         if (otherEnt === playerEnt || !otherEnt.mesh || otherEnt.shape === 'plane') return;
@@ -905,7 +968,7 @@ export class Scene3D {
         const pPos = playerEnt.mesh.position;
         const oPos = otherEnt.mesh.position;
 
-        // 5.1 TRIGGER DETECTION (GATILHO)
+        // 3.1 TRIGGER DETECTION (GATILHO)
         if (otherEnt.type === 'trigger') {
           const dx = pPos.x - oPos.x;
           const dz = pPos.z - oPos.z;
@@ -926,92 +989,86 @@ export class Scene3D {
           return;
         }
 
-        // 5.2 SOLID COLLISION WITH BLOCKS, WALLS, PLATFORMS & PROPS
-        if (playerEnt.hasCollision && otherEnt.hasCollision) {
-          if (otherEnt.type === 'block' || otherEnt.type === 'platform' || otherEnt.type === 'object') {
-            // Precise Oriented Bounding Box (OBB) collision for arbitrarily sized and rotated walls / blocks
-            const sx = otherEnt.mesh.scale.x;
-            const sy = otherEnt.mesh.scale.y;
-            const sz = otherEnt.mesh.scale.z;
-            const baseW = otherEnt.baseSize?.x || 1.8;
-            const baseH = otherEnt.baseSize?.y || 2.2;
-            const baseD = otherEnt.baseSize?.z || 1.8;
+        // 3.2 SOLID LATERAL COLLISION WITH BLOCKS, WALLS, PLATFORMS & PROPS
+        if (playerEnt.hasCollision && otherEnt.hasCollision && otherEnt.isSolid) {
+          const sx = otherEnt.mesh.scale.x;
+          const sy = otherEnt.mesh.scale.y;
+          const sz = otherEnt.mesh.scale.z;
+          const baseW = otherEnt.baseSize?.x || 1.8;
+          const baseH = otherEnt.baseSize?.y || 2.2;
+          const baseD = otherEnt.baseSize?.z || 1.8;
 
-            const halfW = (baseW * sx) / 2;
-            const halfH = (baseH * sy) / 2;
-            const halfD = (baseD * sz) / 2;
-            const rotY = otherEnt.mesh.rotation.y;
+          const padding = otherEnt.collisionPadding || 0;
+          const halfW = ((baseW * sx) / 2) + padding;
+          const halfH = (baseH * sy) / 2;
+          const halfD = ((baseD * sz) / 2) + padding;
+          const rotY = otherEnt.mesh.rotation.y;
 
-            // Player radius = 0.7m
-            const playerRadius = 0.7;
+          const topY = oPos.y + halfH;
+          const bottomY = oPos.y - halfH;
+          const playerFeetY = pPos.y - 1.1;
+          const playerHeadY = pPos.y + 1.1;
 
-            // Transform player into local 2D space of the obstacle (XZ plane)
-            const dx = pPos.x - oPos.x;
-            const dz = pPos.z - oPos.z;
-            const cosR = Math.cos(-rotY);
-            const sinR = Math.sin(-rotY);
-            const localX = dx * cosR - dz * sinR;
-            const localZ = dx * sinR + dz * cosR;
+          // If the player is on top of the obstacle surface, skip lateral push!
+          if (playerFeetY >= topY - 0.25) {
+            return;
+          }
 
-            // Clamped closest point in box coordinates
-            const closestX = Math.max(-halfW, Math.min(halfW, localX));
-            const closestZ = Math.max(-halfD, Math.min(halfD, localZ));
+          // If the player is completely below the bottom of a floating platform, skip lateral push!
+          if (playerHeadY <= bottomY + 0.1) {
+            return;
+          }
 
-            const diffX = localX - closestX;
-            const diffZ = localZ - closestZ;
-            const distSq = diffX * diffX + diffZ * diffZ;
+          // Transform player into local 2D space of the obstacle (XZ plane)
+          const dx = pPos.x - oPos.x;
+          const dz = pPos.z - oPos.z;
+          const cosR = Math.cos(-rotY);
+          const sinR = Math.sin(-rotY);
+          const localX = dx * cosR - dz * sinR;
+          const localZ = dx * sinR + dz * cosR;
 
-            if (distSq < playerRadius * playerRadius) {
-              const dist = Math.sqrt(distSq);
-              let pushLocalX = 0;
-              let pushLocalZ = 0;
+          const playerRadius = 0.7;
 
-              if (dist > 0.0001) {
-                const overlap = playerRadius - dist;
-                pushLocalX = (diffX / dist) * overlap;
-                pushLocalZ = (diffZ / dist) * overlap;
-              } else {
-                // Inside box: find closest edge to push out
-                const penLeft = localX - (-halfW) + playerRadius;
-                const penRight = halfW - localX + playerRadius;
-                const penBack = localZ - (-halfD) + playerRadius;
-                const penFront = halfD - localZ + playerRadius;
-                const minPen = Math.min(penLeft, penRight, penBack, penFront);
+          // Clamped closest point in box coordinates
+          const closestX = Math.max(-halfW, Math.min(halfW, localX));
+          const closestZ = Math.max(-halfD, Math.min(halfD, localZ));
 
-                if (minPen === penLeft) pushLocalX = -penLeft;
-                else if (minPen === penRight) pushLocalX = penRight;
-                else if (minPen === penBack) pushLocalZ = -penBack;
-                else pushLocalZ = penFront;
-              }
+          const diffX = localX - closestX;
+          const diffZ = localZ - closestZ;
+          const distSq = diffX * diffX + diffZ * diffZ;
 
-              // Transform push back to world space
-              const worldPushX = pushLocalX * Math.cos(rotY) - pushLocalZ * Math.sin(rotY);
-              const worldPushZ = pushLocalX * Math.sin(rotY) + pushLocalZ * Math.cos(rotY);
+          if (distSq < playerRadius * playerRadius) {
+            const dist = Math.sqrt(distSq);
+            let pushLocalX = 0;
+            let pushLocalZ = 0;
 
-              pPos.x += worldPushX;
-              pPos.z += worldPushZ;
+            if (dist > 0.0001) {
+              const overlap = playerRadius - dist;
+              pushLocalX = (diffX / dist) * overlap;
+              pushLocalZ = (diffZ / dist) * overlap;
+            } else {
+              // Inside box: find closest edge to push out
+              const penLeft = localX - (-halfW) + playerRadius;
+              const penRight = halfW - localX + playerRadius;
+              const penBack = localZ - (-halfD) + playerRadius;
+              const penFront = halfD - localZ + playerRadius;
+              const minPen = Math.min(penLeft, penRight, penBack, penFront);
 
-              if (this.onCollisionEvent) {
-                this.onCollisionEvent(playerEnt.sunName, otherEnt.sunName);
-              }
+              if (minPen === penLeft) pushLocalX = -penLeft;
+              else if (minPen === penRight) pushLocalX = penRight;
+              else if (minPen === penBack) pushLocalZ = -penBack;
+              else pushLocalZ = penFront;
             }
-          } else {
-            // Spherical collision for dynamic agents (enemies, npcs)
-            const dx = pPos.x - oPos.x;
-            const dz = pPos.z - oPos.z;
-            const dist = Math.hypot(dx, dz);
-            const minDistance = 1.8;
 
-            if (dist < minDistance && dist > 0.001) {
-              const overlap = minDistance - dist;
-              const nx = dx / dist;
-              const nz = dz / dist;
-              pPos.x += nx * overlap;
-              pPos.z += nz * overlap;
+            // Transform push back to world space
+            const worldPushX = pushLocalX * Math.cos(rotY) - pushLocalZ * Math.sin(rotY);
+            const worldPushZ = pushLocalX * Math.sin(rotY) + pushLocalZ * Math.cos(rotY);
 
-              if (this.onCollisionEvent) {
-                this.onCollisionEvent(playerEnt.sunName, otherEnt.sunName);
-              }
+            pPos.x += worldPushX;
+            pPos.z += worldPushZ;
+
+            if (this.onCollisionEvent) {
+              this.onCollisionEvent(playerEnt.sunName, otherEnt.sunName);
             }
           }
         }

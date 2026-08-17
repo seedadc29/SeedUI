@@ -316,11 +316,30 @@ export class PaletteUI {
           </div>
           <div class="inspector-row">
             <span class="inspector-label">Comportamento:</span>
-            <select class="inspector-input" id="sel-collision-type">
-              <option value="solid" ${ent3D?.isSolid ? 'selected' : ''}>Sólido (Impede Passagem / Parede)</option>
-              <option value="trigger" ${ent3D?.type === 'trigger' ? 'selected' : ''}>Gatilho (Atravessável / Trigger)</option>
+            <select class="inspector-input" id="sel-collision-type" style="width: 140px;">
+              <option value="solid" ${ent3D?.isSolid ? 'selected' : ''}>Sólido (Parede / Piso)</option>
+              <option value="trigger" ${ent3D?.type === 'trigger' ? 'selected' : ''}>Gatilho (Atravessável)</option>
               <option value="none" ${!ent3D?.hasCollision ? 'selected' : ''}>Desativada (Passável)</option>
             </select>
+          </div>
+
+          <div class="inspector-toggle-row" style="margin-top: 6px;">
+            <label class="inspector-toggle-label" title="Permite ao jogador pular e ficar em pé em cima do objeto como uma plataforma ou parede sólida">
+              <input type="checkbox" id="chk-walkable-top" ${ent3D?.walkableTop !== false ? 'checked' : ''} />
+              <span>🪜 Permitir Andar / Ficar em Cima</span>
+            </label>
+          </div>
+
+          <div class="dim-row" style="margin-top: 6px;">
+            <span class="dim-label" style="width: 110px;" title="Espaço ou folga extra do colisor além da malha visual">Margem / Padding:</span>
+            <input type="range" min="0.0" max="1.0" step="0.05" value="${ent3D?.collisionPadding || 0}" class="dim-slider" id="slider-col-padding" />
+            <input type="number" min="0.0" max="2.0" step="0.05" value="${ent3D?.collisionPadding || 0}" class="dim-number" id="inp-col-padding" />
+            <span class="dim-unit">m</span>
+          </div>
+
+          <div class="inspector-row" style="margin-top: 6px; font-size: 10px; color: #38bdf8;">
+            <span>Altura do Topo (Cota Y):</span>
+            <span style="font-weight: bold;" id="lbl-top-y">${(((ent3D?.mesh?.position.y || 1.1) + (baseH * scaleY) / 2)).toFixed(2)} m</span>
           </div>
         </div>
       `;
@@ -513,6 +532,28 @@ export class PaletteUI {
         ent3D.isSolid = false;
       }
     });
+
+    // Walkable Top Toggle
+    document.getElementById('chk-walkable-top')?.addEventListener('change', (e) => {
+      const ent3D = this.scene3D.entities.get(entity.id);
+      if (ent3D) {
+        ent3D.walkableTop = e.target.checked;
+      }
+    });
+
+    // Collision Padding / Margin Slider & Number
+    const sliderColPad = document.getElementById('slider-col-padding');
+    const inpColPad = document.getElementById('inp-col-padding');
+    const onPadChange = (pad) => {
+      const ent3D = this.scene3D.entities.get(entity.id);
+      if (ent3D) {
+        ent3D.collisionPadding = pad;
+      }
+      if (sliderColPad && document.activeElement !== sliderColPad) sliderColPad.value = pad;
+      if (inpColPad && document.activeElement !== inpColPad) inpColPad.value = pad;
+    };
+    sliderColPad?.addEventListener('input', (e) => onPadChange(parseFloat(e.target.value) || 0));
+    inpColPad?.addEventListener('input', (e) => onPadChange(parseFloat(e.target.value) || 0));
 
     // Direct 3D Parameter edits on Planet
     document.querySelectorAll('.inp-planet-moon-param').forEach(input => {
