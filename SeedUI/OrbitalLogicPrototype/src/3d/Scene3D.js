@@ -317,14 +317,20 @@ export class Scene3D {
       this.selectionBoxHelper = null;
     }
 
-    if (entity && entity.mesh) {
-      this.transformControls.attach(entity.mesh);
+    const isCameraView = this.isPilotingGameCamera || this.isPlaying;
 
-      this.selectionBoxHelper = new THREE.BoxHelper(entity.mesh, entity.type === 'camera' ? 0x38bdf8 : 0xa855f7);
-      this.selectionBoxHelper.material.linewidth = 2;
-      this.selectionBoxHelper.material.depthTest = false;
-      this.selectionBoxHelper.renderOrder = 999;
-      this.scene.add(this.selectionBoxHelper);
+    if (entity && entity.mesh) {
+      if (!isCameraView) {
+        this.transformControls.attach(entity.mesh);
+
+        this.selectionBoxHelper = new THREE.BoxHelper(entity.mesh, entity.type === 'camera' ? 0x38bdf8 : 0xa855f7);
+        this.selectionBoxHelper.material.linewidth = 2;
+        this.selectionBoxHelper.material.depthTest = false;
+        this.selectionBoxHelper.renderOrder = 999;
+        this.scene.add(this.selectionBoxHelper);
+      } else {
+        this.transformControls.detach();
+      }
 
       if (this.onEntitySelected) {
         this.onEntitySelected(entity);
@@ -418,17 +424,13 @@ export class Scene3D {
     if (this.isPilotingGameCamera) {
       this.activeCamera = this.gameCamera;
       this.controls.enabled = false;
-      this.transformControls.camera = this.gameCamera;
+      this.transformControls.detach();
+      if (this.selectionBoxHelper) {
+        this.scene.remove(this.selectionBoxHelper);
+        this.selectionBoxHelper = null;
+      }
       if (this.cameraHelperMesh) this.cameraHelperMesh.visible = false;
       if (this.cameraHelper) this.cameraHelper.visible = false;
-
-      // Re-attach gizmo to selected object if any, or player
-      if (this.selectedEntity && this.selectedEntity.mesh && this.selectedEntity.type !== 'camera') {
-        this.selectEntity(this.selectedEntity);
-      } else {
-        const p = this.getPlayerEntity();
-        if (p) this.selectEntity(p);
-      }
     } else {
       this.activeCamera = this.perspectiveCamera;
       this.controls.enabled = true;
