@@ -876,8 +876,10 @@ export class PaletteUI {
       }
     });
 
-    this.scene3D.onCollisionEvent = (player, obstacle) => {
-      this.orbitalGraph.triggerEnergyBeam('PLAYER', 'Objeto', '#ff3b30');
+    this.scene3D.onCollisionEvent = (fromName, toName, color = '#ff3b30') => {
+      if (fromName && toName) {
+        this.orbitalGraph.triggerEnergyBeam(fromName, toName, color);
+      }
     };
   }
 

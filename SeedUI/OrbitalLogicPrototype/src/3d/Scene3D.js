@@ -1091,30 +1091,32 @@ export class Scene3D {
       }
     });
 
-    // 2. GRAVITATIONAL ATTRACTION (ATRAIR MECÂNICA)
-    if (playerEnt && playerEnt.mesh && playerEnt.hasAttract) {
-      this.entities.forEach((otherEnt) => {
-        if (otherEnt === playerEnt || !otherEnt.mesh || otherEnt.shape === 'plane') return;
+    // 2. GRAVITATIONAL ATTRACTION (ATRAIR MECÂNICA - Supports any entity with 'Atrair')
+    this.entities.forEach((attractorEnt) => {
+      if (!attractorEnt.hasAttract || !attractorEnt.mesh || attractorEnt.shape === 'plane') return;
 
-        const pPos = playerEnt.mesh.position;
-        const oPos = otherEnt.mesh.position;
+      this.entities.forEach((targetEnt) => {
+        if (targetEnt === attractorEnt || !targetEnt.mesh || targetEnt.shape === 'plane') return;
 
-        const toPlayer = new THREE.Vector3().subVectors(pPos, oPos);
-        toPlayer.y = 0;
-        const dist = toPlayer.length();
+        const aPos = attractorEnt.mesh.position;
+        const tPos = targetEnt.mesh.position;
 
-        if (dist > 1.2 && dist <= (playerEnt.attractRadius || 15.0)) {
-          toPlayer.normalize();
-          const pullForce = (playerEnt.attractForce || 12.0) / Math.max(1.0, Math.sqrt(dist));
-          otherEnt.mesh.position.x += toPlayer.x * pullForce * delta;
-          otherEnt.mesh.position.z += toPlayer.z * pullForce * delta;
+        const toAttractor = new THREE.Vector3().subVectors(aPos, tPos);
+        toAttractor.y = 0;
+        const dist = toAttractor.length();
 
-          if (this.onCollisionEvent && Math.random() < 0.08) {
-            this.onCollisionEvent(playerEnt.familyName, otherEnt.familyName);
+        if (dist > 1.2 && dist <= (attractorEnt.attractRadius || 15.0)) {
+          toAttractor.normalize();
+          const pullForce = (attractorEnt.attractForce || 12.0) / Math.max(1.0, Math.sqrt(dist));
+          targetEnt.mesh.position.x += toAttractor.x * pullForce * delta;
+          targetEnt.mesh.position.z += toAttractor.z * pullForce * delta;
+
+          if (this.onCollisionEvent && Math.random() < 0.1) {
+            this.onCollisionEvent(attractorEnt.familyName || attractorEnt.name, targetEnt.familyName || targetEnt.name, '#ff3b30');
           }
         }
       });
-    }
+    });
 
     // 3. RIGID BODY LATERAL COLLISION & TRIGGER DETECTION
     if (playerEnt && playerEnt.mesh) {

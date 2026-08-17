@@ -467,10 +467,18 @@ export class OrbitalGraph {
   }
 
   triggerEnergyBeam(fromSunName, toSunName, color = '#ff7700') {
-    const fromSun = this.suns.find(s => s.name.toUpperCase().includes(fromSunName.toUpperCase()));
-    const toSun = this.suns.find(s => s.name.toUpperCase().includes(toSunName.toUpperCase()));
+    if (!fromSunName || !toSunName) return;
 
-    if (fromSun && toSun) {
+    const findSun = (identifier) => {
+      if (!identifier) return null;
+      const idUpper = identifier.toUpperCase();
+      return this.suns.find(s => s.id === identifier || s.name.toUpperCase() === idUpper || s.name.toUpperCase().includes(idUpper) || idUpper.includes(s.name.toUpperCase()));
+    };
+
+    const fromSun = findSun(fromSunName);
+    const toSun = findSun(toSunName);
+
+    if (fromSun && toSun && fromSun !== toSun) {
       this.activeBeams.push({
         x1: fromSun.x,
         y1: fromSun.y,
