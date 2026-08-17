@@ -337,6 +337,118 @@ export class PaletteUI {
           <input type="number" min="25" max="100" step="1" value="${camCfg.fov || 48}" class="dim-number" id="inp-cam-fov" />
           <span class="dim-unit">°</span>
         </div>
+
+        <!-- 4. MOUSE LOOK & MOVIMENTO DO MOUSE -->
+        <div class="scenery-box-header" style="margin-top: 12px;">
+          <i class="ti ti-mouse"></i> <span>🖱️ CONTROLE POR MOVIMENTO DO MOUSE</span>
+        </div>
+        <div class="inspector-row" style="margin-top: 4px;">
+          <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#f1f5f9; cursor:pointer;">
+            <input type="checkbox" id="chk-cam-mouselook" ${camCfg.mouseLook?.enabled ? 'checked' : ''} />
+            <b>Ativar Olhar com Mouse (Mouse Look)</b>
+          </label>
+        </div>
+        <div class="dim-row">
+          <span class="dim-label" style="width: 110px;">Sensibilidade:</span>
+          <input type="range" min="0.5" max="4.0" step="0.1" value="${((camCfg.mouseLook?.sensitivityX || 0.003) * 1000).toFixed(1)}" class="dim-slider" id="slider-cam-mousesens" />
+          <input type="number" min="0.5" max="4.0" step="0.1" value="${((camCfg.mouseLook?.sensitivityX || 0.003) * 1000).toFixed(1)}" class="dim-number" id="inp-cam-mousesens" />
+          <span class="dim-unit">x</span>
+        </div>
+        <div class="inspector-row" style="gap: 12px; margin-top: 4px;">
+          <label style="display:flex; align-items:center; gap:6px; font-size:11px; color:#cbd5e1; cursor:pointer;">
+            <input type="checkbox" id="chk-cam-invert-y" ${camCfg.mouseLook?.invertY ? 'checked' : ''} />
+            Inverter Eixo Y
+          </label>
+          <label style="display:flex; align-items:center; gap:6px; font-size:11px; color:#cbd5e1; cursor:pointer;">
+            <input type="checkbox" id="chk-cam-yaw-limit" ${camCfg.mouseLook?.enableYawLimit ? 'checked' : ''} />
+            Travar Giro Horizontal
+          </label>
+        </div>
+
+        <!-- 5. MOVEMENT & ANGLE CLAMPING (DELIMITAÇÃO DE MOVIMENTOS) -->
+        <div class="scenery-box-header" style="margin-top: 12px;">
+          <i class="ti ti-barrier-block"></i> <span>🚧 DELIMITAÇÃO DE MOVIMENTOS & ÂNGULOS</span>
+        </div>
+
+        <!-- 5.1 Pitch Limits (Inclinação Vertical) -->
+        <div class="dim-row">
+          <span class="dim-axis-badge axis-x">V</span>
+          <span class="dim-label">Pitch Mín (Baixo):</span>
+          <input type="range" min="-85" max="0" step="5" value="${camCfg.mouseLook?.minPitchDeg || -60}" class="dim-slider" id="slider-cam-pitch-min" />
+          <input type="number" min="-85" max="0" step="1" value="${camCfg.mouseLook?.minPitchDeg || -60}" class="dim-number" id="inp-cam-pitch-min" />
+          <span class="dim-unit">°</span>
+        </div>
+        <div class="dim-row">
+          <span class="dim-axis-badge axis-x">V</span>
+          <span class="dim-label">Pitch Máx (Cima):</span>
+          <input type="range" min="0" max="85" step="5" value="${camCfg.mouseLook?.maxPitchDeg || 75}" class="dim-slider" id="slider-cam-pitch-max" />
+          <input type="number" min="0" max="85" step="1" value="${camCfg.mouseLook?.maxPitchDeg || 75}" class="dim-number" id="inp-cam-pitch-max" />
+          <span class="dim-unit">°</span>
+        </div>
+
+        <!-- 5.2 Yaw Limits (Giro Horizontal) -->
+        <div class="dim-row">
+          <span class="dim-axis-badge axis-y">H</span>
+          <span class="dim-label">Giro Mínimo:</span>
+          <input type="range" min="-180" max="0" step="5" value="${camCfg.mouseLook?.minYawDeg || -180}" class="dim-slider" id="slider-cam-yaw-min" />
+          <input type="number" min="-180" max="0" step="1" value="${camCfg.mouseLook?.minYawDeg || -180}" class="dim-number" id="inp-cam-yaw-min" />
+          <span class="dim-unit">°</span>
+        </div>
+        <div class="dim-row">
+          <span class="dim-axis-badge axis-y">H</span>
+          <span class="dim-label">Giro Máximo:</span>
+          <input type="range" min="0" max="180" step="5" value="${camCfg.mouseLook?.maxYawDeg || 180}" class="dim-slider" id="slider-cam-yaw-max" />
+          <input type="number" min="0" max="180" step="1" value="${camCfg.mouseLook?.maxYawDeg || 180}" class="dim-number" id="inp-cam-yaw-max" />
+          <span class="dim-unit">°</span>
+        </div>
+
+        <!-- 5.3 Distance / Zoom Clamps -->
+        <div class="dim-row" style="margin-top: 6px;">
+          <span class="dim-axis-badge axis-z">D</span>
+          <span class="dim-label">Distância Mín:</span>
+          <input type="range" min="1.0" max="15.0" step="0.5" value="${camCfg.distanceLimits?.minDistance || 2.0}" class="dim-slider" id="slider-cam-dist-min" />
+          <input type="number" min="1.0" max="15.0" step="0.5" value="${camCfg.distanceLimits?.minDistance || 2.0}" class="dim-number" id="inp-cam-dist-min" />
+          <span class="dim-unit">m</span>
+        </div>
+        <div class="dim-row">
+          <span class="dim-axis-badge axis-z">D</span>
+          <span class="dim-label">Distância Máx:</span>
+          <input type="range" min="5.0" max="40.0" step="0.5" value="${camCfg.distanceLimits?.maxDistance || 30.0}" class="dim-slider" id="slider-cam-dist-max" />
+          <input type="number" min="5.0" max="40.0" step="0.5" value="${camCfg.distanceLimits?.maxDistance || 30.0}" class="dim-number" id="inp-cam-dist-max" />
+          <span class="dim-unit">m</span>
+        </div>
+
+        <!-- 5.4 World Position Clamps (Limites de Sala / Parede) -->
+        <div class="inspector-row" style="margin-top: 8px;">
+          <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#f1f5f9; cursor:pointer;">
+            <input type="checkbox" id="chk-cam-limits-enabled" ${camCfg.limits?.enabled ? 'checked' : ''} />
+            <b>Ativar Delimitação de Posição no Cenário</b>
+          </label>
+        </div>
+        <div class="dim-row">
+          <span class="dim-axis-badge axis-x">X</span>
+          <span class="dim-label">Limites X:</span>
+          <input type="number" step="1" value="${camCfg.limits?.minX ?? -25}" class="dim-number" id="inp-cam-lim-minx" style="width:55px;" />
+          <span style="font-size:11px; color:#64748b;">até</span>
+          <input type="number" step="1" value="${camCfg.limits?.maxX ?? 25}" class="dim-number" id="inp-cam-lim-maxx" style="width:55px;" />
+          <span class="dim-unit">m</span>
+        </div>
+        <div class="dim-row">
+          <span class="dim-axis-badge axis-y">Y</span>
+          <span class="dim-label">Limites Y:</span>
+          <input type="number" step="0.5" value="${camCfg.limits?.minY ?? 0.5}" class="dim-number" id="inp-cam-lim-miny" style="width:55px;" />
+          <span style="font-size:11px; color:#64748b;">até</span>
+          <input type="number" step="0.5" value="${camCfg.limits?.maxY ?? 20}" class="dim-number" id="inp-cam-lim-maxy" style="width:55px;" />
+          <span class="dim-unit">m</span>
+        </div>
+        <div class="dim-row">
+          <span class="dim-axis-badge axis-z">Z</span>
+          <span class="dim-label">Limites Z:</span>
+          <input type="number" step="1" value="${camCfg.limits?.minZ ?? -25}" class="dim-number" id="inp-cam-lim-minz" style="width:55px;" />
+          <span style="font-size:11px; color:#64748b;">até</span>
+          <input type="number" step="1" value="${camCfg.limits?.maxZ ?? 25}" class="dim-number" id="inp-cam-lim-maxz" style="width:55px;" />
+          <span class="dim-unit">m</span>
+        </div>
       </div>
 
       <button class="btn-delete-node" id="btn-del-camera-node" style="margin-top: 14px;"><i class="ti ti-trash"></i> Excluir Entidade Câmera</button>
@@ -377,6 +489,79 @@ export class PaletteUI {
         }
       }
     });
+
+    // Mouse Look Handlers
+    document.getElementById('chk-cam-mouselook')?.addEventListener('change', (e) => {
+      this.scene3D.setGameCameraMouseLook({ enabled: e.target.checked });
+    });
+
+    const onSensChange = (val) => {
+      const sens = Math.max(0.1, val) * 0.001;
+      this.scene3D.setGameCameraMouseLook({ sensitivityX: sens, sensitivityY: sens });
+      const sl = document.getElementById('slider-cam-mousesens');
+      const num = document.getElementById('inp-cam-mousesens');
+      if (sl && document.activeElement !== sl) sl.value = val;
+      if (num && document.activeElement !== num) num.value = val;
+    };
+    document.getElementById('slider-cam-mousesens')?.addEventListener('input', (e) => onSensChange(parseFloat(e.target.value) || 1.0));
+    document.getElementById('inp-cam-mousesens')?.addEventListener('input', (e) => onSensChange(parseFloat(e.target.value) || 1.0));
+
+    document.getElementById('chk-cam-invert-y')?.addEventListener('change', (e) => {
+      this.scene3D.setGameCameraMouseLook({ invertY: e.target.checked });
+    });
+
+    document.getElementById('chk-cam-yaw-limit')?.addEventListener('change', (e) => {
+      this.scene3D.setGameCameraMouseLook({ enableYawLimit: e.target.checked });
+    });
+
+    // Pitch & Yaw Clamps Handlers
+    const setupPitch = (prop, sliderId, numId) => {
+      const sl = document.getElementById(sliderId);
+      const num = document.getElementById(numId);
+      const onVal = (val) => {
+        this.scene3D.setGameCameraMouseLook({ [prop]: val });
+        if (sl && document.activeElement !== sl) sl.value = val;
+        if (num && document.activeElement !== num) num.value = val;
+      };
+      sl?.addEventListener('input', (e) => onVal(parseFloat(e.target.value) || 0));
+      num?.addEventListener('input', (e) => onVal(parseFloat(e.target.value) || 0));
+    };
+    setupPitch('minPitchDeg', 'slider-cam-pitch-min', 'inp-cam-pitch-min');
+    setupPitch('maxPitchDeg', 'slider-cam-pitch-max', 'inp-cam-pitch-max');
+    setupPitch('minYawDeg', 'slider-cam-yaw-min', 'inp-cam-yaw-min');
+    setupPitch('maxYawDeg', 'slider-cam-yaw-max', 'inp-cam-yaw-max');
+
+    // Distance Clamps Handlers
+    const setupDist = (prop, sliderId, numId) => {
+      const sl = document.getElementById(sliderId);
+      const num = document.getElementById(numId);
+      const onVal = (val) => {
+        this.scene3D.setGameCameraDistanceLimits({ [prop]: val });
+        if (sl && document.activeElement !== sl) sl.value = val;
+        if (num && document.activeElement !== num) num.value = val;
+      };
+      sl?.addEventListener('input', (e) => onVal(parseFloat(e.target.value) || 2.0));
+      num?.addEventListener('input', (e) => onVal(parseFloat(e.target.value) || 2.0));
+    };
+    setupDist('minDistance', 'slider-cam-dist-min', 'inp-cam-dist-min');
+    setupDist('maxDistance', 'slider-cam-dist-max', 'inp-cam-dist-max');
+
+    // World Limits Handlers
+    document.getElementById('chk-cam-limits-enabled')?.addEventListener('change', (e) => {
+      this.scene3D.setGameCameraLimits({ enabled: e.target.checked });
+    });
+
+    const setupLimInp = (prop, elemId) => {
+      document.getElementById(elemId)?.addEventListener('input', (e) => {
+        this.scene3D.setGameCameraLimits({ [prop]: parseFloat(e.target.value) || 0 });
+      });
+    };
+    setupLimInp('minX', 'inp-cam-lim-minx');
+    setupLimInp('maxX', 'inp-cam-lim-maxx');
+    setupLimInp('minY', 'inp-cam-lim-miny');
+    setupLimInp('maxY', 'inp-cam-lim-maxy');
+    setupLimInp('minZ', 'inp-cam-lim-minz');
+    setupLimInp('maxZ', 'inp-cam-lim-maxz');
 
     // Mode Selector Handler
     document.getElementById('sel-cam-mode')?.addEventListener('change', (e) => {

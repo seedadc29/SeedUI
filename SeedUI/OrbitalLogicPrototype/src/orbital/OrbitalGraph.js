@@ -597,6 +597,24 @@ export class OrbitalGraph {
               { name: 'Altura Y (m)', val: 3.2, color: '#38bdf8' }
             ],
             sunId: newSunId
+          },
+          {
+            id: `planet-${Date.now()}-mouse`,
+            name: 'Mouse Look',
+            type: 'planet',
+            orbitRadius: 165,
+            angle: 2.8,
+            speed: 0.12,
+            radius: 18,
+            color: '#059669',
+            textColor: '#ffffff',
+            moons: [
+              { name: 'Mouse', val: 'Ativo', color: '#34d399' },
+              { name: 'Sensib.', val: '1.0x', color: '#34d399' },
+              { name: 'Pitch Min', val: -60, color: '#34d399' },
+              { name: 'Pitch Max', val: 75, color: '#34d399' }
+            ],
+            sunId: newSunId
           }
         ];
       }

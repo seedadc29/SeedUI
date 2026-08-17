@@ -29,7 +29,7 @@ export class Scene3D {
     this.isOrthographic = false;
     this.isPilotingGameCamera = false;
 
-    // Game Camera Configuration
+    // Game Camera Configuration with Mouse Look and Movement Clamping
     this.cameraConfig = {
       mode: 'follow', // 'follow' | 'static'
       preset: 'platformer', // 'platformer' | 'third_person' | 'top_down' | 'first_person' | 'static'
@@ -37,7 +37,36 @@ export class Scene3D {
       lookAtOffset: new THREE.Vector3(0, 1.2, 0),
       fov: 48,
       smoothSpeed: 6.0,
-      trackRotation: false
+      trackRotation: false,
+      mouseLook: {
+        enabled: true,
+        sensitivityX: 0.003,
+        sensitivityY: 0.003,
+        invertY: false,
+        smoothDamping: 0.12,
+        yaw: 0,
+        pitch: 0.1,
+        targetYaw: 0,
+        targetPitch: 0.1,
+        minPitchDeg: -60,
+        maxPitchDeg: 75,
+        minYawDeg: -180,
+        maxYawDeg: 180,
+        enableYawLimit: false
+      },
+      limits: {
+        enabled: false,
+        minX: -25.0,
+        maxX: 25.0,
+        minY: 0.5,
+        maxY: 20.0,
+        minZ: -25.0,
+        maxZ: 25.0
+      },
+      distanceLimits: {
+        minDistance: 2.0,
+        maxDistance: 30.0
+      }
     };
 
     // Input state during play
@@ -168,8 +197,14 @@ export class Scene3D {
     };
 
     let downPos = { x: 0, y: 0 };
+    let prevMouse = { x: 0, y: 0 };
+    let isPointerDown = false;
+
     this.canvas.addEventListener('pointerdown', (e) => {
+      isPointerDown = true;
       downPos = { x: e.clientX, y: e.clientY };
+      prevMouse = { x: e.clientX, y: e.clientY };
+
       if (this.isPlaying) {
         if (e.button === 0 && !e.altKey) this.controls.enabled = false;
         else this.controls.enabled = true;
@@ -180,6 +215,41 @@ export class Scene3D {
           this.controls.enabled = false;
         } else {
           this.controls.enabled = true;
+        }
+      }
+    });
+
+    window.addEventListener('pointerup', () => {
+      isPointerDown = false;
+    });
+
+    // Mouse Look / Pointer Rotation when in Camera View or Playing
+    window.addEventListener('pointermove', (e) => {
+      if (!isPointerDown) return;
+      const isCameraView = this.isPilotingGameCamera || this.isPlaying;
+      if (isCameraView && this.cameraConfig.mouseLook?.enabled) {
+        const dx = e.clientX - prevMouse.x;
+        const dy = e.clientY - prevMouse.y;
+        prevMouse = { x: e.clientX, y: e.clientY };
+
+        const cfg = this.cameraConfig.mouseLook;
+        cfg.targetYaw -= dx * cfg.sensitivityX;
+        if (cfg.invertY) {
+          cfg.targetPitch -= dy * cfg.sensitivityY;
+        } else {
+          cfg.targetPitch += dy * cfg.sensitivityY;
+        }
+
+        // Clamp Pitch (Vertical)
+        const minPitchRad = (cfg.minPitchDeg * Math.PI) / 180;
+        const maxPitchRad = (cfg.maxPitchDeg * Math.PI) / 180;
+        cfg.targetPitch = Math.max(minPitchRad, Math.min(maxPitchRad, cfg.targetPitch));
+
+        // Clamp Yaw (Horizontal) if enabled
+        if (cfg.enableYawLimit) {
+          const minYawRad = (cfg.minYawDeg * Math.PI) / 180;
+          const maxYawRad = (cfg.maxYawDeg * Math.PI) / 180;
+          cfg.targetYaw = Math.max(minYawRad, Math.min(maxYawRad, cfg.targetYaw));
         }
       }
     });
@@ -415,6 +485,24 @@ export class Scene3D {
       this.selectionBoxHelper.update();
     }
 
+    if (this.onCameraConfigChange) this.onCameraConfigChange(this.cameraConfig);
+  }
+
+  setGameCameraMouseLook(params = {}) {
+    if (!this.cameraConfig.mouseLook) this.cameraConfig.mouseLook = {};
+    Object.assign(this.cameraConfig.mouseLook, params);
+    if (this.onCameraConfigChange) this.onCameraConfigChange(this.cameraConfig);
+  }
+
+  setGameCameraLimits(params = {}) {
+    if (!this.cameraConfig.limits) this.cameraConfig.limits = {};
+    Object.assign(this.cameraConfig.limits, params);
+    if (this.onCameraConfigChange) this.onCameraConfigChange(this.cameraConfig);
+  }
+
+  setGameCameraDistanceLimits(params = {}) {
+    if (!this.cameraConfig.distanceLimits) this.cameraConfig.distanceLimits = {};
+    Object.assign(this.cameraConfig.distanceLimits, params);
     if (this.onCameraConfigChange) this.onCameraConfigChange(this.cameraConfig);
   }
 
@@ -1269,6 +1357,13 @@ export class Scene3D {
 
       if (this.cameraConfig.mode === 'follow') {
         const lerpFactor = Math.min(1.0, (this.cameraConfig.smoothSpeed || 6.0) * delta);
+        const mLook = this.cameraConfig.mouseLook;
+
+        // Smooth mouseLook damping
+        if (mLook && mLook.enabled) {
+          mLook.yaw += (mLook.targetYaw - mLook.yaw) * Math.min(1.0, 14.0 * delta);
+          mLook.pitch += (mLook.targetPitch - mLook.pitch) * Math.min(1.0, 14.0 * delta);
+        }
 
         if (this.cameraConfig.preset === 'platformer') {
           // 2.5D Lateral platformer tracking: slides horizontally (X) and vertically (Y), fixed Z distance
@@ -1292,13 +1387,43 @@ export class Scene3D {
           this.gameCamera.position.z += (targetCamZ - this.gameCamera.position.z) * lerpFactor;
 
           this.gameCamera.lookAt(pPos.x, pPos.y, pPos.z);
+        } else if (this.cameraConfig.preset === 'first_person') {
+          // 1st Person: at player head level looking with mouse
+          const eyePos = pPos.clone().add(this.cameraConfig.offset);
+          this.gameCamera.position.copy(eyePos);
+
+          const lookDir = new THREE.Vector3(
+            -Math.sin(mLook.yaw) * Math.cos(mLook.pitch),
+            Math.sin(mLook.pitch),
+            -Math.cos(mLook.yaw) * Math.cos(mLook.pitch)
+          );
+          this.gameCamera.lookAt(eyePos.clone().add(lookDir));
         } else {
-          // Third-person / Custom 3D follow
-          const targetPos = pPos.clone().add(this.cameraConfig.offset);
+          // Third-person / Custom 3D follow with spherical Mouse Look & Distance Clamping
+          const baseDist = Math.max(
+            this.cameraConfig.distanceLimits.minDistance,
+            Math.min(this.cameraConfig.distanceLimits.maxDistance, this.cameraConfig.offset.length())
+          );
+
+          const camOffset = new THREE.Vector3(
+            baseDist * Math.sin(mLook.yaw) * Math.cos(mLook.pitch),
+            baseDist * Math.sin(mLook.pitch) + this.cameraConfig.offset.y,
+            baseDist * Math.cos(mLook.yaw) * Math.cos(mLook.pitch)
+          );
+
+          const targetPos = pPos.clone().add(camOffset);
           this.gameCamera.position.lerp(targetPos, lerpFactor);
 
           const lookTarget = pPos.clone().add(this.cameraConfig.lookAtOffset);
           this.gameCamera.lookAt(lookTarget);
+        }
+
+        // Apply World Position / Boundary Clamps if enabled
+        if (this.cameraConfig.limits && this.cameraConfig.limits.enabled) {
+          const lim = this.cameraConfig.limits;
+          this.gameCamera.position.x = Math.max(lim.minX, Math.min(lim.maxX, this.gameCamera.position.x));
+          this.gameCamera.position.y = Math.max(lim.minY, Math.min(lim.maxY, this.gameCamera.position.y));
+          this.gameCamera.position.z = Math.max(lim.minZ, Math.min(lim.maxZ, this.gameCamera.position.z));
         }
 
         if (this.cameraHelperMesh && !this.isPlaying && !this.isPilotingGameCamera) {
