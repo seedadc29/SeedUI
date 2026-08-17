@@ -194,9 +194,11 @@ export class Scene3D {
     let downPos = { x: 0, y: 0 };
     this.canvas.addEventListener('pointerdown', (e) => {
       downPos = { x: e.clientX, y: e.clientY };
-      if (this.isPlaying || this.isPilotingGameCamera) {
+      if (this.isPlaying) {
         if (e.button === 0 && !e.altKey) this.controls.enabled = false;
         else this.controls.enabled = true;
+      } else if (this.isPilotingGameCamera) {
+        this.controls.enabled = false;
       } else {
         if (this.transformControls && this.transformControls.dragging) {
           this.controls.enabled = false;
@@ -206,9 +208,9 @@ export class Scene3D {
       }
     });
 
-    // Hover feedback over 3D objects
+    // Hover feedback over 3D objects (Works in Editor and Camera View)
     this.canvas.addEventListener('pointermove', (e) => {
-      if (this.isPlaying || this.isPilotingGameCamera) return;
+      if (this.isPlaying) return;
       if (this.transformControls && this.transformControls.dragging) return;
 
       const rect = this.canvas.getBoundingClientRect();
@@ -216,7 +218,10 @@ export class Scene3D {
       this.mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 
       this.raycaster.setFromCamera(this.mouse, this.activeCamera);
-      const meshes = Array.from(this.entities.values()).map(e => e.mesh).filter(Boolean);
+      const meshes = Array.from(this.entities.values())
+        .filter(e => e.type !== 'camera' || !this.isPilotingGameCamera)
+        .map(e => e.mesh)
+        .filter(Boolean);
       const intersects = this.raycaster.intersectObjects(meshes, true);
 
       if (intersects.length > 0) {
@@ -226,9 +231,9 @@ export class Scene3D {
       }
     });
 
-    // Raycast selection on click
+    // Raycast selection on click (Works in Editor and Camera View)
     this.canvas.addEventListener('click', (e) => {
-      if (this.isPlaying || this.isPilotingGameCamera) return;
+      if (this.isPlaying) return;
       if (Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y) > 10) return;
       if (this.transformControls && this.transformControls.dragging) return;
 
@@ -237,7 +242,10 @@ export class Scene3D {
       this.mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 
       this.raycaster.setFromCamera(this.mouse, this.activeCamera);
-      const meshes = Array.from(this.entities.values()).map(e => e.mesh).filter(Boolean);
+      const meshes = Array.from(this.entities.values())
+        .filter(e => e.type !== 'camera' || !this.isPilotingGameCamera)
+        .map(e => e.mesh)
+        .filter(Boolean);
       const intersects = this.raycaster.intersectObjects(meshes, true);
 
       if (intersects.length > 0) {
@@ -433,17 +441,29 @@ export class Scene3D {
 
     if (this.isPilotingGameCamera) {
       this.activeCamera = this.gameCamera;
-      this.controls.object = this.gameCamera;
+      this.controls.enabled = false;
       this.transformControls.camera = this.gameCamera;
       if (this.cameraHelperMesh) this.cameraHelperMesh.visible = false;
       if (this.cameraHelper) this.cameraHelper.visible = false;
-      this.selectEntity(null);
+
+      // Re-attach gizmo to selected object if any, or player
+      if (this.selectedEntity && this.selectedEntity.mesh && this.selectedEntity.type !== 'camera') {
+        this.selectEntity(this.selectedEntity);
+      } else {
+        const p = this.getPlayerEntity();
+        if (p) this.selectEntity(p);
+      }
     } else {
       this.activeCamera = this.perspectiveCamera;
+      this.controls.enabled = true;
       this.controls.object = this.perspectiveCamera;
       this.transformControls.camera = this.perspectiveCamera;
       if (this.cameraHelperMesh) this.cameraHelperMesh.visible = true;
       if (this.cameraHelper) this.cameraHelper.visible = true;
+
+      if (this.selectedEntity && this.selectedEntity.mesh) {
+        this.selectEntity(this.selectedEntity);
+      }
     }
 
     this.onResize();
