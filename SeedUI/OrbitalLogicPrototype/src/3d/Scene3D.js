@@ -1397,7 +1397,7 @@ export class Scene3D {
           // 2.5D Lateral platformer tracking: slides horizontally (X) and vertically (Y), fixed Z distance
           const targetCamX = pPos.x + this.cameraConfig.offset.x;
           const targetCamY = pPos.y + this.cameraConfig.offset.y;
-          const targetCamZ = this.cameraConfig.offset.z;
+          const targetCamZ = pPos.z + (this.cameraConfig.offset.z || 14.0);
 
           this.gameCamera.position.x += (targetCamX - this.gameCamera.position.x) * lerpFactor;
           this.gameCamera.position.y += (targetCamY - this.gameCamera.position.y) * lerpFactor;
@@ -1405,6 +1405,8 @@ export class Scene3D {
 
           const lookTarget = new THREE.Vector3(pPos.x, pPos.y + this.cameraConfig.lookAtOffset.y, pPos.z);
           this.gameCamera.lookAt(lookTarget);
+
+          if (playerEnt.mesh) playerEnt.mesh.visible = true;
         } else if (this.cameraConfig.preset === 'top_down') {
           const targetCamX = pPos.x + this.cameraConfig.offset.x;
           const targetCamY = pPos.y + this.cameraConfig.offset.y;
@@ -1415,6 +1417,8 @@ export class Scene3D {
           this.gameCamera.position.z += (targetCamZ - this.gameCamera.position.z) * lerpFactor;
 
           this.gameCamera.lookAt(pPos.x, pPos.y, pPos.z);
+
+          if (playerEnt.mesh) playerEnt.mesh.visible = true;
         } else if (this.cameraConfig.preset === 'first_person') {
           // 1st Person: at player head level looking with mouse
           const eyePos = pPos.clone().add(this.cameraConfig.offset);
@@ -1426,6 +1430,9 @@ export class Scene3D {
             -Math.cos(mLook.yaw) * Math.cos(mLook.pitch)
           );
           this.gameCamera.lookAt(eyePos.clone().add(lookDir));
+
+          // Hide player body mesh during first-person gameplay so it does not block the camera view
+          if (playerEnt.mesh) playerEnt.mesh.visible = !this.isPlaying;
         } else {
           // Third-person / Custom 3D follow with spherical Mouse Look & Distance Clamping
           const baseDist = Math.max(
@@ -1444,6 +1451,8 @@ export class Scene3D {
 
           const lookTarget = pPos.clone().add(this.cameraConfig.lookAtOffset);
           this.gameCamera.lookAt(lookTarget);
+
+          if (playerEnt.mesh) playerEnt.mesh.visible = true;
         }
 
         // Apply World Position / Boundary Clamps if enabled
@@ -1481,6 +1490,7 @@ export class Scene3D {
       if (ent.type === 'player') {
         if (ent.hasMove && ent.walkSpeed > 0) {
           const moveDir = new THREE.Vector3();
+
           if (this.cameraConfig.preset === 'platformer') {
             // 2.5D Lateral platformer movement (A = Left, D = Right)
             if (this.keys.a) moveDir.x -= 1;
@@ -1492,11 +1502,21 @@ export class Scene3D {
               ent.velocity.x = moveDir.x * activeSpeed;
               ent.velocity.z = 0;
 
-              ent.mesh.rotation.y = moveDir.x > 0 ? Math.PI / 2 : -Math.PI / 2;
+              // Face left or right in 2D platformer without resetting
+              ent.mesh.rotation.y = moveDir.x > 0 ? (Math.PI / 2) : (-Math.PI / 2);
             } else {
               ent.velocity.x *= 0.75;
               ent.velocity.z = 0;
             }
+
+            // Platformer jump support with W / Space / Up Arrow
+            if ((this.keys.w || this.keys.space) && ent.hasJump && ent.isGrounded) {
+              ent.velocity.y = ent.jumpForce || 6.5;
+              ent.isGrounded = false;
+            }
+
+            // Lock Z coordinate to initial Z in 2D platformer to prevent depth drift
+            if (ent.initialPos) ent.mesh.position.z = ent.initialPos.z;
           } else if (this.cameraConfig.preset === 'top_down') {
             // Top-Down Aerial View: Full 8-directional planar movement (W = Up/North, S = Down/South, A = Left, D = Right)
             if (this.keys.w) moveDir.z -= 1;
@@ -1515,9 +1535,10 @@ export class Scene3D {
             } else {
               ent.velocity.x *= 0.75;
               ent.velocity.z *= 0.75;
+              // Preserve rotation angle when stopped
             }
           } else {
-            // 3D Camera-Relative Movement & Mouse Heading
+            // 3D Camera-Relative Movement & Mouse Heading (3rd Person & 1st Person)
             const camYaw = (this.cameraConfig.mouseLook && this.cameraConfig.mouseLook.enabled)
               ? this.cameraConfig.mouseLook.yaw
               : 0;
@@ -1543,14 +1564,22 @@ export class Scene3D {
               ent.velocity.x *= 0.75;
               ent.velocity.z *= 0.75;
 
-              // When standing, player smoothly follows camera / mouse orientation!
-              const idleTargetRot = -camYaw + Math.PI;
-              ent.mesh.rotation.y = THREE.MathUtils.lerp(ent.mesh.rotation.y, idleTargetRot, Math.min(1.0, 10.0 * delta));
+              // In 1st Person: body continuously matches mouse view direction
+              if (this.cameraConfig.preset === 'first_person') {
+                ent.mesh.rotation.y = -camYaw + Math.PI;
+              }
+              // In 3rd Person: KEEP current rotation when stopped, NEVER force-reset!
             }
           }
         } else {
           ent.velocity.x = 0;
           ent.velocity.z = 0;
+        }
+
+        // Standard 3D / Top-Down Jump with Space
+        if (this.cameraConfig.preset !== 'platformer' && this.keys.space && ent.hasJump && ent.isGrounded) {
+          ent.velocity.y = ent.jumpForce || 6.5;
+          ent.isGrounded = false;
         }
       } else if (ent.type === 'enemy') {
         if (ent.hasMove && playerEnt && playerEnt.mesh) {
