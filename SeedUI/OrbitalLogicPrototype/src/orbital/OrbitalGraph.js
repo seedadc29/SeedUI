@@ -58,7 +58,7 @@ export class OrbitalGraph {
             type: 'planet',
             orbitRadius: 65,
             angle: -0.6,
-            speed: 0.3,
+            speed: 0.05,
             radius: 18,
             color: '#382f7e',
             textColor: '#ffffff',
@@ -85,7 +85,7 @@ export class OrbitalGraph {
             type: 'planet',
             orbitRadius: 65,
             angle: -0.8,
-            speed: 0.25,
+            speed: 0.04,
             radius: 18,
             color: '#382f7e',
             textColor: '#ffffff',
@@ -651,7 +651,7 @@ export class OrbitalGraph {
                 name: m.name,
                 color: m.color || '#ffffff',
                 angle: i * step,
-                speed: 1.0,
+                speed: 0.08,
                 val: m.val
               }));
             }
@@ -677,7 +677,7 @@ export class OrbitalGraph {
             type: 'planet',
             orbitRadius: orbitR,
             angle,
-            speed: 0.3,
+            speed: 0.05,
             radius: 20,
             color: '#2b2368',
             textColor: '#ffffff',
@@ -700,13 +700,26 @@ export class OrbitalGraph {
     this.animTime += delta;
 
     if (this.isOrbitAnimationActive) {
+      // Gentle, slow, non-intrusive orbital rotation factor
+      const globalOrbitSpeed = 0.25;
+
       this.suns.forEach(sun => {
+        const isSunInteracting = this.hoveredEntity === sun || this.selectedEntity === sun;
+
         sun.planets.forEach(planet => {
           if (this.draggedEntity && this.draggedEntity.id === planet.id) return;
-          planet.angle += planet.speed * delta;
+          const isPlanetInteracting = isSunInteracting || this.hoveredEntity === planet || this.selectedEntity === planet;
+
+          // If hovered or selected, rotate at ultra-slow speed (0.1x) to make interaction effortless
+          const interactionFactor = isPlanetInteracting ? 0.1 : 1.0;
+          const pSpeed = (planet.speed || 0.05) * globalOrbitSpeed * interactionFactor;
+
+          planet.angle += pSpeed * delta;
+
           if (planet.moons) {
             planet.moons.forEach(moon => {
-              moon.angle += moon.speed * delta;
+              const mSpeed = (moon.speed || 0.08) * globalOrbitSpeed * interactionFactor;
+              moon.angle += mSpeed * delta;
             });
           }
         });
