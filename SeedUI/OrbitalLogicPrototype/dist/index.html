@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Seed Studio - Lógica Orbital (Protótipo Funcional)</title>
-  <script type="module" crossorigin src="/assets/index-B2sJW_w0.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-CCRoWH3G.css">
+  <script type="module" crossorigin src="/assets/index-ZA4t245z.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-D-wLK-T5.css">
 </head>
 <body class="seed-dark-theme">
   <div class="seed-app-root">
@@ -101,7 +101,26 @@
       <!-- 2.2 Left Pane: Real-time 3D Viewport -->
       <section class="seed-pane seed-viewport-3d-pane" id="pane-3d">
         <div class="pane-header">
-          <span class="pane-title"><i class="ti ti-cube-3d-sphere"></i> Viewport 3D (Cena em Tempo Real)</span>
+          <div class="v3d-header-left" style="display:flex;align-items:center;gap:6px;">
+            <span class="pane-title"><i class="ti ti-cube-3d-sphere"></i> Viewport 3D</span>
+            <div class="v3d-tools-group" style="display:flex;align-items:center;gap:3px;background:rgba(0,0,0,0.35);padding:2px 4px;border-radius:6px;border:1px solid var(--seed-border-dark);">
+              <button class="v3d-tool-btn active" id="btn-3d-select" data-vtool="select" title="Seleção Simples (V)">
+                <i class="ti ti-pointer"></i> <span>Selecionar</span>
+              </button>
+              <button class="v3d-tool-btn" id="btn-3d-translate" data-vtool="translate" title="Mover / Transladar Objeto no Mundo (G)">
+                <i class="ti ti-arrows-move"></i> <span>Mover (G)</span>
+              </button>
+              <button class="v3d-tool-btn" id="btn-3d-rotate" data-vtool="rotate" title="Rotacionar Objeto 3D (R)">
+                <i class="ti ti-rotate-3d"></i> <span>Girar (R)</span>
+              </button>
+              <button class="v3d-tool-btn" id="btn-3d-scale" data-vtool="scale" title="Esticar / Escalar Lados do Objeto 3D (S)">
+                <i class="ti ti-dimensions"></i> <span>Esticar (S)</span>
+              </button>
+              <button class="v3d-tool-btn" id="btn-3d-frame" title="Focar Câmera no Objeto Selecionado (F)">
+                <i class="ti ti-focus-2"></i> <span>Focar</span>
+              </button>
+            </div>
+          </div>
           <div class="pane-header-actions">
             <span class="pane-chip" id="chip-3d-status">Pronto (3D)</span>
             <button class="pane-action-btn" id="btn-max-3d" title="Maximizar / Expandir Viewport 3D">

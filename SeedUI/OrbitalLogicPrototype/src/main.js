@@ -130,11 +130,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 8. Toolshelf Buttons & Tool Switching
+  // 8. Toolshelf Buttons & 3D Viewport Tool Switching
   const toolButtons = document.querySelectorAll('.seed-shelf-btn[data-tool]');
+  const v3dButtons = document.querySelectorAll('.v3d-tool-btn[data-vtool]');
+
   const setTool = (toolName) => {
     toolButtons.forEach(btn => {
       btn.classList.toggle('active', btn.dataset.tool === toolName);
+    });
+
+    v3dButtons.forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.vtool === toolName);
     });
 
     if (toolName === 'translate' || toolName === 'rotate' || toolName === 'scale') {
@@ -149,6 +155,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const inspectorBox = document.getElementById('node-inspector');
       inspectorBox?.scrollIntoView({ behavior: 'smooth' });
     } else {
+      scene3D.setGizmoMode('translate');
       orbitalGraph.currentTool = 'select';
     }
   };
@@ -161,6 +168,13 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('tool-beam')?.addEventListener('click', () => setTool('beam'));
   document.getElementById('tool-inspect')?.addEventListener('click', () => setTool('inspect'));
 
+  // 3D Viewport Toolbar Buttons
+  document.getElementById('btn-3d-select')?.addEventListener('click', () => setTool('select'));
+  document.getElementById('btn-3d-translate')?.addEventListener('click', () => setTool('translate'));
+  document.getElementById('btn-3d-rotate')?.addEventListener('click', () => setTool('rotate'));
+  document.getElementById('btn-3d-scale')?.addEventListener('click', () => setTool('scale'));
+  document.getElementById('btn-3d-frame')?.addEventListener('click', () => scene3D.frameSelectedEntity());
+
   // Keyboard shortcut listener
   window.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
@@ -171,6 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
     else if (e.code === 'KeyL') setTool('beam');
     else if (e.code === 'KeyI') setTool('inspect');
     else if (e.code === 'KeyV' || e.code === 'KeyW') setTool('select');
+    else if (e.code === 'KeyF') scene3D.frameSelectedEntity();
   });
 
   // 9. Tactical Map Tool Selector Buttons (Selecionar, Mover, Quadrado, Círculo, Triângulo, Pan)

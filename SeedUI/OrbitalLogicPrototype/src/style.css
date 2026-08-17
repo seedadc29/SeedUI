@@ -537,6 +537,34 @@ html, body {
   box-shadow: 0 0 8px rgba(56, 189, 248, 0.5);
 }
 
+.v3d-tool-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--seed-text-muted);
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s;
+}
+
+.v3d-tool-btn:hover {
+  background: var(--seed-bg-chip-hover);
+  color: #ffffff;
+}
+
+.v3d-tool-btn.active {
+  background: #ff7700;
+  color: #ffffff;
+  border-color: #ff7700;
+  font-weight: 700;
+  box-shadow: 0 0 8px rgba(255, 119, 0, 0.5);
+}
+
 .tactical-tool-label {
   font-size: 9px;
   font-weight: 700;

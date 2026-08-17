@@ -123,10 +123,9 @@ export class Scene3D {
       }
     });
 
-    // Raycast selection on click
-    this.canvas.addEventListener('click', (e) => {
+    // Hover feedback over 3D objects
+    this.canvas.addEventListener('pointermove', (e) => {
       if (this.isPlaying) return;
-      if (Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y) > 4) return;
       if (this.transformControls && this.transformControls.dragging) return;
 
       const rect = this.canvas.getBoundingClientRect();
@@ -138,15 +137,47 @@ export class Scene3D {
       const intersects = this.raycaster.intersectObjects(meshes, true);
 
       if (intersects.length > 0) {
-        let hitMesh = intersects[0].object;
-        while (hitMesh && hitMesh.parent && hitMesh.parent !== this.scene) {
-          hitMesh = hitMesh.parent;
-        }
-        for (const ent of this.entities.values()) {
-          if (ent.mesh === hitMesh) {
-            this.selectEntity(ent);
-            break;
+        this.canvas.style.cursor = 'pointer';
+      } else {
+        this.canvas.style.cursor = 'default';
+      }
+    });
+
+    // Raycast selection on click
+    this.canvas.addEventListener('click', (e) => {
+      if (this.isPlaying) return;
+      if (Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y) > 10) return;
+      if (this.transformControls && this.transformControls.dragging) return;
+
+      const rect = this.canvas.getBoundingClientRect();
+      this.mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      this.mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+      this.raycaster.setFromCamera(this.mouse, this.activeCamera);
+      const meshes = Array.from(this.entities.values()).map(e => e.mesh).filter(Boolean);
+      const intersects = this.raycaster.intersectObjects(meshes, true);
+
+      if (intersects.length > 0) {
+        let foundEnt = null;
+        for (const hit of intersects) {
+          let curr = hit.object;
+          while (curr) {
+            for (const ent of this.entities.values()) {
+              if (ent.mesh === curr) {
+                foundEnt = ent;
+                break;
+              }
+            }
+            if (foundEnt) break;
+            curr = curr.parent;
           }
+          if (foundEnt) break;
+        }
+
+        if (foundEnt) {
+          this.selectEntity(foundEnt);
+        } else {
+          this.selectEntity(null);
         }
       } else {
         this.selectEntity(null);

@@ -213,7 +213,7 @@ export class PaletteUI {
     if (!entity) {
       titleEl.textContent = 'Propriedades';
       typeEl.textContent = 'Nenhum';
-      bodyEl.innerHTML = `<div class="inspector-empty-hint">Clique em qualquer Objeto 3D, Sol, Planeta ou Sala Tática para editar em tempo real.</div>`;
+      bodyEl.innerHTML = `<div class="inspector-empty-hint">Clique diretamente em qualquer <b>Objeto 3D</b> no mundo, Sol, Planeta ou Sala Tática para alterar posição, tamanho e rotação.</div>`;
       return;
     }
 
@@ -237,8 +237,17 @@ export class PaletteUI {
       const dimY = (baseH * scaleY).toFixed(1);
       const dimZ = (baseD * scaleZ).toFixed(1);
 
+      const posX = ent3D?.mesh ? ent3D.mesh.position.x.toFixed(1) : '0.0';
+      const posY = ent3D?.mesh ? ent3D.mesh.position.y.toFixed(1) : '1.1';
+      const posZ = ent3D?.mesh ? ent3D.mesh.position.z.toFixed(1) : '0.0';
+
+      const rotXDeg = ent3D?.mesh ? Math.round((ent3D.mesh.rotation.x * 180) / Math.PI) % 360 : 0;
       const rotYDeg = ent3D?.mesh ? Math.round((ent3D.mesh.rotation.y * 180) / Math.PI) % 360 : 0;
+      const rotZDeg = ent3D?.mesh ? Math.round((ent3D.mesh.rotation.z * 180) / Math.PI) % 360 : 0;
+
+      const normRotX = rotXDeg < 0 ? rotXDeg + 360 : rotXDeg;
       const normRotY = rotYDeg < 0 ? rotYDeg + 360 : rotYDeg;
+      const normRotZ = rotZDeg < 0 ? rotZDeg + 360 : rotZDeg;
 
       html += `
         <div class="inspector-row">
@@ -250,10 +259,66 @@ export class PaletteUI {
           <input type="number" class="inspector-input" value="${entity.radius}" id="inp-sun-radius" />
         </div>
 
-        <!-- 3D Scenery Dimensions & Individual Axis Stretching -->
+        <!-- 1. 3D POSITION IN WORLD (POSIÇÃO) -->
         <div class="scenery-transform-box">
           <div class="scenery-box-header">
-            <i class="ti ti-dimensions"></i> <span>DIMENSÕES 3D (ESTIQUER LADOS)</span>
+            <i class="ti ti-arrows-move"></i> <span>📍 POSIÇÃO 3D NO MUNDO</span>
+          </div>
+          <div class="dim-control-group">
+            <div class="dim-row">
+              <span class="dim-axis-badge axis-x">X</span>
+              <span class="dim-label">Posição X:</span>
+              <input type="range" min="-30" max="30" step="0.5" value="${posX}" class="dim-slider" id="slider-pos-x" />
+              <input type="number" step="0.1" value="${posX}" class="dim-number" id="inp-pos-x" />
+              <span class="dim-unit">m</span>
+            </div>
+            <div class="dim-row">
+              <span class="dim-axis-badge axis-y">Y</span>
+              <span class="dim-label">Posição Y:</span>
+              <input type="range" min="0" max="25" step="0.2" value="${posY}" class="dim-slider" id="slider-pos-y" />
+              <input type="number" step="0.1" value="${posY}" class="dim-number" id="inp-pos-y" />
+              <span class="dim-unit">m</span>
+            </div>
+            <div class="dim-row">
+              <span class="dim-axis-badge axis-z">Z</span>
+              <span class="dim-label">Posição Z:</span>
+              <input type="range" min="-30" max="30" step="0.5" value="${posZ}" class="dim-slider" id="slider-pos-z" />
+              <input type="number" step="0.1" value="${posZ}" class="dim-number" id="inp-pos-z" />
+              <span class="dim-unit">m</span>
+            </div>
+          </div>
+
+          <!-- 2. 3D ROTATION (ROTAÇÃO) -->
+          <div class="scenery-box-header" style="margin-top: 10px;">
+            <i class="ti ti-rotate-3d"></i> <span>🔄 ROTAÇÃO 3D (GRAUS)</span>
+          </div>
+          <div class="rot-control-group">
+            <div class="dim-row">
+              <span class="dim-axis-badge axis-x">X</span>
+              <span class="dim-label">Pitch (X):</span>
+              <input type="range" min="0" max="360" step="5" value="${normRotX}" class="dim-slider" id="slider-rot-x" />
+              <input type="number" min="0" max="360" step="1" value="${normRotX}" class="dim-number" id="inp-rot-x" />
+              <span class="dim-unit">°</span>
+            </div>
+            <div class="dim-row">
+              <span class="dim-axis-badge axis-y">Y</span>
+              <span class="dim-label">Giro / Yaw (Y):</span>
+              <input type="range" min="0" max="360" step="5" value="${normRotY}" class="dim-slider" id="slider-rot-y" />
+              <input type="number" min="0" max="360" step="1" value="${normRotY}" class="dim-number" id="inp-rot-y" />
+              <span class="dim-unit">°</span>
+            </div>
+            <div class="dim-row">
+              <span class="dim-axis-badge axis-z">Z</span>
+              <span class="dim-label">Roll (Z):</span>
+              <input type="range" min="0" max="360" step="5" value="${normRotZ}" class="dim-slider" id="slider-rot-z" />
+              <input type="number" min="0" max="360" step="1" value="${normRotZ}" class="dim-number" id="inp-rot-z" />
+              <span class="dim-unit">°</span>
+            </div>
+          </div>
+
+          <!-- 3. 3D DIMENSIONS / STRETCHING (TAMANHO) -->
+          <div class="scenery-box-header" style="margin-top: 10px;">
+            <i class="ti ti-dimensions"></i> <span>📐 DIMENSÕES / TAMANHO 3D</span>
           </div>
 
           <div class="inspector-toggle-row">
@@ -266,7 +331,7 @@ export class PaletteUI {
           <div class="dim-control-group">
             <div class="dim-row">
               <span class="dim-axis-badge axis-x">X</span>
-              <span class="dim-label">Largura:</span>
+              <span class="dim-label">Largura (X):</span>
               <input type="range" min="0.2" max="25" step="0.2" value="${dimX}" class="dim-slider" id="slider-dim-x" />
               <input type="number" min="0.1" step="0.1" value="${dimX}" class="dim-number" id="inp-dim-x" />
               <span class="dim-unit">m</span>
@@ -274,7 +339,7 @@ export class PaletteUI {
 
             <div class="dim-row">
               <span class="dim-axis-badge axis-y">Y</span>
-              <span class="dim-label">Altura:</span>
+              <span class="dim-label">Altura (Y):</span>
               <input type="range" min="0.2" max="15" step="0.2" value="${dimY}" class="dim-slider" id="slider-dim-y" />
               <input type="number" min="0.1" step="0.1" value="${dimY}" class="dim-number" id="inp-dim-y" />
               <span class="dim-unit">m</span>
@@ -282,7 +347,7 @@ export class PaletteUI {
 
             <div class="dim-row">
               <span class="dim-axis-badge axis-z">Z</span>
-              <span class="dim-label">Profundidade:</span>
+              <span class="dim-label">Profundidade (Z):</span>
               <input type="range" min="0.2" max="25" step="0.2" value="${dimZ}" class="dim-slider" id="slider-dim-z" />
               <input type="number" min="0.1" step="0.1" value="${dimZ}" class="dim-number" id="inp-dim-z" />
               <span class="dim-unit">m</span>
@@ -298,19 +363,7 @@ export class PaletteUI {
             <button class="btn-scenery-preset" data-px="1.2" data-py="6.0" data-pz="1.2" title="Coluna / Pilar vertical 6m">🚪 Pilar 6m</button>
           </div>
 
-          <div class="scenery-box-header" style="margin-top: 10px;">
-            <i class="ti ti-rotate"></i> <span>ROTAÇÃO 3D</span>
-          </div>
-          <div class="rot-control-group">
-            <div class="dim-row">
-              <span class="dim-axis-badge axis-y">Y</span>
-              <span class="dim-label">Giro (Yaw):</span>
-              <input type="range" min="0" max="360" step="5" value="${normRotY}" class="dim-slider" id="slider-rot-y" />
-              <input type="number" min="0" max="360" step="1" value="${normRotY}" class="dim-number" id="inp-rot-y" />
-              <span class="dim-unit">°</span>
-            </div>
-          </div>
-
+          <!-- 4. COLLISION & PHYSICS -->
           <div class="scenery-box-header" style="margin-top: 10px;">
             <i class="ti ti-shield"></i> <span>COLISÃO & FÍSICA DE CENÁRIO</span>
           </div>
@@ -432,7 +485,60 @@ export class PaletteUI {
       });
     }
 
-    // Proportional Scale Toggle
+    // 1. Position Handlers (X, Y, Z)
+    const setupPosListeners = (axis, sliderId, numId) => {
+      const slider = document.getElementById(sliderId);
+      const num = document.getElementById(numId);
+
+      const onValChange = (val) => {
+        const ent3D = this.scene3D.entities.get(entity.id);
+        const curX = parseFloat(document.getElementById('inp-pos-x')?.value) || (ent3D?.mesh?.position.x || 0);
+        const curY = parseFloat(document.getElementById('inp-pos-y')?.value) || (ent3D?.mesh?.position.y || 1.1);
+        const curZ = parseFloat(document.getElementById('inp-pos-z')?.value) || (ent3D?.mesh?.position.z || 0);
+
+        if (axis === 'x') this.scene3D.setEntityPosition(entity.id, val, curY, curZ);
+        else if (axis === 'y') this.scene3D.setEntityPosition(entity.id, curX, val, curZ);
+        else this.scene3D.setEntityPosition(entity.id, curX, curY, val);
+
+        if (slider && document.activeElement !== slider) slider.value = val;
+        if (num && document.activeElement !== num) num.value = val;
+      };
+
+      slider?.addEventListener('input', (e) => onValChange(parseFloat(e.target.value) || 0));
+      num?.addEventListener('input', (e) => onValChange(parseFloat(e.target.value) || 0));
+    };
+
+    setupPosListeners('x', 'slider-pos-x', 'inp-pos-x');
+    setupPosListeners('y', 'slider-pos-y', 'inp-pos-y');
+    setupPosListeners('z', 'slider-pos-z', 'inp-pos-z');
+
+    // 2. Rotation Handlers (X, Y, Z)
+    const setupRotListeners = (axis, sliderId, numId) => {
+      const slider = document.getElementById(sliderId);
+      const num = document.getElementById(numId);
+
+      const onValChange = (deg) => {
+        const curX = parseFloat(document.getElementById('inp-rot-x')?.value) || 0;
+        const curY = parseFloat(document.getElementById('inp-rot-y')?.value) || 0;
+        const curZ = parseFloat(document.getElementById('inp-rot-z')?.value) || 0;
+
+        if (axis === 'x') this.scene3D.setEntityRotation(entity.id, deg, curY, curZ);
+        else if (axis === 'y') this.scene3D.setEntityRotation(entity.id, curX, deg, curZ);
+        else this.scene3D.setEntityRotation(entity.id, curX, curY, deg);
+
+        if (slider && document.activeElement !== slider) slider.value = deg;
+        if (num && document.activeElement !== num) num.value = deg;
+      };
+
+      slider?.addEventListener('input', (e) => onValChange(parseFloat(e.target.value) || 0));
+      num?.addEventListener('input', (e) => onValChange(parseFloat(e.target.value) || 0));
+    };
+
+    setupRotListeners('x', 'slider-rot-x', 'inp-rot-x');
+    setupRotListeners('y', 'slider-rot-y', 'inp-rot-y');
+    setupRotListeners('z', 'slider-rot-z', 'inp-rot-z');
+
+    // 3. Proportional Scale Toggle
     const chkProp = document.getElementById('chk-proportional-scale');
     if (chkProp) {
       chkProp.addEventListener('change', (e) => {
@@ -440,7 +546,7 @@ export class PaletteUI {
       });
     }
 
-    // 3D Dimension Handlers (X, Y, Z)
+    // 4. 3D Dimension Handlers (X, Y, Z)
     const applyDimensions = (newX, newY, newZ) => {
       this.scene3D.setEntityDimensions(entity.id, newX, newY, newZ);
       const sliderX = document.getElementById('slider-dim-x');
@@ -463,7 +569,6 @@ export class PaletteUI {
       const num = document.getElementById(numId);
 
       const onValChange = (val) => {
-        const ent3D = this.scene3D.entities.get(entity.id);
         const curX = parseFloat(document.getElementById('inp-dim-x')?.value) || 1.8;
         const curY = parseFloat(document.getElementById('inp-dim-y')?.value) || 2.2;
         const curZ = parseFloat(document.getElementById('inp-dim-z')?.value) || 1.8;
@@ -503,17 +608,6 @@ export class PaletteUI {
         applyDimensions(px, py, pz);
       });
     });
-
-    // 3D Rotation (Yaw)
-    const sliderRotY = document.getElementById('slider-rot-y');
-    const inpRotY = document.getElementById('inp-rot-y');
-    const onRotChange = (deg) => {
-      this.scene3D.setEntityRotation(entity.id, 0, deg, 0);
-      if (sliderRotY && document.activeElement !== sliderRotY) sliderRotY.value = deg;
-      if (inpRotY && document.activeElement !== inpRotY) inpRotY.value = deg;
-    };
-    sliderRotY?.addEventListener('input', (e) => onRotChange(parseFloat(e.target.value) || 0));
-    inpRotY?.addEventListener('input', (e) => onRotChange(parseFloat(e.target.value) || 0));
 
     // Collision Type Change
     document.getElementById('sel-collision-type')?.addEventListener('change', (e) => {
@@ -586,6 +680,49 @@ export class PaletteUI {
   syncInspectorWith3DTransform(ent) {
     if (!ent || !ent.mesh) return;
 
+    // 1. Position sync
+    const posX = ent.mesh.position.x.toFixed(1);
+    const posY = ent.mesh.position.y.toFixed(1);
+    const posZ = ent.mesh.position.z.toFixed(1);
+
+    const sliderPosX = document.getElementById('slider-pos-x');
+    const numPosX = document.getElementById('inp-pos-x');
+    const sliderPosY = document.getElementById('slider-pos-y');
+    const numPosY = document.getElementById('inp-pos-y');
+    const sliderPosZ = document.getElementById('slider-pos-z');
+    const numPosZ = document.getElementById('inp-pos-z');
+
+    if (sliderPosX && document.activeElement !== sliderPosX) sliderPosX.value = posX;
+    if (numPosX && document.activeElement !== numPosX) numPosX.value = posX;
+    if (sliderPosY && document.activeElement !== sliderPosY) sliderPosY.value = posY;
+    if (numPosY && document.activeElement !== numPosY) numPosY.value = posY;
+    if (sliderPosZ && document.activeElement !== sliderPosZ) sliderPosZ.value = posZ;
+    if (numPosZ && document.activeElement !== numPosZ) numPosZ.value = posZ;
+
+    // 2. Rotation sync
+    const rotXDeg = Math.round((ent.mesh.rotation.x * 180) / Math.PI) % 360;
+    const rotYDeg = Math.round((ent.mesh.rotation.y * 180) / Math.PI) % 360;
+    const rotZDeg = Math.round((ent.mesh.rotation.z * 180) / Math.PI) % 360;
+
+    const normRotX = rotXDeg < 0 ? rotXDeg + 360 : rotXDeg;
+    const normRotY = rotYDeg < 0 ? rotYDeg + 360 : rotYDeg;
+    const normRotZ = rotZDeg < 0 ? rotZDeg + 360 : rotZDeg;
+
+    const sliderRotX = document.getElementById('slider-rot-x');
+    const inpRotX = document.getElementById('inp-rot-x');
+    const sliderRotY = document.getElementById('slider-rot-y');
+    const inpRotY = document.getElementById('inp-rot-y');
+    const sliderRotZ = document.getElementById('slider-rot-z');
+    const inpRotZ = document.getElementById('inp-rot-z');
+
+    if (sliderRotX && document.activeElement !== sliderRotX) sliderRotX.value = normRotX;
+    if (inpRotX && document.activeElement !== inpRotX) inpRotX.value = normRotX;
+    if (sliderRotY && document.activeElement !== sliderRotY) sliderRotY.value = normRotY;
+    if (inpRotY && document.activeElement !== inpRotY) inpRotY.value = normRotY;
+    if (sliderRotZ && document.activeElement !== sliderRotZ) sliderRotZ.value = normRotZ;
+    if (inpRotZ && document.activeElement !== inpRotZ) inpRotZ.value = normRotZ;
+
+    // 3. Dimensions sync
     const baseW = ent.baseSize?.x || 1.8;
     const baseH = ent.baseSize?.y || 2.2;
     const baseD = ent.baseSize?.z || 1.8;
@@ -608,13 +745,11 @@ export class PaletteUI {
     if (sliderZ && document.activeElement !== sliderZ) sliderZ.value = dimZ;
     if (numZ && document.activeElement !== numZ) numZ.value = dimZ;
 
-    const rotYDeg = Math.round((ent.mesh.rotation.y * 180) / Math.PI) % 360;
-    const normRotY = rotYDeg < 0 ? rotYDeg + 360 : rotYDeg;
-
-    const sliderRotY = document.getElementById('slider-rot-y');
-    const inpRotY = document.getElementById('inp-rot-y');
-    if (sliderRotY && document.activeElement !== sliderRotY) sliderRotY.value = normRotY;
-    if (inpRotY && document.activeElement !== inpRotY) inpRotY.value = normRotY;
+    const lblTopY = document.getElementById('lbl-top-y');
+    if (lblTopY) {
+      const topY = ((ent.mesh.position.y || 1.1) + (baseH * ent.mesh.scale.y) / 2).toFixed(2);
+      lblTopY.textContent = `${topY} m`;
+    }
   }
 
   initPlayMode() {
