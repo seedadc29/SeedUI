@@ -868,7 +868,7 @@ export class Scene3D {
     // 1. Remove deleted families' instances (except camera)
     this.entities.forEach((ent, instanceId) => {
       if (ent.type === 'camera') return;
-      if (!activeFamilyIds.has(ent.familyId)) {
+      if (!activeFamilyIds.has(ent.familyId) || (cameraSun && ent.familyId === cameraSun.id)) {
         if (ent.mesh) {
           this.scene.remove(ent.mesh);
           ent.mesh.geometry?.dispose();
@@ -881,6 +881,8 @@ export class Scene3D {
     // 2. Build / Update family capabilities on all instances
     suns.forEach((sun, index) => {
       const sunNameUpper = sun.name.toUpperCase();
+      if (sunNameUpper.includes('CAMERA') || sunNameUpper.includes('CÂMERA')) return; // Handled exclusively by camera system
+
       let entityType = 'object';
       if (sunNameUpper.includes('PLAYER')) entityType = 'player';
       else if (sunNameUpper.includes('INIMIGO') || sunNameUpper.includes('ENEMY')) entityType = 'enemy';
