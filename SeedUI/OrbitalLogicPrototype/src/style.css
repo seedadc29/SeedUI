@@ -1015,3 +1015,144 @@ html, body {
   background: var(--seed-accent-red);
   color: #ffffff;
 }
+
+/* 3D Scenery Dimensions, Stretching & Rotation Controls in Inspector */
+.scenery-transform-box {
+  margin-top: 10px;
+  padding: 10px;
+  background: #141720;
+  border: 1px solid #232836;
+  border-radius: 6px;
+}
+
+.scenery-box-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #38bdf8;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.inspector-toggle-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.inspector-toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #94a3b8;
+  cursor: pointer;
+  user-select: none;
+}
+
+.inspector-toggle-label input[type="checkbox"] {
+  accent-color: #38bdf8;
+  cursor: pointer;
+}
+
+.dim-control-group, .rot-control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dim-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dim-axis-badge {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.dim-axis-badge.axis-x { background: #ef4444; }
+.dim-axis-badge.axis-y { background: #22c55e; }
+.dim-axis-badge.axis-z { background: #3b82f6; }
+
+.dim-label {
+  font-size: 10.5px;
+  color: #94a3b8;
+  width: 70px;
+  flex-shrink: 0;
+}
+
+.dim-slider {
+  flex: 1;
+  height: 4px;
+  background: #232836;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  accent-color: #38bdf8;
+}
+
+.dim-number {
+  width: 52px;
+  background: #1c202a;
+  border: 1px solid #2d3345;
+  border-radius: 4px;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: right;
+  padding: 2px 4px;
+}
+
+.dim-unit {
+  font-size: 10px;
+  color: #64748b;
+  width: 12px;
+  flex-shrink: 0;
+}
+
+.scenery-presets-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748b;
+  margin-top: 10px;
+  margin-bottom: 6px;
+}
+
+.scenery-presets-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+.btn-scenery-preset {
+  background: #1c202a;
+  border: 1px solid #2d3345;
+  border-radius: 4px;
+  color: #cbd5e1;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 4px 6px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s;
+}
+
+.btn-scenery-preset:hover {
+  background: #2d3345;
+  border-color: #38bdf8;
+  color: #ffffff;
+}

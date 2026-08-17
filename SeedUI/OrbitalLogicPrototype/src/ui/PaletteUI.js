@@ -6,6 +6,7 @@ export class PaletteUI {
     this.tacticalMap = tacticalMap;
 
     this.maximizedPane = null;
+    this.isProportionalScale = false;
 
     this.initAccordions();
     this.initDragAndDrop();
@@ -18,6 +19,11 @@ export class PaletteUI {
 
     // Initial 3D sync
     this.scene3D.syncWithOrbitalSuns(this.orbitalGraph.suns);
+
+    // Live update Inspector when user drags 3D Transform Gizmo
+    this.scene3D.onTransformChange = (ent) => {
+      this.syncInspectorWith3DTransform(ent);
+    };
   }
 
   initAccordions() {
@@ -122,56 +128,63 @@ export class PaletteUI {
     }
 
     titleEl.textContent = room.name;
-    typeEl.textContent = `SALA TÁTICA (${room.shape.toUpperCase()})`;
+    typeEl.textContent = `SALA TÁTICA (${room.shape ? room.shape.toUpperCase() : 'RETÂNGULO'})`;
 
     let html = `
       <div class="inspector-row">
-        <span class="inspector-label">Nome da Sala:</span>
+        <span class="inspector-label">Nome da Sala / Zona:</span>
         <input type="text" class="inspector-input" value="${room.name}" id="inp-room-name" />
       </div>
       <div class="inspector-row">
-        <span class="inspector-label">Forma Geométrica:</span>
-        <span style="color:#38bdf8;font-weight:700;">${room.shape.toUpperCase()}</span>
+        <span class="inspector-label">Posição X (Grid):</span>
+        <input type="number" step="0.5" class="inspector-input" value="${room.x}" id="inp-room-x" />
+      </div>
+      <div class="inspector-row">
+        <span class="inspector-label">Posição Z (Grid):</span>
+        <input type="number" step="0.5" class="inspector-input" value="${room.z}" id="inp-room-z" />
       </div>
     `;
 
     if (room.shape === 'circle') {
       html += `
         <div class="inspector-row">
-          <span class="inspector-label">Raio (m):</span>
-          <input type="number" step="0.5" class="inspector-input" value="${room.radius}" id="inp-room-radius" />
+          <span class="inspector-label">Raio (Metros):</span>
+          <input type="number" step="0.5" min="1.0" class="inspector-input" value="${room.radius || 3.5}" id="inp-room-rad" />
         </div>
       `;
     } else {
       html += `
         <div class="inspector-row">
           <span class="inspector-label">Largura (W):</span>
-          <input type="number" step="0.5" class="inspector-input" value="${room.w}" id="inp-room-w" />
+          <input type="number" step="0.5" min="1.5" class="inspector-input" value="${room.w || 6.0}" id="inp-room-w" />
         </div>
         <div class="inspector-row">
-          <span class="inspector-label">Altura (H):</span>
-          <input type="number" step="0.5" class="inspector-input" value="${room.h}" id="inp-room-h" />
+          <span class="inspector-label">Altura / Profundidade (H):</span>
+          <input type="number" step="0.5" min="1.5" class="inspector-input" value="${room.h || 5.0}" id="inp-room-h" />
         </div>
       `;
     }
 
     html += `
-      <div class="inspector-row">
-        <span class="inspector-label">Posição Grid:</span>
-        <span style="color:var(--seed-text-muted);font-size:11px;">X: ${room.x}m, Z: ${room.z}m</span>
-      </div>
-      <button class="btn-delete-node" id="btn-del-room-node" style="margin-top:10px;"><i class="ti ti-trash"></i> Excluir Sala</button>
+      <button class="btn-delete-node" id="btn-del-room-node" style="margin-top: 14px;"><i class="ti ti-trash"></i> Excluir Sala Tática</button>
     `;
 
     bodyEl.innerHTML = html;
 
-    // Attach listeners
     document.getElementById('inp-room-name')?.addEventListener('input', (e) => {
-      room.name = e.target.value;
+      room.name = e.target.value.trim() || 'Nova Sala';
     });
 
-    document.getElementById('inp-room-radius')?.addEventListener('input', (e) => {
-      room.radius = Math.max(1, parseFloat(e.target.value) || 1);
+    document.getElementById('inp-room-x')?.addEventListener('input', (e) => {
+      room.x = parseFloat(e.target.value) || 0;
+    });
+
+    document.getElementById('inp-room-z')?.addEventListener('input', (e) => {
+      room.z = parseFloat(e.target.value) || 0;
+    });
+
+    document.getElementById('inp-room-rad')?.addEventListener('input', (e) => {
+      room.radius = Math.max(1.0, parseFloat(e.target.value) || 1.0);
     });
 
     document.getElementById('inp-room-w')?.addEventListener('input', (e) => {
@@ -200,7 +213,7 @@ export class PaletteUI {
     if (!entity) {
       titleEl.textContent = 'Propriedades';
       typeEl.textContent = 'Nenhum';
-      bodyEl.innerHTML = `<div class="inspector-empty-hint">Clique em qualquer Sol, Planeta, Lua ou Sala Tática para editar em tempo real.</div>`;
+      bodyEl.innerHTML = `<div class="inspector-empty-hint">Clique em qualquer Objeto 3D, Sol, Planeta ou Sala Tática para editar em tempo real.</div>`;
       return;
     }
 
@@ -211,6 +224,22 @@ export class PaletteUI {
     const isTrigger = entity.name.toUpperCase().includes('GATILHO') || entity.name.toUpperCase().includes('TRIGGER');
 
     if (entity.type === 'sun') {
+      const ent3D = this.scene3D.entities.get(entity.id);
+      const baseW = ent3D?.baseSize?.x || 1.8;
+      const baseH = ent3D?.baseSize?.y || 2.2;
+      const baseD = ent3D?.baseSize?.z || 1.8;
+
+      const scaleX = ent3D?.mesh ? ent3D.mesh.scale.x : 1.0;
+      const scaleY = ent3D?.mesh ? ent3D.mesh.scale.y : 1.0;
+      const scaleZ = ent3D?.mesh ? ent3D.mesh.scale.z : 1.0;
+
+      const dimX = (baseW * scaleX).toFixed(1);
+      const dimY = (baseH * scaleY).toFixed(1);
+      const dimZ = (baseD * scaleZ).toFixed(1);
+
+      const rotYDeg = ent3D?.mesh ? Math.round((ent3D.mesh.rotation.y * 180) / Math.PI) % 360 : 0;
+      const normRotY = rotYDeg < 0 ? rotYDeg + 360 : rotYDeg;
+
       html += `
         <div class="inspector-row">
           <span class="inspector-label">Nome da Entidade:</span>
@@ -220,9 +249,79 @@ export class PaletteUI {
           <span class="inspector-label">Raio do Núcleo:</span>
           <input type="number" class="inspector-input" value="${entity.radius}" id="inp-sun-radius" />
         </div>
-        <div class="inspector-row">
-          <span class="inspector-label">Planetas Orbitando:</span>
-          <span style="color:#ff7700;font-weight:700;">${entity.planets.length}</span>
+
+        <!-- 3D Scenery Dimensions & Individual Axis Stretching -->
+        <div class="scenery-transform-box">
+          <div class="scenery-box-header">
+            <i class="ti ti-dimensions"></i> <span>DIMENSÕES 3D (ESTIQUER LADOS)</span>
+          </div>
+
+          <div class="inspector-toggle-row">
+            <label class="inspector-toggle-label" title="Trava a proporção para aumentar/diminuir uniformemente todos os lados">
+              <input type="checkbox" id="chk-proportional-scale" ${this.isProportionalScale ? 'checked' : ''} />
+              <span>🔗 Escala Proporcional Uniforme</span>
+            </label>
+          </div>
+
+          <div class="dim-control-group">
+            <div class="dim-row">
+              <span class="dim-axis-badge axis-x">X</span>
+              <span class="dim-label">Largura:</span>
+              <input type="range" min="0.2" max="25" step="0.2" value="${dimX}" class="dim-slider" id="slider-dim-x" />
+              <input type="number" min="0.1" step="0.1" value="${dimX}" class="dim-number" id="inp-dim-x" />
+              <span class="dim-unit">m</span>
+            </div>
+
+            <div class="dim-row">
+              <span class="dim-axis-badge axis-y">Y</span>
+              <span class="dim-label">Altura:</span>
+              <input type="range" min="0.2" max="15" step="0.2" value="${dimY}" class="dim-slider" id="slider-dim-y" />
+              <input type="number" min="0.1" step="0.1" value="${dimY}" class="dim-number" id="inp-dim-y" />
+              <span class="dim-unit">m</span>
+            </div>
+
+            <div class="dim-row">
+              <span class="dim-axis-badge axis-z">Z</span>
+              <span class="dim-label">Profundidade:</span>
+              <input type="range" min="0.2" max="25" step="0.2" value="${dimZ}" class="dim-slider" id="slider-dim-z" />
+              <input type="number" min="0.1" step="0.1" value="${dimZ}" class="dim-number" id="inp-dim-z" />
+              <span class="dim-unit">m</span>
+            </div>
+          </div>
+
+          <div class="scenery-presets-label">Presets Rápidos de Cenário:</div>
+          <div class="scenery-presets-grid">
+            <button class="btn-scenery-preset" data-px="6.0" data-py="3.0" data-pz="0.5" title="Parede padrão 6m de largura por 3m de altura">🧱 Parede 6m</button>
+            <button class="btn-scenery-preset" data-px="12.0" data-py="3.0" data-pz="0.5" title="Parede longa de 12m">🧱 Parede 12m</button>
+            <button class="btn-scenery-preset" data-px="8.0" data-py="0.4" data-pz="8.0" title="Chão / Plataforma larga 8x8m">🪜 Chão 8x8m</button>
+            <button class="btn-scenery-preset" data-px="2.0" data-py="2.0" data-pz="2.0" title="Cubo / Bloco 2x2x2m">📦 Cubo 2m</button>
+            <button class="btn-scenery-preset" data-px="1.2" data-py="6.0" data-pz="1.2" title="Coluna / Pilar vertical 6m">🚪 Pilar 6m</button>
+          </div>
+
+          <div class="scenery-box-header" style="margin-top: 10px;">
+            <i class="ti ti-rotate"></i> <span>ROTAÇÃO 3D</span>
+          </div>
+          <div class="rot-control-group">
+            <div class="dim-row">
+              <span class="dim-axis-badge axis-y">Y</span>
+              <span class="dim-label">Giro (Yaw):</span>
+              <input type="range" min="0" max="360" step="5" value="${normRotY}" class="dim-slider" id="slider-rot-y" />
+              <input type="number" min="0" max="360" step="1" value="${normRotY}" class="dim-number" id="inp-rot-y" />
+              <span class="dim-unit">°</span>
+            </div>
+          </div>
+
+          <div class="scenery-box-header" style="margin-top: 10px;">
+            <i class="ti ti-shield"></i> <span>COLISÃO & FÍSICA DE CENÁRIO</span>
+          </div>
+          <div class="inspector-row">
+            <span class="inspector-label">Comportamento:</span>
+            <select class="inspector-input" id="sel-collision-type">
+              <option value="solid" ${ent3D?.isSolid ? 'selected' : ''}>Sólido (Impede Passagem / Parede)</option>
+              <option value="trigger" ${ent3D?.type === 'trigger' ? 'selected' : ''}>Gatilho (Atravessável / Trigger)</option>
+              <option value="none" ${!ent3D?.hasCollision ? 'selected' : ''}>Desativada (Passável)</option>
+            </select>
+          </div>
         </div>
       `;
 
@@ -268,7 +367,6 @@ export class PaletteUI {
         </div>
       `;
 
-      // Render all 3D mechanical parameters (Moons) directly inside the planet inspector
       if (entity.moons && entity.moons.length > 0) {
         entity.moons.forEach((moon, idx) => {
           html += `
@@ -315,6 +413,107 @@ export class PaletteUI {
       });
     }
 
+    // Proportional Scale Toggle
+    const chkProp = document.getElementById('chk-proportional-scale');
+    if (chkProp) {
+      chkProp.addEventListener('change', (e) => {
+        this.isProportionalScale = e.target.checked;
+      });
+    }
+
+    // 3D Dimension Handlers (X, Y, Z)
+    const applyDimensions = (newX, newY, newZ) => {
+      this.scene3D.setEntityDimensions(entity.id, newX, newY, newZ);
+      const sliderX = document.getElementById('slider-dim-x');
+      const numX = document.getElementById('inp-dim-x');
+      const sliderY = document.getElementById('slider-dim-y');
+      const numY = document.getElementById('inp-dim-y');
+      const sliderZ = document.getElementById('slider-dim-z');
+      const numZ = document.getElementById('inp-dim-z');
+
+      if (sliderX && document.activeElement !== sliderX) sliderX.value = newX;
+      if (numX && document.activeElement !== numX) numX.value = newX;
+      if (sliderY && document.activeElement !== sliderY) sliderY.value = newY;
+      if (numY && document.activeElement !== numY) numY.value = newY;
+      if (sliderZ && document.activeElement !== sliderZ) sliderZ.value = newZ;
+      if (numZ && document.activeElement !== numZ) numZ.value = newZ;
+    };
+
+    const setupDimListeners = (axis, sliderId, numId) => {
+      const slider = document.getElementById(sliderId);
+      const num = document.getElementById(numId);
+
+      const onValChange = (val) => {
+        const ent3D = this.scene3D.entities.get(entity.id);
+        const curX = parseFloat(document.getElementById('inp-dim-x')?.value) || 1.8;
+        const curY = parseFloat(document.getElementById('inp-dim-y')?.value) || 2.2;
+        const curZ = parseFloat(document.getElementById('inp-dim-z')?.value) || 1.8;
+
+        if (this.isProportionalScale) {
+          let ratio = 1.0;
+          if (axis === 'x') ratio = val / Math.max(0.1, curX);
+          else if (axis === 'y') ratio = val / Math.max(0.1, curY);
+          else ratio = val / Math.max(0.1, curZ);
+
+          applyDimensions(
+            Math.round(curX * ratio * 10) / 10,
+            Math.round(curY * ratio * 10) / 10,
+            Math.round(curZ * ratio * 10) / 10
+          );
+        } else {
+          if (axis === 'x') applyDimensions(val, curY, curZ);
+          else if (axis === 'y') applyDimensions(curX, val, curZ);
+          else applyDimensions(curX, curY, val);
+        }
+      };
+
+      slider?.addEventListener('input', (e) => onValChange(parseFloat(e.target.value) || 0.1));
+      num?.addEventListener('input', (e) => onValChange(parseFloat(e.target.value) || 0.1));
+    };
+
+    setupDimListeners('x', 'slider-dim-x', 'inp-dim-x');
+    setupDimListeners('y', 'slider-dim-y', 'inp-dim-y');
+    setupDimListeners('z', 'slider-dim-z', 'inp-dim-z');
+
+    // Scenery Quick Presets
+    document.querySelectorAll('.btn-scenery-preset').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const px = parseFloat(btn.dataset.px) || 6.0;
+        const py = parseFloat(btn.dataset.py) || 3.0;
+        const pz = parseFloat(btn.dataset.pz) || 0.5;
+        applyDimensions(px, py, pz);
+      });
+    });
+
+    // 3D Rotation (Yaw)
+    const sliderRotY = document.getElementById('slider-rot-y');
+    const inpRotY = document.getElementById('inp-rot-y');
+    const onRotChange = (deg) => {
+      this.scene3D.setEntityRotation(entity.id, 0, deg, 0);
+      if (sliderRotY && document.activeElement !== sliderRotY) sliderRotY.value = deg;
+      if (inpRotY && document.activeElement !== inpRotY) inpRotY.value = deg;
+    };
+    sliderRotY?.addEventListener('input', (e) => onRotChange(parseFloat(e.target.value) || 0));
+    inpRotY?.addEventListener('input', (e) => onRotChange(parseFloat(e.target.value) || 0));
+
+    // Collision Type Change
+    document.getElementById('sel-collision-type')?.addEventListener('change', (e) => {
+      const ent3D = this.scene3D.entities.get(entity.id);
+      if (!ent3D) return;
+      if (e.target.value === 'solid') {
+        ent3D.hasCollision = true;
+        ent3D.isSolid = true;
+        ent3D.type = 'block';
+      } else if (e.target.value === 'trigger') {
+        ent3D.hasCollision = true;
+        ent3D.isSolid = false;
+        ent3D.type = 'trigger';
+      } else {
+        ent3D.hasCollision = false;
+        ent3D.isSolid = false;
+      }
+    });
+
     // Direct 3D Parameter edits on Planet
     document.querySelectorAll('.inp-planet-moon-param').forEach(input => {
       input.addEventListener('input', (e) => {
@@ -343,6 +542,40 @@ export class PaletteUI {
     }
   }
 
+  syncInspectorWith3DTransform(ent) {
+    if (!ent || !ent.mesh) return;
+
+    const baseW = ent.baseSize?.x || 1.8;
+    const baseH = ent.baseSize?.y || 2.2;
+    const baseD = ent.baseSize?.z || 1.8;
+
+    const dimX = (baseW * ent.mesh.scale.x).toFixed(1);
+    const dimY = (baseH * ent.mesh.scale.y).toFixed(1);
+    const dimZ = (baseD * ent.mesh.scale.z).toFixed(1);
+
+    const sliderX = document.getElementById('slider-dim-x');
+    const numX = document.getElementById('inp-dim-x');
+    const sliderY = document.getElementById('slider-dim-y');
+    const numY = document.getElementById('inp-dim-y');
+    const sliderZ = document.getElementById('slider-dim-z');
+    const numZ = document.getElementById('inp-dim-z');
+
+    if (sliderX && document.activeElement !== sliderX) sliderX.value = dimX;
+    if (numX && document.activeElement !== numX) numX.value = dimX;
+    if (sliderY && document.activeElement !== sliderY) sliderY.value = dimY;
+    if (numY && document.activeElement !== numY) numY.value = dimY;
+    if (sliderZ && document.activeElement !== sliderZ) sliderZ.value = dimZ;
+    if (numZ && document.activeElement !== numZ) numZ.value = dimZ;
+
+    const rotYDeg = Math.round((ent.mesh.rotation.y * 180) / Math.PI) % 360;
+    const normRotY = rotYDeg < 0 ? rotYDeg + 360 : rotYDeg;
+
+    const sliderRotY = document.getElementById('slider-rot-y');
+    const inpRotY = document.getElementById('inp-rot-y');
+    if (sliderRotY && document.activeElement !== sliderRotY) sliderRotY.value = normRotY;
+    if (inpRotY && document.activeElement !== inpRotY) inpRotY.value = normRotY;
+  }
+
   initPlayMode() {
     const playBtn = document.getElementById('btn-toggle-play');
     const playIcon = document.getElementById('play-btn-icon');
@@ -353,9 +586,8 @@ export class PaletteUI {
 
     const toggle = () => {
       isPlaying = !isPlaying;
-      this.scene3D.setPlayMode(isPlaying);
-
       if (isPlaying) {
+        this.scene3D.startPlay();
         playBtn.classList.add('is-playing');
         playIcon.className = 'ti ti-player-pause';
         playLabel.textContent = 'Pausar (Enter)';
@@ -365,6 +597,7 @@ export class PaletteUI {
           chip3D.style.color = '#34c759';
         }
       } else {
+        this.scene3D.stopPlay();
         playBtn.classList.remove('is-playing');
         playIcon.className = 'ti ti-player-play';
         playLabel.textContent = 'Executar (Enter)';
@@ -379,13 +612,13 @@ export class PaletteUI {
     if (playBtn) {
       playBtn.addEventListener('click', () => {
         toggle();
-        playBtn.blur(); // Remove HTML button focus so Space key only triggers 3D Jump!
+        playBtn.blur();
       });
     }
 
     // Enter / F5 Shortcut for Play Mode (Ignored when typing in inputs)
     window.addEventListener('keydown', (e) => {
-      if (e.target.tagName === 'INPUT') return;
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
       if (e.key === 'Enter' || e.key === 'F5') {
         e.preventDefault();
         toggle();
@@ -458,184 +691,91 @@ export class PaletteUI {
     });
   }
 
-  // --- Maximize / Solo Windows ---
+  // --- Panes Maximize & Expand ---
   initMaximizeControls() {
-    const pane3D = document.getElementById('pane-3d');
-    const paneOrbital = document.getElementById('pane-orbital');
-    const paneCatalog = document.getElementById('pane-catalog');
-    const splitterLeft = document.getElementById('splitter-left');
-    const splitterRight = document.getElementById('splitter-right');
+    const setupMax = (btnId, paneId) => {
+      const btn = document.getElementById(btnId);
+      const pane = document.getElementById(paneId);
+      if (!btn || !pane) return;
 
-    const resetLayout = () => {
-      this.maximizedPane = null;
-      [pane3D, paneOrbital, paneCatalog].forEach(p => {
-        p.classList.remove('is-maximized', 'is-hidden');
-        p.style.flex = '';
-        p.style.width = '';
-      });
-      splitterLeft.style.display = '';
-      splitterRight.style.display = '';
-      document.getElementById('icon-max-3d').className = 'ti ti-maximize';
-      document.getElementById('icon-max-orbital').className = 'ti ti-maximize';
-      document.getElementById('icon-max-catalog').className = 'ti ti-maximize';
-      setTimeout(() => {
-        this.scene3D.onResize();
-        this.orbitalGraph.resize();
-      }, 50);
-    };
+      btn.addEventListener('click', () => {
+        const isMax = pane.classList.contains('is-maximized');
+        document.querySelectorAll('.seed-pane').forEach((p) => p.classList.remove('is-maximized'));
 
-    const toggleMaximize = (targetPane, iconId) => {
-      if (this.maximizedPane === targetPane) {
-        resetLayout();
-        return;
-      }
-
-      this.maximizedPane = targetPane;
-      const allPanes = [pane3D, paneOrbital, paneCatalog];
-      allPanes.forEach(p => {
-        if (p === targetPane) {
-          p.classList.add('is-maximized');
-          p.classList.remove('is-hidden');
+        if (!isMax) {
+          pane.classList.add('is-maximized');
+          this.maximizedPane = pane;
+          btn.querySelector('i').className = 'ti ti-minimize';
         } else {
-          p.classList.remove('is-maximized');
-          p.classList.add('is-hidden');
+          this.maximizedPane = null;
+          btn.querySelector('i').className = 'ti ti-maximize';
         }
+
+        setTimeout(() => {
+          this.scene3D.onResize();
+          this.orbitalGraph.resize();
+        }, 50);
       });
-
-      splitterLeft.style.display = 'none';
-      splitterRight.style.display = 'none';
-
-      document.getElementById('icon-max-3d').className = 'ti ti-maximize';
-      document.getElementById('icon-max-orbital').className = 'ti ti-maximize';
-      document.getElementById('icon-max-catalog').className = 'ti ti-maximize';
-      document.getElementById(iconId).className = 'ti ti-minimize';
-
-      setTimeout(() => {
-        this.scene3D.onResize();
-        this.orbitalGraph.resize();
-      }, 50);
     };
 
-    document.getElementById('btn-max-3d')?.addEventListener('click', () => toggleMaximize(pane3D, 'icon-max-3d'));
-    document.getElementById('btn-max-orbital')?.addEventListener('click', () => toggleMaximize(paneOrbital, 'icon-max-orbital'));
-    document.getElementById('btn-max-catalog')?.addEventListener('click', () => toggleMaximize(paneCatalog, 'icon-max-catalog'));
-    document.getElementById('btn-reset-layout')?.addEventListener('click', resetLayout);
+    setupMax('btn-max-3d', 'pane-3d');
+    setupMax('btn-max-orbital', 'pane-orbital');
+    setupMax('btn-max-catalog', 'pane-catalog');
+    setupMax('btn-max-tactical', 'pane-tactical');
   }
 
-  // --- Toggle Planet Rotation Animation ---
+  // --- Animation Live Toggle ---
   initAnimationToggle() {
-    const btnAnim = document.getElementById('btn-toggle-orbit-anim');
-    const iconAnim = document.getElementById('icon-orbit-anim');
-    const labelAnim = document.getElementById('label-orbit-anim');
-
-    const btnTopbar = document.getElementById('btn-toggle-orbit-topbar');
-    const iconTopbar = document.getElementById('icon-orbit-topbar');
-    const labelTopbar = document.getElementById('label-orbit-topbar');
-
-    const updateVisuals = () => {
-      const active = this.orbitalGraph.isOrbitAnimationActive;
-      if (btnAnim) {
-        if (active) {
-          btnAnim.classList.add('active');
-          if (iconAnim) iconAnim.className = 'ti ti-rotate';
-          if (labelAnim) labelAnim.textContent = 'Girar Órbitas';
-        } else {
-          btnAnim.classList.remove('active');
-          if (iconAnim) iconAnim.className = 'ti ti-player-pause';
-          if (labelAnim) labelAnim.textContent = 'Pausado';
-        }
-      }
-
-      if (btnTopbar) {
-        if (active) {
-          btnTopbar.classList.remove('is-paused');
-          btnTopbar.classList.add('is-rotating');
-          if (iconTopbar) iconTopbar.className = 'ti ti-rotate';
-          if (labelTopbar) labelTopbar.textContent = 'Girar Órbitas (Ativo)';
-        } else {
-          btnTopbar.classList.add('is-paused');
-          btnTopbar.classList.remove('is-rotating');
-          if (iconTopbar) iconTopbar.className = 'ti ti-player-pause';
-          if (labelTopbar) labelTopbar.textContent = 'Rotação Pausada';
-        }
-      }
-    };
-
-    const toggle = () => {
-      this.orbitalGraph.isOrbitAnimationActive = !this.orbitalGraph.isOrbitAnimationActive;
-      updateVisuals();
-    };
-
-    if (btnAnim) btnAnim.addEventListener('click', toggle);
-    if (btnTopbar) btnTopbar.addEventListener('click', toggle);
+    const animToggle = document.getElementById('chk-enable-anim');
+    if (animToggle) {
+      animToggle.addEventListener('change', (e) => {
+        const isEnabled = e.target.checked;
+        this.orbitalGraph.enableAnimations = isEnabled;
+      });
+    }
   }
 
-  // --- Undo / Redo History Support ---
+  // --- History (Undo / Redo) Keyboard Hooks ---
   initHistory() {
-    const btnUndo = document.getElementById('btn-undo');
-    const btnRedo = document.getElementById('btn-redo');
-
-    const handleUndo = () => {
-      if (this.historyManager) {
-        const restored = this.historyManager.undo(this.orbitalGraph.suns);
-        if (restored) {
-          this.orbitalGraph.suns = restored;
-          this.orbitalGraph.selectedEntity = null;
-          this.renderInspector(null);
-          this.updateStatsCounters();
-          this.scene3D.syncWithOrbitalSuns(restored);
-        }
-      }
-    };
-
-    const handleRedo = () => {
-      if (this.historyManager) {
-        const restored = this.historyManager.redo(this.orbitalGraph.suns);
-        if (restored) {
-          this.orbitalGraph.suns = restored;
-          this.orbitalGraph.selectedEntity = null;
-          this.renderInspector(null);
-          this.updateStatsCounters();
-          this.scene3D.syncWithOrbitalSuns(restored);
-        }
-      }
-    };
-
-    if (btnUndo) btnUndo.addEventListener('click', handleUndo);
-    if (btnRedo) btnRedo.addEventListener('click', handleRedo);
-
     window.addEventListener('keydown', (e) => {
-      if (e.target.tagName === 'INPUT') return;
-      if (e.ctrlKey || e.metaKey) {
-        if (e.key === 'z' || e.key === 'Z') {
-          e.preventDefault();
-          if (e.shiftKey) handleRedo();
-          else handleUndo();
-        } else if (e.key === 'y' || e.key === 'Y') {
-          e.preventDefault();
-          handleRedo();
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ' && !e.shiftKey) {
+        e.preventDefault();
+        const prev = this.historyManager.undo();
+        if (prev) {
+          this.orbitalGraph.loadState(prev);
+          this.scene3D.syncWithOrbitalSuns(this.orbitalGraph.suns);
+        }
+      } else if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyY' || (e.code === 'KeyZ' && e.shiftKey))) {
+        e.preventDefault();
+        const next = this.historyManager.redo();
+        if (next) {
+          this.orbitalGraph.loadState(next);
+          this.scene3D.syncWithOrbitalSuns(this.orbitalGraph.suns);
         }
       }
     });
   }
 
   updateStatsCounters() {
-    const statSuns = document.getElementById('stat-suns');
-    const statPlanets = document.getElementById('stat-planets');
-    const statMoons = document.getElementById('stat-moons');
+    const sunCount = this.orbitalGraph.suns.length;
+    let planetCount = 0;
+    let moonCount = 0;
 
-    let totalPlanets = 0;
-    let totalMoons = 0;
-
-    this.orbitalGraph.suns.forEach(s => {
-      totalPlanets += s.planets.length;
-      s.planets.forEach(p => {
-        if (p.moons) totalMoons += p.moons.length;
+    this.orbitalGraph.suns.forEach((s) => {
+      planetCount += s.planets.length;
+      s.planets.forEach((p) => {
+        if (p.moons) moonCount += p.moons.length;
       });
     });
 
-    if (statSuns) statSuns.textContent = `${this.orbitalGraph.suns.length} Sistemas`;
-    if (statPlanets) statPlanets.textContent = `${totalPlanets} Planetas`;
-    if (statMoons) statMoons.textContent = `${totalMoons} Luas`;
+    const statSuns = document.getElementById('stat-active-suns');
+    const statPlanets = document.getElementById('stat-active-planets');
+    const statMoons = document.getElementById('stat-active-moons');
+
+    if (statSuns) statSuns.textContent = sunCount;
+    if (statPlanets) statPlanets.textContent = planetCount;
+    if (statMoons) statMoons.textContent = moonCount;
   }
 }

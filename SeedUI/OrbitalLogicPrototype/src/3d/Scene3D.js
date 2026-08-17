@@ -5,46 +5,54 @@ import { TransformControls } from 'three/examples/jsm/controls/TransformControls
 export class Scene3D {
   constructor(canvas) {
     this.canvas = canvas;
-    this.isPlaying = false;
-
-    // Keyboard state
-    this.keys = {
-      w: false, a: false, s: false, d: false,
-      space: false, shift: false
-    };
-
-    // Dynamic ECS Entities: Map(sunId -> EntityData)
-    this.entities = new Map();
-    this.selectedEntity = null;
-    this.onCollisionEvent = null;
-    this.onEntitySelected = null;
-
-    // Raycaster for 3D selection
+    this.scene = null;
+    this.perspectiveCamera = null;
+    this.orthoCamera = null;
+    this.activeCamera = null;
+    this.renderer = null;
+    this.controls = null;
+    this.transformControls = null;
+    this.grid = null;
+    this.selectionBoxHelper = null;
     this.raycaster = new THREE.Raycaster();
     this.mouse = new THREE.Vector2();
 
-    this.initScene();
+    // Game / Sim state
+    this.entities = new Map(); // sunId -> { sunId, sunName, mesh, shape, type, ... }
+    this.selectedEntity = null;
+    this.isPlaying = false;
+    this.isPaused = false;
+    this.isOrthographic = false;
+
+    // Input state during play
+    this.keys = { w: false, a: false, s: false, d: false, space: false, shift: false };
+
+    // Callbacks
+    this.onEntitySelected = null;
+    this.onTransformChange = null;
+    this.onCollisionEvent = null;
+
+    this.init();
     this.initControls();
     this.initTransformControls();
     this.initShortcuts();
-    this.initInputs();
     this.animate();
   }
 
-  initScene() {
+  init() {
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x181818);
+    this.scene.background = new THREE.Color(0x12141a);
 
-    const rect = this.canvas.getBoundingClientRect();
-    const aspect = (rect.width || 400) / (rect.height || 400);
+    const rect = this.canvas.parentElement.getBoundingClientRect();
+    const aspect = rect.width / rect.height;
 
-    // Perspective & Orthographic Cameras
-    this.cameraPersp = new THREE.PerspectiveCamera(45, aspect, 0.1, 1000);
-    this.cameraPersp.position.set(8, 7, 10);
-    this.cameraPersp.lookAt(0, 0.8, 0);
+    // 1. Perspective Camera
+    this.perspectiveCamera = new THREE.PerspectiveCamera(45, aspect, 0.1, 1000);
+    this.perspectiveCamera.position.set(12, 10, 16);
 
-    const frustumSize = 14;
-    this.cameraOrtho = new THREE.OrthographicCamera(
+    // 2. Orthographic Camera
+    const frustumSize = 18;
+    this.orthoCamera = new THREE.OrthographicCamera(
       (-frustumSize * aspect) / 2,
       (frustumSize * aspect) / 2,
       frustumSize / 2,
@@ -52,31 +60,34 @@ export class Scene3D {
       0.1,
       1000
     );
-    this.cameraOrtho.position.copy(this.cameraPersp.position);
-    this.cameraOrtho.lookAt(0, 0.8, 0);
+    this.orthoCamera.position.set(12, 10, 16);
 
-    this.activeCamera = this.cameraPersp;
-    this.isOrthographic = false;
+    this.activeCamera = this.perspectiveCamera;
 
+    // Renderer
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true });
-    this.renderer.setSize(rect.width || 400, rect.height || 400);
+    this.renderer.setSize(rect.width, rect.height);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-    // Lighting
-    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x222222, 0.6);
-    this.scene.add(hemiLight);
+    // Lighting (Cyberpunk Blueprint / Studio look)
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+    this.scene.add(ambientLight);
 
     const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
-    dirLight.position.set(6, 12, 8);
+    dirLight.position.set(20, 30, 20);
     dirLight.castShadow = true;
     dirLight.shadow.mapSize.width = 1024;
     dirLight.shadow.mapSize.height = 1024;
     this.scene.add(dirLight);
 
-    // Coordinate Ground Grid
-    this.grid = new THREE.GridHelper(30, 30, 0x444444, 0x242424);
+    const rimLight = new THREE.DirectionalLight(0x38bdf8, 0.4);
+    rimLight.position.set(-15, 10, -15);
+    this.scene.add(rimLight);
+
+    // Floor Grid
+    this.grid = new THREE.GridHelper(60, 60, 0x38bdf8, 0x222631);
     this.grid.position.y = 0.005;
     this.scene.add(this.grid);
 
@@ -153,8 +164,21 @@ export class Scene3D {
     this.transformControls.addEventListener('dragging-changed', (e) => {
       this.controls.enabled = !e.value;
       if (!e.value && this.selectedEntity) {
-        // Update initialPos when dragging ends
         this.selectedEntity.initialPos.copy(this.selectedEntity.mesh.position);
+        if (this.selectedEntity.scale) {
+          this.selectedEntity.scale.x = this.selectedEntity.mesh.scale.x;
+          this.selectedEntity.scale.y = this.selectedEntity.mesh.scale.y;
+          this.selectedEntity.scale.z = this.selectedEntity.mesh.scale.z;
+        }
+      }
+    });
+
+    this.transformControls.addEventListener('change', () => {
+      if (this.selectedEntity) {
+        if (this.selectionBoxHelper) this.selectionBoxHelper.update();
+        if (this.onTransformChange) {
+          this.onTransformChange(this.selectedEntity);
+        }
       }
     });
 
@@ -205,10 +229,76 @@ export class Scene3D {
     if (ent) this.selectEntity(ent);
   }
 
-  // --- Complete Blender Viewport Shortcuts ---
+  // --- Dimension, Scale and Rotation Modifiers for Scenery / Collision Objects ---
+  setEntityDimensions(sunId, widthX, heightY, depthZ) {
+    const ent = this.entities.get(sunId);
+    if (!ent || !ent.mesh) return;
+
+    const baseW = ent.baseSize?.x || 1.8;
+    const baseH = ent.baseSize?.y || 2.2;
+    const baseD = ent.baseSize?.z || 1.8;
+
+    const sx = Math.max(0.05, widthX / baseW);
+    const sy = Math.max(0.05, heightY / baseH);
+    const sz = Math.max(0.05, depthZ / baseD);
+
+    ent.mesh.scale.set(sx, sy, sz);
+    ent.scale = { x: sx, y: sy, z: sz };
+    ent.dimensions = { x: widthX, y: heightY, z: depthZ };
+
+    if (this.selectionBoxHelper) this.selectionBoxHelper.update();
+    if (this.onTransformChange) this.onTransformChange(ent);
+  }
+
+  setEntityScale(sunId, sx, sy, sz) {
+    const ent = this.entities.get(sunId);
+    if (!ent || !ent.mesh) return;
+
+    ent.mesh.scale.set(Math.max(0.05, sx), Math.max(0.05, sy), Math.max(0.05, sz));
+    ent.scale = { x: ent.mesh.scale.x, y: ent.mesh.scale.y, z: ent.mesh.scale.z };
+
+    const baseW = ent.baseSize?.x || 1.8;
+    const baseH = ent.baseSize?.y || 2.2;
+    const baseD = ent.baseSize?.z || 1.8;
+    ent.dimensions = {
+      x: baseW * ent.scale.x,
+      y: baseH * ent.scale.y,
+      z: baseD * ent.scale.z
+    };
+
+    if (this.selectionBoxHelper) this.selectionBoxHelper.update();
+    if (this.onTransformChange) this.onTransformChange(ent);
+  }
+
+  setEntityRotation(sunId, rxDeg, ryDeg, rzDeg) {
+    const ent = this.entities.get(sunId);
+    if (!ent || !ent.mesh) return;
+
+    ent.mesh.rotation.set(
+      (rxDeg * Math.PI) / 180,
+      (ryDeg * Math.PI) / 180,
+      (rzDeg * Math.PI) / 180
+    );
+
+    if (this.selectionBoxHelper) this.selectionBoxHelper.update();
+    if (this.onTransformChange) this.onTransformChange(ent);
+  }
+
+  setEntityPosition(sunId, px, py, pz) {
+    const ent = this.entities.get(sunId);
+    if (!ent || !ent.mesh) return;
+
+    ent.mesh.position.set(px, py, pz);
+    ent.initialPos.copy(ent.mesh.position);
+
+    if (this.selectionBoxHelper) this.selectionBoxHelper.update();
+    if (this.onTransformChange) this.onTransformChange(ent);
+  }
+
+  // --- Complete Viewport Shortcuts ---
   initShortcuts() {
     window.addEventListener('keydown', (e) => {
-      if (e.target.tagName === 'INPUT') return;
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
       if (this.isPlaying) return;
 
       // Transform Gizmo shortcuts
@@ -248,16 +338,16 @@ export class Scene3D {
 
   setCameraView(viewName) {
     const target = this.controls.target.clone();
-    const dist = 14;
-    let newPos = new THREE.Vector3();
+    const dist = this.activeCamera.position.distanceTo(target);
+    const newPos = target.clone();
 
     switch (viewName) {
-      case 'front': newPos.set(target.x, target.y, target.z + dist); break;
-      case 'back': newPos.set(target.x, target.y, target.z - dist); break;
-      case 'right': newPos.set(target.x + dist, target.y, target.z); break;
-      case 'left': newPos.set(target.x - dist, target.y, target.z); break;
-      case 'top': newPos.set(target.x, target.y + dist, target.z + 0.001); break;
-      case 'bottom': newPos.set(target.x, target.y - dist, target.z + 0.001); break;
+      case 'front': newPos.z += dist; break;
+      case 'back': newPos.z -= dist; break;
+      case 'right': newPos.x += dist; break;
+      case 'left': newPos.x -= dist; break;
+      case 'top': newPos.y += dist; break;
+      case 'bottom': newPos.y -= dist; break;
     }
 
     this.animateCameraTo(newPos, target);
@@ -266,7 +356,7 @@ export class Scene3D {
   toggleProjection() {
     this.isOrthographic = !this.isOrthographic;
     const oldCam = this.activeCamera;
-    const newCam = this.isOrthographic ? this.cameraOrtho : this.cameraPersp;
+    const newCam = this.isOrthographic ? this.orthoCamera : this.perspectiveCamera;
 
     newCam.position.copy(oldCam.position);
     newCam.quaternion.copy(oldCam.quaternion);
@@ -347,7 +437,6 @@ export class Scene3D {
       else if (sunNameUpper.includes('PLATAFORMA') || sunNameUpper.includes('PLATFORM')) entityType = 'platform';
 
       let modelShape = null;
-      let hasGroundPlane = false;
       let hasMove = false;
       let walkSpeed = 0;
       let hasRun = false;
@@ -373,7 +462,6 @@ export class Scene3D {
         else if (pName.includes('triangulo') || pName.includes('cone')) modelShape = 'cone';
         else if (pName.includes('plano') || pName.includes('plane') || pName.includes('chao')) {
           modelShape = 'plane';
-          hasGroundPlane = true;
         }
 
         if (pName === 'andar') {
@@ -423,7 +511,7 @@ export class Scene3D {
       let ent = this.entities.get(sun.id);
 
       if (!ent) {
-        const mesh = this.createMeshForShape(modelShape, entityType, index);
+        const { mesh, baseSize } = this.createMeshForShape(modelShape, entityType, index);
         mesh.name = sun.name;
         this.scene.add(mesh);
 
@@ -433,6 +521,9 @@ export class Scene3D {
           mesh,
           shape: modelShape,
           type: entityType,
+          baseSize,
+          scale: { x: 1, y: 1, z: 1 },
+          dimensions: { x: baseSize.x, y: baseSize.y, z: baseSize.z },
           hasMove, walkSpeed,
           hasRun, runMultiplier,
           hasJump, jumpForce,
@@ -447,21 +538,29 @@ export class Scene3D {
         };
         this.entities.set(sun.id, ent);
 
-        // Auto select player by default
         if (entityType === 'player' && !this.selectedEntity) {
           this.selectEntity(ent);
         }
       } else {
         if (ent.shape !== modelShape || ent.type !== entityType) {
+          const oldPos = ent.mesh.position.clone();
+          const oldRot = ent.mesh.rotation.clone();
+          const oldScale = ent.mesh.scale.clone();
+
           this.scene.remove(ent.mesh);
           ent.mesh.geometry?.dispose();
-          const newMesh = this.createMeshForShape(modelShape, entityType, index);
-          newMesh.position.copy(ent.mesh.position);
-          newMesh.name = sun.name;
-          this.scene.add(newMesh);
-          ent.mesh = newMesh;
+
+          const { mesh, baseSize } = this.createMeshForShape(modelShape, entityType, index);
+          mesh.position.copy(oldPos);
+          mesh.rotation.copy(oldRot);
+          mesh.scale.copy(oldScale);
+          mesh.name = sun.name;
+          this.scene.add(mesh);
+
+          ent.mesh = mesh;
           ent.shape = modelShape;
-          if (this.selectedEntity === ent) this.transformControls.attach(newMesh);
+          ent.baseSize = baseSize;
+          if (this.selectedEntity === ent) this.transformControls.attach(mesh);
         }
 
         ent.sunName = sun.name;
@@ -488,10 +587,11 @@ export class Scene3D {
   createMeshForShape(shape, type, index) {
     let geo;
     let mat;
-    let yPos = 1.1;
+    let baseSize = { x: 1.8, y: 2.2, z: 1.8 };
 
     if (type === 'platform' || (shape === 'plane' && type !== 'player')) {
       if (type === 'platform') {
+        baseSize = { x: 5.0, y: 0.4, z: 5.0 };
         geo = new THREE.BoxGeometry(5.0, 0.4, 5.0);
         mat = new THREE.MeshStandardMaterial({ color: 0x1e3a5f, roughness: 0.4, metalness: 0.3 });
         const mesh = new THREE.Mesh(geo, mat);
@@ -501,28 +601,29 @@ export class Scene3D {
         const edgeGeo = new THREE.EdgesGeometry(geo);
         const edgeMat = new THREE.LineBasicMaterial({ color: 0x38bdf8, linewidth: 2 });
         mesh.add(new THREE.LineSegments(edgeGeo, edgeMat));
-        return mesh;
+        return { mesh, baseSize };
       }
+      baseSize = { x: 28, y: 0.1, z: 28 };
       geo = new THREE.PlaneGeometry(28, 28);
       mat = new THREE.MeshStandardMaterial({ color: 0x1c1c20, roughness: 0.85, metalness: 0.1 });
       const mesh = new THREE.Mesh(geo, mat);
       mesh.rotation.x = -Math.PI / 2;
       mesh.receiveShadow = true;
-      return mesh;
+      return { mesh, baseSize };
     }
 
     if (shape === 'sphere') {
+      baseSize = { x: 2.0, y: 2.0, z: 2.0 };
       geo = new THREE.SphereGeometry(1.0, 32, 24);
-      yPos = 1.0;
     } else if (shape === 'cylinder') {
+      baseSize = { x: 1.6, y: 2.0, z: 1.6 };
       geo = new THREE.CylinderGeometry(0.8, 0.8, 2.0, 24);
-      yPos = 1.0;
     } else if (shape === 'cone') {
+      baseSize = { x: 2.0, y: 2.2, z: 2.0 };
       geo = new THREE.ConeGeometry(1.0, 2.2, 24);
-      yPos = 1.1;
     } else {
+      baseSize = { x: 1.8, y: 2.2, z: 1.8 };
       geo = new THREE.BoxGeometry(1.8, 2.2, 1.8);
-      yPos = 1.1;
     }
 
     let color = 0x1f1f22;
@@ -561,67 +662,15 @@ export class Scene3D {
     });
 
     const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(type === 'player' ? 0 : (index * 3.5 - 3.5), yPos, type === 'player' ? 0 : -3.0);
-    mesh.castShadow = !isTransparent;
+    mesh.position.set(index * 3.5 - 3.5, 1.1, (index % 2 === 0 ? -1 : 1) * 2.5);
+    mesh.castShadow = true;
     mesh.receiveShadow = true;
 
     const edgeGeo = new THREE.EdgesGeometry(geo);
     const edgeMat = new THREE.LineBasicMaterial({ color: edgeColor, linewidth: 2 });
-    const edgeLine = new THREE.LineSegments(edgeGeo, edgeMat);
-    mesh.add(edgeLine);
+    mesh.add(new THREE.LineSegments(edgeGeo, edgeMat));
 
-    return mesh;
-  }
-
-  initInputs() {
-    window.addEventListener('keydown', (e) => {
-      if (!this.isPlaying) return;
-      const k = e.key.toLowerCase();
-      if (k === 'w' || k === 'arrowup') this.keys.w = true;
-      if (k === 's' || k === 'arrowdown') this.keys.s = true;
-      if (k === 'a' || k === 'arrowleft') this.keys.a = true;
-      if (k === 'd' || k === 'arrowright') this.keys.d = true;
-      if (k === ' ' || e.code === 'Space') {
-        this.keys.space = true;
-        const playerEnt = this.getPlayerEntity();
-        if (playerEnt && playerEnt.hasJump && playerEnt.isGrounded) {
-          playerEnt.velocity.y = playerEnt.jumpForce;
-          playerEnt.isGrounded = false;
-        }
-      }
-      if (e.shiftKey) this.keys.shift = true;
-    });
-
-    window.addEventListener('keyup', (e) => {
-      const k = e.key.toLowerCase();
-      if (k === 'w' || k === 'arrowup') this.keys.w = false;
-      if (k === 's' || k === 'arrowdown') this.keys.s = false;
-      if (k === 'a' || k === 'arrowleft') this.keys.a = false;
-      if (k === 'd' || k === 'arrowright') this.keys.d = false;
-      if (k === ' ' || e.code === 'Space') this.keys.space = false;
-      if (!e.shiftKey) this.keys.shift = false;
-    });
-  }
-
-  setPlayMode(playing) {
-    this.isPlaying = playing;
-    if (this.transformControls) {
-      if (playing) this.transformControls.detach();
-      else if (this.selectedEntity && this.selectedEntity.mesh) this.transformControls.attach(this.selectedEntity.mesh);
-    }
-
-    if (!playing) {
-      this.entities.forEach(ent => {
-        if (ent.mesh && ent.initialPos) {
-          ent.mesh.position.copy(ent.initialPos);
-          ent.mesh.rotation.set(0, 0, 0);
-          ent.mesh.scale.set(1, 1, 1);
-          ent.velocity.set(0, 0, 0);
-          ent.isGrounded = true;
-        }
-      });
-      this.controls.enabled = true;
-    }
+    return { mesh, baseSize };
   }
 
   getPlayerEntity() {
@@ -631,21 +680,97 @@ export class Scene3D {
     return null;
   }
 
+  // --- Play Simulation & Live Game Loop ---
+  startPlay() {
+    this.isPlaying = true;
+    this.isPaused = false;
+    this.selectEntity(null);
+
+    this.entities.forEach(ent => {
+      if (ent.mesh) ent.initialPos.copy(ent.mesh.position);
+      ent.velocity.set(0, 0, 0);
+      ent.isGrounded = true;
+    });
+
+    this.initKeyboardControls();
+  }
+
+  stopPlay() {
+    this.isPlaying = false;
+    this.isPaused = false;
+
+    this.entities.forEach(ent => {
+      if (ent.mesh) {
+        ent.mesh.position.copy(ent.initialPos);
+        ent.velocity.set(0, 0, 0);
+        if (ent.scale) {
+          ent.mesh.scale.set(ent.scale.x, ent.scale.y, ent.scale.z);
+        }
+      }
+    });
+
+    this.removeKeyboardControls();
+    this.controls.enabled = true;
+  }
+
+  pausePlay() {
+    this.isPaused = true;
+  }
+
+  resumePlay() {
+    this.isPaused = false;
+  }
+
+  initKeyboardControls() {
+    this.keydownHandler = (e) => {
+      if (e.code === 'KeyW' || e.code === 'ArrowUp') this.keys.w = true;
+      if (e.code === 'KeyS' || e.code === 'ArrowDown') this.keys.s = true;
+      if (e.code === 'KeyA' || e.code === 'ArrowLeft') this.keys.a = true;
+      if (e.code === 'KeyD' || e.code === 'ArrowRight') this.keys.d = true;
+      if (e.code === 'Space') {
+        this.keys.space = true;
+        const p = this.getPlayerEntity();
+        if (p && p.hasJump && p.isGrounded) {
+          p.velocity.y = p.jumpForce || 7.5;
+          p.isGrounded = false;
+        }
+      }
+      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.keys.shift = true;
+    };
+
+    this.keyupHandler = (e) => {
+      if (e.code === 'KeyW' || e.code === 'ArrowUp') this.keys.w = false;
+      if (e.code === 'KeyS' || e.code === 'ArrowDown') this.keys.s = false;
+      if (e.code === 'KeyA' || e.code === 'ArrowLeft') this.keys.a = false;
+      if (e.code === 'KeyD' || e.code === 'ArrowRight') this.keys.d = false;
+      if (e.code === 'Space') this.keys.space = false;
+      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.keys.shift = false;
+    };
+
+    window.addEventListener('keydown', this.keydownHandler);
+    window.addEventListener('keyup', this.keyupHandler);
+  }
+
+  removeKeyboardControls() {
+    if (this.keydownHandler) window.removeEventListener('keydown', this.keydownHandler);
+    if (this.keyupHandler) window.removeEventListener('keyup', this.keyupHandler);
+    this.keys = { w: false, a: false, s: false, d: false, space: false, shift: false };
+  }
+
   onResize() {
     if (!this.canvas.parentElement) return;
     const rect = this.canvas.parentElement.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) return;
     const aspect = rect.width / rect.height;
 
-    this.cameraPersp.aspect = aspect;
-    this.cameraPersp.updateProjectionMatrix();
+    this.perspectiveCamera.aspect = aspect;
+    this.perspectiveCamera.updateProjectionMatrix();
 
-    const frustumSize = 14;
-    this.cameraOrtho.left = (-frustumSize * aspect) / 2;
-    this.cameraOrtho.right = (frustumSize * aspect) / 2;
-    this.cameraOrtho.top = frustumSize / 2;
-    this.cameraOrtho.bottom = -frustumSize / 2;
-    this.cameraOrtho.updateProjectionMatrix();
+    const frustumSize = 18;
+    this.orthoCamera.left = (-frustumSize * aspect) / 2;
+    this.orthoCamera.right = (frustumSize * aspect) / 2;
+    this.orthoCamera.top = frustumSize / 2;
+    this.orthoCamera.bottom = -frustumSize / 2;
+    this.orthoCamera.updateProjectionMatrix();
 
     this.renderer.setSize(rect.width, rect.height);
   }
@@ -653,7 +778,7 @@ export class Scene3D {
   update(delta) {
     this.controls.update();
 
-    if (!this.isPlaying) return;
+    if (!this.isPlaying || this.isPaused) return;
 
     const playerEnt = this.getPlayerEntity();
 
@@ -729,19 +854,21 @@ export class Scene3D {
       ent.mesh.position.x += ent.velocity.x * delta;
       ent.mesh.position.z += ent.velocity.z * delta;
 
-      // 3. PROCEDURAL ANIMATION
+      // 3. PROCEDURAL ANIMATION (Applied only to characters/animated actors)
       if (ent.hasAnimation) {
         const speed2D = Math.hypot(ent.velocity.x, ent.velocity.z);
+        const baseSx = ent.scale?.x || 1.0;
+        const baseSy = ent.scale?.y || 1.0;
+        const baseSz = ent.scale?.z || 1.0;
+
         if (speed2D > 0.1) {
           const bob = Math.abs(Math.sin(ent.animTime * (speed2D * 1.5))) * 0.15;
           ent.mesh.position.y = (ent.hasPhysics ? ent.mesh.position.y : 1.1) + bob;
-          ent.mesh.scale.set(1.0 + bob * 0.5, 1.0 - bob * 0.5, 1.0 + bob * 0.5);
+          ent.mesh.scale.set(baseSx * (1.0 + bob * 0.5), baseSy * (1.0 - bob * 0.5), baseSz * (1.0 + bob * 0.5));
         } else {
           const breath = Math.sin(ent.animTime * 3) * 0.03;
-          ent.mesh.scale.set(1.0 - breath, 1.0 + breath, 1.0 - breath);
+          ent.mesh.scale.set(baseSx * (1.0 - breath), baseSy * (1.0 + breath), baseSz * (1.0 - breath));
         }
-      } else {
-        ent.mesh.scale.set(1, 1, 1);
       }
     });
 
@@ -759,7 +886,6 @@ export class Scene3D {
 
         if (dist > 1.2 && dist <= (playerEnt.attractRadius || 15.0)) {
           toPlayer.normalize();
-          // Mathematical gravitational attraction: F = G / sqrt(d)
           const pullForce = (playerEnt.attractForce || 12.0) / Math.max(1.0, Math.sqrt(dist));
           otherEnt.mesh.position.x += toPlayer.x * pullForce * delta;
           otherEnt.mesh.position.z += toPlayer.z * pullForce * delta;
@@ -778,12 +904,13 @@ export class Scene3D {
 
         const pPos = playerEnt.mesh.position;
         const oPos = otherEnt.mesh.position;
-        const dx = pPos.x - oPos.x;
-        const dz = pPos.z - oPos.z;
-        const dist = Math.hypot(dx, dz);
 
         // 5.1 TRIGGER DETECTION (GATILHO)
         if (otherEnt.type === 'trigger') {
+          const dx = pPos.x - oPos.x;
+          const dz = pPos.z - oPos.z;
+          const dist = Math.hypot(dx, dz);
+
           if (dist < 2.8) {
             if (otherEnt.mesh.material) {
               otherEnt.mesh.material.opacity = 0.85;
@@ -799,20 +926,92 @@ export class Scene3D {
           return;
         }
 
-        // 5.2 SOLID COLLISION WITH BLOCKS, ENEMIES & PROPS
+        // 5.2 SOLID COLLISION WITH BLOCKS, WALLS, PLATFORMS & PROPS
         if (playerEnt.hasCollision && otherEnt.hasCollision) {
-          const minDistance = otherEnt.type === 'block' ? 2.1 : 1.8;
+          if (otherEnt.type === 'block' || otherEnt.type === 'platform' || otherEnt.type === 'object') {
+            // Precise Oriented Bounding Box (OBB) collision for arbitrarily sized and rotated walls / blocks
+            const sx = otherEnt.mesh.scale.x;
+            const sy = otherEnt.mesh.scale.y;
+            const sz = otherEnt.mesh.scale.z;
+            const baseW = otherEnt.baseSize?.x || 1.8;
+            const baseH = otherEnt.baseSize?.y || 2.2;
+            const baseD = otherEnt.baseSize?.z || 1.8;
 
-          if (dist < minDistance && dist > 0.001) {
-            const overlap = minDistance - dist;
-            const nx = dx / dist;
-            const nz = dz / dist;
+            const halfW = (baseW * sx) / 2;
+            const halfH = (baseH * sy) / 2;
+            const halfD = (baseD * sz) / 2;
+            const rotY = otherEnt.mesh.rotation.y;
 
-            pPos.x += nx * overlap;
-            pPos.z += nz * overlap;
+            // Player radius = 0.7m
+            const playerRadius = 0.7;
 
-            if (this.onCollisionEvent) {
-              this.onCollisionEvent(playerEnt.sunName, otherEnt.sunName);
+            // Transform player into local 2D space of the obstacle (XZ plane)
+            const dx = pPos.x - oPos.x;
+            const dz = pPos.z - oPos.z;
+            const cosR = Math.cos(-rotY);
+            const sinR = Math.sin(-rotY);
+            const localX = dx * cosR - dz * sinR;
+            const localZ = dx * sinR + dz * cosR;
+
+            // Clamped closest point in box coordinates
+            const closestX = Math.max(-halfW, Math.min(halfW, localX));
+            const closestZ = Math.max(-halfD, Math.min(halfD, localZ));
+
+            const diffX = localX - closestX;
+            const diffZ = localZ - closestZ;
+            const distSq = diffX * diffX + diffZ * diffZ;
+
+            if (distSq < playerRadius * playerRadius) {
+              const dist = Math.sqrt(distSq);
+              let pushLocalX = 0;
+              let pushLocalZ = 0;
+
+              if (dist > 0.0001) {
+                const overlap = playerRadius - dist;
+                pushLocalX = (diffX / dist) * overlap;
+                pushLocalZ = (diffZ / dist) * overlap;
+              } else {
+                // Inside box: find closest edge to push out
+                const penLeft = localX - (-halfW) + playerRadius;
+                const penRight = halfW - localX + playerRadius;
+                const penBack = localZ - (-halfD) + playerRadius;
+                const penFront = halfD - localZ + playerRadius;
+                const minPen = Math.min(penLeft, penRight, penBack, penFront);
+
+                if (minPen === penLeft) pushLocalX = -penLeft;
+                else if (minPen === penRight) pushLocalX = penRight;
+                else if (minPen === penBack) pushLocalZ = -penBack;
+                else pushLocalZ = penFront;
+              }
+
+              // Transform push back to world space
+              const worldPushX = pushLocalX * Math.cos(rotY) - pushLocalZ * Math.sin(rotY);
+              const worldPushZ = pushLocalX * Math.sin(rotY) + pushLocalZ * Math.cos(rotY);
+
+              pPos.x += worldPushX;
+              pPos.z += worldPushZ;
+
+              if (this.onCollisionEvent) {
+                this.onCollisionEvent(playerEnt.sunName, otherEnt.sunName);
+              }
+            }
+          } else {
+            // Spherical collision for dynamic agents (enemies, npcs)
+            const dx = pPos.x - oPos.x;
+            const dz = pPos.z - oPos.z;
+            const dist = Math.hypot(dx, dz);
+            const minDistance = 1.8;
+
+            if (dist < minDistance && dist > 0.001) {
+              const overlap = minDistance - dist;
+              const nx = dx / dist;
+              const nz = dz / dist;
+              pPos.x += nx * overlap;
+              pPos.z += nz * overlap;
+
+              if (this.onCollisionEvent) {
+                this.onCollisionEvent(playerEnt.sunName, otherEnt.sunName);
+              }
             }
           }
         }

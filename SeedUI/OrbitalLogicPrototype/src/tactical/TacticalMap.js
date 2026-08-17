@@ -1081,22 +1081,47 @@ export class TacticalMap {
         return;
       }
 
-      // 2. BLOCK / SOLID OBSTACLE
-      if (ent.type === 'block') {
-        const size = 1.8 * this.meterToPx;
-        this.ctx.save();
-        this.ctx.fillStyle = '#312e81';
-        this.ctx.fillRect(px - size / 2, pz - size / 2, size, size);
+      // 2. BLOCK / WALL / PLATFORM / STATIC SCENERY (Render exact scaled width, depth and rotation)
+      if (ent.type === 'block' || ent.type === 'platform' || (ent.type === 'object' && ent.hasCollision)) {
+        const sx = ent.mesh ? ent.mesh.scale.x : 1.0;
+        const sz = ent.mesh ? ent.mesh.scale.z : 1.0;
+        const baseW = ent.baseSize?.x || 1.8;
+        const baseD = ent.baseSize?.z || 1.8;
+        const w = (baseW * sx) * this.meterToPx;
+        const d = (baseD * sz) * this.meterToPx;
+        const rotY = ent.mesh ? ent.mesh.rotation.y : 0;
 
-        this.ctx.strokeStyle = isSelected ? '#ffffff' : '#a855f7';
-        this.ctx.lineWidth = 2;
-        this.ctx.strokeRect(px - size / 2, pz - size / 2, size, size);
+        this.ctx.save();
+        this.ctx.translate(px, pz);
+        this.ctx.rotate(rotY);
+
+        this.ctx.fillStyle = ent.type === 'platform' ? 'rgba(30, 58, 95, 0.75)' : 'rgba(49, 46, 129, 0.85)';
+        this.ctx.fillRect(-w / 2, -d / 2, w, d);
+
+        // Internal blueprint crosshatch lines for walls/blocks
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        this.ctx.lineWidth = 1;
+        for (let tx = -w / 2; tx <= w / 2; tx += this.meterToPx / 2) {
+          this.ctx.beginPath();
+          this.ctx.moveTo(tx, -d / 2);
+          this.ctx.lineTo(tx, d / 2);
+          this.ctx.stroke();
+        }
+
+        this.ctx.strokeStyle = isSelected ? '#38bdf8' : (ent.type === 'platform' ? '#38bdf8' : '#a855f7');
+        this.ctx.lineWidth = isSelected ? 3 : 1.8;
+        if (isSelected) {
+          this.ctx.shadowColor = '#38bdf8';
+          this.ctx.shadowBlur = 12;
+        }
+        this.ctx.strokeRect(-w / 2, -d / 2, w, d);
 
         this.ctx.fillStyle = '#e0e7ff';
-        this.ctx.font = 'bold 9px sans-serif';
+        this.ctx.font = 'bold 9.5px sans-serif';
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
-        this.ctx.fillText(ent.sunName || 'Bloco', px, pz);
+        this.ctx.fillText(ent.sunName || 'Parede/Bloco', 0, 0);
+
         this.ctx.restore();
         return;
       }
