@@ -871,13 +871,20 @@ html, body {
 /* 2.4 Right Catalog Pane */
 .seed-catalog-pane {
   flex: 1 1 20%;
-  min-width: 200px;
+  min-width: 220px;
   background: var(--seed-bg-darker);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
 }
 
 .catalog-scroll-container {
-  flex: 1;
+  flex: 0 1 auto;
+  max-height: 40vh;
   overflow-y: auto;
+  overflow-x: hidden;
+  border-bottom: 1px solid var(--seed-border-dark);
 }
 
 .catalog-accordion-group {
@@ -962,13 +969,17 @@ html, body {
 .dot-mesh { color: var(--seed-accent-cyan); }
 .dot-mechanic { color: #a288ff; }
 
-/* Node Inspector Box */
+/* Node Inspector Box - Fully Scrollable Contextual Parameters */
 .node-inspector-box {
   border-top: 2px solid var(--seed-border-dark);
   background: #171717;
-  padding: 10px;
-  min-height: 160px;
-  flex-shrink: 0;
+  padding: 10px 10px 4px 10px;
+  flex: 1 1 auto;
+  min-height: 220px;
+  max-height: calc(100vh - 140px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .inspector-header {
@@ -980,6 +991,50 @@ html, body {
   margin-bottom: 8px;
   padding-bottom: 4px;
   border-bottom: 1px solid var(--seed-border-dark);
+  flex-shrink: 0;
+}
+
+.inspector-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 6px;
+  padding-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Custom Sleek Scrollbars */
+.inspector-body::-webkit-scrollbar,
+.catalog-scroll-container::-webkit-scrollbar,
+.scenery-transform-box::-webkit-scrollbar,
+.diagnostic-drawer-body::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.inspector-body::-webkit-scrollbar-track,
+.catalog-scroll-container::-webkit-scrollbar-track,
+.scenery-transform-box::-webkit-scrollbar-track,
+.diagnostic-drawer-body::-webkit-scrollbar-track {
+  background: rgba(15, 17, 23, 0.6);
+  border-radius: 3px;
+}
+
+.inspector-body::-webkit-scrollbar-thumb,
+.catalog-scroll-container::-webkit-scrollbar-thumb,
+.scenery-transform-box::-webkit-scrollbar-thumb,
+.diagnostic-drawer-body::-webkit-scrollbar-thumb {
+  background: rgba(56, 189, 248, 0.4);
+  border-radius: 3px;
+}
+
+.inspector-body::-webkit-scrollbar-thumb:hover,
+.catalog-scroll-container::-webkit-scrollbar-thumb:hover,
+.scenery-transform-box::-webkit-scrollbar-thumb:hover,
+.diagnostic-drawer-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(56, 189, 248, 0.85);
 }
 
 .inspector-node-type {
