@@ -18,8 +18,8 @@ export class Scene3D {
     this.raycaster = new THREE.Raycaster();
     this.mouse = new THREE.Vector2();
 
-    // Game / Sim state
-    this.entities = new Map(); // sunId -> { sunId, sunName, mesh, shape, type, ... }
+    // 3D World Instances: instanceId -> { id, name, familyId, familyName, mesh, shape, type, ... }
+    this.entities = new Map();
     this.selectedEntity = null;
     this.isPlaying = false;
     this.isPaused = false;
@@ -72,7 +72,7 @@ export class Scene3D {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-    // Lighting (Cyberpunk Blueprint / Studio look)
+    // Lighting
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
     this.scene.add(ambientLight);
 
@@ -108,7 +108,6 @@ export class Scene3D {
       RIGHT: THREE.MOUSE.PAN
     };
 
-    // Smooth gating
     let downPos = { x: 0, y: 0 };
     this.canvas.addEventListener('pointerdown', (e) => {
       downPos = { x: e.clientX, y: e.clientY };
@@ -245,7 +244,7 @@ export class Scene3D {
       this.scene.add(this.selectionBoxHelper);
 
       if (this.onEntitySelected) {
-        this.onEntitySelected(entity.sunId);
+        this.onEntitySelected(entity);
       }
     } else {
       this.transformControls.detach();
@@ -255,18 +254,97 @@ export class Scene3D {
     }
   }
 
+  selectEntityById(entityId) {
+    if (!entityId) {
+      this.selectEntity(null);
+      return;
+    }
+    const ent = this.entities.get(entityId);
+    if (ent) this.selectEntity(ent);
+  }
+
   selectEntityBySunId(sunId) {
     if (!sunId) {
       this.selectEntity(null);
       return;
     }
-    const ent = this.entities.get(sunId);
-    if (ent) this.selectEntity(ent);
+    // Find first instance belonging to this family
+    for (const ent of this.entities.values()) {
+      if (ent.familyId === sunId || ent.id === sunId) {
+        this.selectEntity(ent);
+        return;
+      }
+    }
   }
 
-  // --- Dimension, Scale and Rotation Modifiers for Scenery / Collision Objects ---
-  setEntityDimensions(sunId, widthX, heightY, depthZ) {
-    const ent = this.entities.get(sunId);
+  // --- Duplication of 3D Objects in World (Belonging to the same Orbital Family) ---
+  duplicateSelectedEntity() {
+    if (!this.selectedEntity || !this.selectedEntity.mesh) return null;
+
+    if (this.historyManager) {
+      this.historyManager.saveSnapshot();
+    }
+
+    const src = this.selectedEntity;
+    const sameFamilyCount = Array.from(this.entities.values()).filter(e => e.familyId === src.familyId).length;
+    const nextIdx = sameFamilyCount + 1;
+    const newId = `inst-${src.familyId}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const newName = `${src.familyName || src.name} #${nextIdx}`;
+
+    // Create cloned mesh
+    const { mesh, baseSize } = this.createMeshForShape(src.shape, src.type, nextIdx);
+    mesh.position.copy(src.mesh.position);
+    mesh.position.x += (src.dimensions?.x || 2.0) + 1.2; // Offset in world
+    mesh.rotation.copy(src.mesh.rotation);
+    mesh.scale.copy(src.mesh.scale);
+    mesh.name = newName;
+    this.scene.add(mesh);
+
+    const newEnt = {
+      ...src,
+      id: newId,
+      name: newName,
+      mesh,
+      baseSize,
+      scale: { x: src.scale.x, y: src.scale.y, z: src.scale.z },
+      dimensions: { x: src.dimensions.x, y: src.dimensions.y, z: src.dimensions.z },
+      initialPos: mesh.position.clone(),
+      velocity: new THREE.Vector3(),
+      isGrounded: true,
+      currentGroundY: 1.1,
+      animTime: Math.random() * 10
+    };
+
+    this.entities.set(newId, newEnt);
+    this.selectEntity(newEnt);
+    return newEnt;
+  }
+
+  deleteSelectedEntity() {
+    if (!this.selectedEntity) return;
+
+    if (this.historyManager) {
+      this.historyManager.saveSnapshot();
+    }
+
+    const ent = this.selectedEntity;
+    if (ent.mesh) {
+      this.scene.remove(ent.mesh);
+      ent.mesh.geometry?.dispose();
+    }
+
+    this.entities.delete(ent.id);
+    this.selectEntity(null);
+  }
+
+  // --- Dimension, Scale, Rotation & Position Modifiers ---
+  setEntityDimensions(entityId, widthX, heightY, depthZ) {
+    let ent = this.entities.get(entityId);
+    if (!ent) {
+      for (const e of this.entities.values()) {
+        if (e.familyId === entityId) { ent = e; break; }
+      }
+    }
     if (!ent || !ent.mesh) return;
 
     const baseW = ent.baseSize?.x || 1.8;
@@ -285,8 +363,13 @@ export class Scene3D {
     if (this.onTransformChange) this.onTransformChange(ent);
   }
 
-  setEntityScale(sunId, sx, sy, sz) {
-    const ent = this.entities.get(sunId);
+  setEntityScale(entityId, sx, sy, sz) {
+    let ent = this.entities.get(entityId);
+    if (!ent) {
+      for (const e of this.entities.values()) {
+        if (e.familyId === entityId) { ent = e; break; }
+      }
+    }
     if (!ent || !ent.mesh) return;
 
     ent.mesh.scale.set(Math.max(0.05, sx), Math.max(0.05, sy), Math.max(0.05, sz));
@@ -305,8 +388,13 @@ export class Scene3D {
     if (this.onTransformChange) this.onTransformChange(ent);
   }
 
-  setEntityRotation(sunId, rxDeg, ryDeg, rzDeg) {
-    const ent = this.entities.get(sunId);
+  setEntityRotation(entityId, rxDeg, ryDeg, rzDeg) {
+    let ent = this.entities.get(entityId);
+    if (!ent) {
+      for (const e of this.entities.values()) {
+        if (e.familyId === entityId) { ent = e; break; }
+      }
+    }
     if (!ent || !ent.mesh) return;
 
     ent.mesh.rotation.set(
@@ -319,8 +407,13 @@ export class Scene3D {
     if (this.onTransformChange) this.onTransformChange(ent);
   }
 
-  setEntityPosition(sunId, px, py, pz) {
-    const ent = this.entities.get(sunId);
+  setEntityPosition(entityId, px, py, pz) {
+    let ent = this.entities.get(entityId);
+    if (!ent) {
+      for (const e of this.entities.values()) {
+        if (e.familyId === entityId) { ent = e; break; }
+      }
+    }
     if (!ent || !ent.mesh) return;
 
     ent.mesh.position.set(px, py, pz);
@@ -330,8 +423,13 @@ export class Scene3D {
     if (this.onTransformChange) this.onTransformChange(ent);
   }
 
-  setEntityCollisionConfig(sunId, { padding = 0, walkableTop = true, isSolid = true }) {
-    const ent = this.entities.get(sunId);
+  setEntityCollisionConfig(entityId, { padding = 0, walkableTop = true, isSolid = true }) {
+    let ent = this.entities.get(entityId);
+    if (!ent) {
+      for (const e of this.entities.values()) {
+        if (e.familyId === entityId) { ent = e; break; }
+      }
+    }
     if (!ent) return;
     ent.collisionPadding = padding;
     ent.walkableTop = walkableTop;
@@ -343,6 +441,22 @@ export class Scene3D {
     window.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
       if (this.isPlaying) return;
+
+      // Duplicate shortcut
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyD') {
+        e.preventDefault();
+        this.duplicateSelectedEntity();
+        return;
+      }
+
+      // Delete shortcut
+      if (e.code === 'Delete' || e.code === 'Backspace') {
+        if (this.selectedEntity) {
+          e.preventDefault();
+          this.deleteSelectedEntity();
+          return;
+        }
+      }
 
       // Transform Gizmo shortcuts
       if (e.code === 'KeyG') {
@@ -440,7 +554,7 @@ export class Scene3D {
     step();
   }
 
-  // --- Dynamic Synchronization with Orbital Logic Suns ---
+  // --- Dynamic Synchronization with Orbital Families (Suns) ---
   syncWithOrbitalSuns(suns) {
     if (!suns || suns.length === 0) {
       this.entities.forEach(ent => {
@@ -454,21 +568,21 @@ export class Scene3D {
       return;
     }
 
-    const activeSunIds = new Set(suns.map(s => s.id));
+    const activeFamilyIds = new Set(suns.map(s => s.id));
 
-    // 1. Remove deleted entities
-    this.entities.forEach((ent, sunId) => {
-      if (!activeSunIds.has(sunId)) {
+    // 1. Remove deleted families' instances
+    this.entities.forEach((ent, instanceId) => {
+      if (!activeFamilyIds.has(ent.familyId)) {
         if (ent.mesh) {
           this.scene.remove(ent.mesh);
           ent.mesh.geometry?.dispose();
         }
         if (this.selectedEntity === ent) this.selectEntity(null);
-        this.entities.delete(sunId);
+        this.entities.delete(instanceId);
       }
     });
 
-    // 2. Build / Update entity capabilities based strictly on active planets
+    // 2. Build / Update family capabilities on all instances
     suns.forEach((sun, index) => {
       const sunNameUpper = sun.name.toUpperCase();
       let entityType = 'object';
@@ -551,16 +665,21 @@ export class Scene3D {
         else modelShape = 'plane';
       }
 
-      let ent = this.entities.get(sun.id);
+      // Find all existing instances for this family
+      const familyInstances = Array.from(this.entities.values()).filter(e => e.familyId === sun.id);
 
-      if (!ent) {
+      if (familyInstances.length === 0) {
+        // Create initial default instance #1
+        const instanceId = `inst-${sun.id}-1`;
         const { mesh, baseSize } = this.createMeshForShape(modelShape, entityType, index);
-        mesh.name = sun.name;
+        mesh.name = `${sun.name} #1`;
         this.scene.add(mesh);
 
-        ent = {
-          sunId: sun.id,
-          sunName: sun.name,
+        const ent = {
+          id: instanceId,
+          name: `${sun.name} #1`,
+          familyId: sun.id,
+          familyName: sun.name,
           mesh,
           shape: modelShape,
           type: entityType,
@@ -582,50 +701,53 @@ export class Scene3D {
           animTime: Math.random() * 10,
           initialPos: mesh.position.clone()
         };
-        this.entities.set(sun.id, ent);
+        this.entities.set(instanceId, ent);
 
         if (entityType === 'player' && !this.selectedEntity) {
           this.selectEntity(ent);
         }
       } else {
-        if (ent.shape !== modelShape || ent.type !== entityType) {
-          const oldPos = ent.mesh.position.clone();
-          const oldRot = ent.mesh.rotation.clone();
-          const oldScale = ent.mesh.scale.clone();
+        // Update all existing instances belonging to this family
+        familyInstances.forEach((ent) => {
+          if (ent.shape !== modelShape || ent.type !== entityType) {
+            const oldPos = ent.mesh.position.clone();
+            const oldRot = ent.mesh.rotation.clone();
+            const oldScale = ent.mesh.scale.clone();
 
-          this.scene.remove(ent.mesh);
-          ent.mesh.geometry?.dispose();
+            this.scene.remove(ent.mesh);
+            ent.mesh.geometry?.dispose();
 
-          const { mesh, baseSize } = this.createMeshForShape(modelShape, entityType, index);
-          mesh.position.copy(oldPos);
-          mesh.rotation.copy(oldRot);
-          mesh.scale.copy(oldScale);
-          mesh.name = sun.name;
-          this.scene.add(mesh);
+            const { mesh, baseSize } = this.createMeshForShape(modelShape, entityType, index);
+            mesh.position.copy(oldPos);
+            mesh.rotation.copy(oldRot);
+            mesh.scale.copy(oldScale);
+            mesh.name = ent.name;
+            this.scene.add(mesh);
 
-          ent.mesh = mesh;
-          ent.shape = modelShape;
-          ent.baseSize = baseSize;
-          if (this.selectedEntity === ent) this.transformControls.attach(mesh);
-        }
+            ent.mesh = mesh;
+            ent.shape = modelShape;
+            ent.baseSize = baseSize;
+            if (this.selectedEntity === ent) this.transformControls.attach(mesh);
+          }
 
-        ent.sunName = sun.name;
-        ent.type = entityType;
-        ent.hasMove = hasMove;
-        ent.walkSpeed = walkSpeed;
-        ent.hasRun = hasRun;
-        ent.runMultiplier = runMultiplier;
-        ent.hasJump = hasJump;
-        ent.jumpForce = jumpForce;
-        ent.hasPhysics = hasPhysics;
-        ent.mass = mass;
-        ent.gravity = gravity;
-        ent.hasCollision = hasCollision;
-        ent.isSolid = isSolid;
-        ent.hasAnimation = hasAnimation;
-        ent.hasAttract = hasAttract;
-        ent.attractForce = attractForce;
-        ent.attractRadius = attractRadius;
+          ent.familyName = sun.name;
+          ent.type = entityType;
+          ent.hasMove = hasMove;
+          ent.walkSpeed = walkSpeed;
+          ent.hasRun = hasRun;
+          ent.runMultiplier = runMultiplier;
+          ent.hasJump = hasJump;
+          ent.jumpForce = jumpForce;
+          ent.hasPhysics = hasPhysics;
+          ent.mass = mass;
+          ent.gravity = gravity;
+          ent.hasCollision = hasCollision;
+          ent.isSolid = isSolid;
+          ent.hasAnimation = hasAnimation;
+          ent.hasAttract = hasAttract;
+          ent.attractForce = attractForce;
+          ent.attractRadius = attractRadius;
+        });
       }
     });
   }
@@ -926,7 +1048,6 @@ export class Scene3D {
         const isInsideFootprint = Math.abs(localX) <= (halfW + entRadius * 0.4) && Math.abs(localZ) <= (halfD + entRadius * 0.4);
 
         if (isInsideFootprint && otherEnt.walkableTop !== false) {
-          // If feet are above or close to the top surface
           if (entFeetY >= topY - 0.4) {
             const platformFloorY = topY + 1.1;
             if (platformFloorY > targetFloorY) {
@@ -989,7 +1110,7 @@ export class Scene3D {
           otherEnt.mesh.position.z += toPlayer.z * pullForce * delta;
 
           if (this.onCollisionEvent && Math.random() < 0.08) {
-            this.onCollisionEvent(playerEnt.sunName, otherEnt.sunName);
+            this.onCollisionEvent(playerEnt.familyName, otherEnt.familyName);
           }
         }
       });
@@ -1014,7 +1135,7 @@ export class Scene3D {
               otherEnt.mesh.material.opacity = 0.85;
             }
             if (this.onCollisionEvent && Math.random() < 0.12) {
-              this.onCollisionEvent(playerEnt.sunName, otherEnt.sunName);
+              this.onCollisionEvent(playerEnt.familyName, otherEnt.familyName);
             }
           } else {
             if (otherEnt.mesh.material) {
@@ -1082,7 +1203,6 @@ export class Scene3D {
               pushLocalX = (diffX / dist) * overlap;
               pushLocalZ = (diffZ / dist) * overlap;
             } else {
-              // Inside box: find closest edge to push out
               const penLeft = localX - (-halfW) + playerRadius;
               const penRight = halfW - localX + playerRadius;
               const penBack = localZ - (-halfD) + playerRadius;
@@ -1095,7 +1215,6 @@ export class Scene3D {
               else pushLocalZ = penFront;
             }
 
-            // Transform push back to world space
             const worldPushX = pushLocalX * Math.cos(rotY) - pushLocalZ * Math.sin(rotY);
             const worldPushZ = pushLocalX * Math.sin(rotY) + pushLocalZ * Math.cos(rotY);
 
@@ -1103,14 +1222,13 @@ export class Scene3D {
             pPos.z += worldPushZ;
 
             if (this.onCollisionEvent) {
-              this.onCollisionEvent(playerEnt.sunName, otherEnt.sunName);
+              this.onCollisionEvent(playerEnt.familyName, otherEnt.familyName);
             }
           }
         }
       });
     }
 
-    // Update selection box outline
     if (this.selectionBoxHelper && this.selectedEntity && this.selectedEntity.mesh) {
       this.selectionBoxHelper.update();
     }

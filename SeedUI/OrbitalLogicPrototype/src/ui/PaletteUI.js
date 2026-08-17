@@ -40,7 +40,6 @@ export class PaletteUI {
     const orbitalCanvas = document.getElementById('canvas-orbital');
 
     document.querySelectorAll('.palette-chip-item').forEach((item) => {
-      // 1. Drag Start
       item.addEventListener('dragstart', (e) => {
         const data = {
           type: item.dataset.type,
@@ -55,7 +54,6 @@ export class PaletteUI {
         e.dataTransfer.effectAllowed = 'copy';
       });
 
-      // 2. Direct Click to Add (Instant Add to Active / Closest Sun)
       item.addEventListener('click', () => {
         const data = {
           type: item.dataset.type,
@@ -217,14 +215,35 @@ export class PaletteUI {
       return;
     }
 
-    titleEl.textContent = entity.name;
-    typeEl.textContent = entity.type ? entity.type.toUpperCase() : 'NÓ';
+    // Resolve target 3D instance and target Family Sun
+    let ent3D = null;
+    let targetSun = null;
+
+    if (entity.mesh) {
+      // Direct 3D instance passed
+      ent3D = entity;
+      targetSun = this.orbitalGraph.suns.find(s => s.id === ent3D.familyId) || null;
+    } else if (entity.type === 'sun') {
+      targetSun = entity;
+      // Find currently selected 3D instance or first instance of this family
+      if (this.scene3D.selectedEntity && this.scene3D.selectedEntity.familyId === targetSun.id) {
+        ent3D = this.scene3D.selectedEntity;
+      } else {
+        for (const e of this.scene3D.entities.values()) {
+          if (e.familyId === targetSun.id) { ent3D = e; break; }
+        }
+      }
+    }
+
+    const familyInstances = targetSun ? Array.from(this.scene3D.entities.values()).filter(e => e.familyId === targetSun.id) : [];
+
+    titleEl.textContent = ent3D ? ent3D.name : (entity.name || 'Entidade');
+    typeEl.textContent = entity.type ? entity.type.toUpperCase() : (ent3D ? `INSTÂNCIA 3D` : 'NÓ');
 
     let html = '';
-    const isTrigger = entity.name.toUpperCase().includes('GATILHO') || entity.name.toUpperCase().includes('TRIGGER');
+    const isTrigger = (entity.name || ent3D?.familyName || '').toUpperCase().includes('GATILHO') || (entity.name || '').toUpperCase().includes('TRIGGER');
 
-    if (entity.type === 'sun') {
-      const ent3D = this.scene3D.entities.get(entity.id);
+    if (targetSun || ent3D) {
       const baseW = ent3D?.baseSize?.x || 1.8;
       const baseH = ent3D?.baseSize?.y || 2.2;
       const baseD = ent3D?.baseSize?.z || 1.8;
@@ -250,13 +269,28 @@ export class PaletteUI {
       const normRotZ = rotZDeg < 0 ? rotZDeg + 360 : rotZDeg;
 
       html += `
-        <div class="inspector-row">
-          <span class="inspector-label">Nome da Entidade:</span>
-          <input type="text" class="inspector-input" value="${entity.name}" id="inp-sun-name" />
+        <div class="inspector-row" style="background: rgba(56, 189, 248, 0.08); padding: 6px 8px; border-radius: 6px; border: 1px solid rgba(56, 189, 248, 0.2); margin-bottom: 8px;">
+          <div>
+            <div style="font-size: 11px; font-weight: 700; color: #38bdf8;">
+              <i class="ti ti-box"></i> ${ent3D ? ent3D.name : 'Instância #1'}
+            </div>
+            <div style="font-size: 10px; color: #94a3b8; margin-top: 2px;">
+              Família Orbital: <span style="color:#ff7700; font-weight:700;">${targetSun?.name || ent3D?.familyName}</span> (${familyInstances.length} no mundo)
+            </div>
+          </div>
+          <div style="display:flex; gap:4px;">
+            <button class="btn-scenery-preset" id="btn-duplicate-inspector" title="Duplicar Objeto 3D no Mundo (Ctrl+D)" style="padding: 3px 6px; color:#38bdf8; border-color:#38bdf8;">
+              <i class="ti ti-copy"></i> Duplicar
+            </button>
+            <button class="btn-scenery-preset" id="btn-detach-family" title="Separar este objeto em uma nova Família Orbital única" style="padding: 3px 6px; color:#fb923c;">
+              <i class="ti ti-star"></i> Separar
+            </button>
+          </div>
         </div>
+
         <div class="inspector-row">
-          <span class="inspector-label">Raio do Núcleo:</span>
-          <input type="number" class="inspector-input" value="${entity.radius}" id="inp-sun-radius" />
+          <span class="inspector-label">Nome da Família:</span>
+          <input type="text" class="inspector-input" value="${targetSun ? targetSun.name : (ent3D?.familyName || '')}" id="inp-sun-name" />
         </div>
 
         <!-- 1. 3D POSITION IN WORLD (POSIÇÃO) -->
@@ -429,7 +463,7 @@ export class PaletteUI {
       }
 
       html += `
-        <button class="btn-delete-node" id="btn-del-selected-node" style="margin-top:10px;"><i class="ti ti-trash"></i> Excluir Sistema</button>
+        <button class="btn-delete-node" id="btn-del-selected-node" style="margin-top:10px;"><i class="ti ti-trash"></i> Excluir Instância 3D</button>
       `;
     } else if (entity.type === 'planet') {
       html += `
@@ -469,19 +503,49 @@ export class PaletteUI {
 
     bodyEl.innerHTML = html;
 
+    const targetId = ent3D ? ent3D.id : (targetSun ? targetSun.id : entity.id);
+
+    // Duplicate button
+    document.getElementById('btn-duplicate-inspector')?.addEventListener('click', () => {
+      this.scene3D.duplicateSelectedEntity();
+    });
+
+    // Detach to new unique family
+    document.getElementById('btn-detach-family')?.addEventListener('click', () => {
+      if (!ent3D) return;
+      if (this.historyManager) this.historyManager.saveSnapshot();
+
+      const newFamilyId = `sun-${Date.now()}`;
+      const newFamilyName = `${ent3D.name} (Família)`;
+      const origSun = this.orbitalGraph.suns.find(s => s.id === ent3D.familyId);
+
+      const newSun = {
+        id: newFamilyId,
+        name: newFamilyName,
+        type: 'sun',
+        x: (origSun?.x || 0) + 120,
+        y: (origSun?.y || 0) + 40,
+        radius: 36,
+        color: origSun?.color || '#38bdf8',
+        orbits: JSON.parse(JSON.stringify(origSun?.orbits || [{ radius: 65, dash: [4, 4] }])),
+        planets: JSON.parse(JSON.stringify(origSun?.planets || []))
+      };
+
+      this.orbitalGraph.suns.push(newSun);
+      ent3D.familyId = newFamilyId;
+      ent3D.familyName = newFamilyName;
+      this.orbitalGraph.selectedEntity = newSun;
+      this.renderInspector(ent3D);
+      this.orbitalGraph.notifyGraphChange();
+    });
+
     // Attach real-time edit listeners
     const inpSunName = document.getElementById('inp-sun-name');
-    if (inpSunName) {
+    if (inpSunName && targetSun) {
       inpSunName.addEventListener('input', (e) => {
-        entity.name = e.target.value;
+        targetSun.name = e.target.value;
+        if (ent3D) ent3D.familyName = e.target.value;
         this.scene3D.syncWithOrbitalSuns(this.orbitalGraph.suns);
-      });
-    }
-
-    const inpSunRadius = document.getElementById('inp-sun-radius');
-    if (inpSunRadius) {
-      inpSunRadius.addEventListener('input', (e) => {
-        entity.radius = parseFloat(e.target.value) || 36;
       });
     }
 
@@ -491,14 +555,15 @@ export class PaletteUI {
       const num = document.getElementById(numId);
 
       const onValChange = (val) => {
-        const ent3D = this.scene3D.entities.get(entity.id);
-        const curX = parseFloat(document.getElementById('inp-pos-x')?.value) || (ent3D?.mesh?.position.x || 0);
-        const curY = parseFloat(document.getElementById('inp-pos-y')?.value) || (ent3D?.mesh?.position.y || 1.1);
-        const curZ = parseFloat(document.getElementById('inp-pos-z')?.value) || (ent3D?.mesh?.position.z || 0);
+        const activeEnt = this.scene3D.selectedEntity || ent3D;
+        if (!activeEnt) return;
+        const curX = parseFloat(document.getElementById('inp-pos-x')?.value) || (activeEnt.mesh?.position.x || 0);
+        const curY = parseFloat(document.getElementById('inp-pos-y')?.value) || (activeEnt.mesh?.position.y || 1.1);
+        const curZ = parseFloat(document.getElementById('inp-pos-z')?.value) || (activeEnt.mesh?.position.z || 0);
 
-        if (axis === 'x') this.scene3D.setEntityPosition(entity.id, val, curY, curZ);
-        else if (axis === 'y') this.scene3D.setEntityPosition(entity.id, curX, val, curZ);
-        else this.scene3D.setEntityPosition(entity.id, curX, curY, val);
+        if (axis === 'x') this.scene3D.setEntityPosition(activeEnt.id, val, curY, curZ);
+        else if (axis === 'y') this.scene3D.setEntityPosition(activeEnt.id, curX, val, curZ);
+        else this.scene3D.setEntityPosition(activeEnt.id, curX, curY, val);
 
         if (slider && document.activeElement !== slider) slider.value = val;
         if (num && document.activeElement !== num) num.value = val;
@@ -518,13 +583,15 @@ export class PaletteUI {
       const num = document.getElementById(numId);
 
       const onValChange = (deg) => {
+        const activeEnt = this.scene3D.selectedEntity || ent3D;
+        if (!activeEnt) return;
         const curX = parseFloat(document.getElementById('inp-rot-x')?.value) || 0;
         const curY = parseFloat(document.getElementById('inp-rot-y')?.value) || 0;
         const curZ = parseFloat(document.getElementById('inp-rot-z')?.value) || 0;
 
-        if (axis === 'x') this.scene3D.setEntityRotation(entity.id, deg, curY, curZ);
-        else if (axis === 'y') this.scene3D.setEntityRotation(entity.id, curX, deg, curZ);
-        else this.scene3D.setEntityRotation(entity.id, curX, curY, deg);
+        if (axis === 'x') this.scene3D.setEntityRotation(activeEnt.id, deg, curY, curZ);
+        else if (axis === 'y') this.scene3D.setEntityRotation(activeEnt.id, curX, deg, curZ);
+        else this.scene3D.setEntityRotation(activeEnt.id, curX, curY, deg);
 
         if (slider && document.activeElement !== slider) slider.value = deg;
         if (num && document.activeElement !== num) num.value = deg;
@@ -548,7 +615,9 @@ export class PaletteUI {
 
     // 4. 3D Dimension Handlers (X, Y, Z)
     const applyDimensions = (newX, newY, newZ) => {
-      this.scene3D.setEntityDimensions(entity.id, newX, newY, newZ);
+      const activeEnt = this.scene3D.selectedEntity || ent3D;
+      if (!activeEnt) return;
+      this.scene3D.setEntityDimensions(activeEnt.id, newX, newY, newZ);
       const sliderX = document.getElementById('slider-dim-x');
       const numX = document.getElementById('inp-dim-x');
       const sliderY = document.getElementById('slider-dim-y');
@@ -611,27 +680,27 @@ export class PaletteUI {
 
     // Collision Type Change
     document.getElementById('sel-collision-type')?.addEventListener('change', (e) => {
-      const ent3D = this.scene3D.entities.get(entity.id);
-      if (!ent3D) return;
+      const activeEnt = this.scene3D.selectedEntity || ent3D;
+      if (!activeEnt) return;
       if (e.target.value === 'solid') {
-        ent3D.hasCollision = true;
-        ent3D.isSolid = true;
-        ent3D.type = 'block';
+        activeEnt.hasCollision = true;
+        activeEnt.isSolid = true;
+        activeEnt.type = 'block';
       } else if (e.target.value === 'trigger') {
-        ent3D.hasCollision = true;
-        ent3D.isSolid = false;
-        ent3D.type = 'trigger';
+        activeEnt.hasCollision = true;
+        activeEnt.isSolid = false;
+        activeEnt.type = 'trigger';
       } else {
-        ent3D.hasCollision = false;
-        ent3D.isSolid = false;
+        activeEnt.hasCollision = false;
+        activeEnt.isSolid = false;
       }
     });
 
     // Walkable Top Toggle
     document.getElementById('chk-walkable-top')?.addEventListener('change', (e) => {
-      const ent3D = this.scene3D.entities.get(entity.id);
-      if (ent3D) {
-        ent3D.walkableTop = e.target.checked;
+      const activeEnt = this.scene3D.selectedEntity || ent3D;
+      if (activeEnt) {
+        activeEnt.walkableTop = e.target.checked;
       }
     });
 
@@ -639,9 +708,9 @@ export class PaletteUI {
     const sliderColPad = document.getElementById('slider-col-padding');
     const inpColPad = document.getElementById('inp-col-padding');
     const onPadChange = (pad) => {
-      const ent3D = this.scene3D.entities.get(entity.id);
-      if (ent3D) {
-        ent3D.collisionPadding = pad;
+      const activeEnt = this.scene3D.selectedEntity || ent3D;
+      if (activeEnt) {
+        activeEnt.collisionPadding = pad;
       }
       if (sliderColPad && document.activeElement !== sliderColPad) sliderColPad.value = pad;
       if (inpColPad && document.activeElement !== inpColPad) inpColPad.value = pad;
@@ -672,7 +741,13 @@ export class PaletteUI {
     const btnDel = document.getElementById('btn-del-selected-node');
     if (btnDel) {
       btnDel.addEventListener('click', () => {
-        this.orbitalGraph.deleteEntity(entity);
+        if (ent3D) {
+          this.scene3D.deleteSelectedEntity();
+        } else if (targetSun) {
+          this.orbitalGraph.deleteEntity(targetSun);
+        } else {
+          this.orbitalGraph.deleteEntity(entity);
+        }
       });
     }
   }

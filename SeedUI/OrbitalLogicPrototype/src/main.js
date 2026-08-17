@@ -101,24 +101,22 @@ document.addEventListener('DOMContentLoaded', () => {
   // 5. Initialize UI, Inspector, Splitters & Accordions
   paletteUI = new PaletteUI(orbitalGraph, scene3D, historyManager, tacticalMap);
 
-  // 6. Cross-Selection Synchronization (3D <-> Orbital Graph <-> Tactical Map)
+  // 6. Cross-Selection Synchronization (3D Instance <-> Orbital Family Sun <-> Tactical Map)
   let isSyncing = false;
 
-  scene3D.onEntitySelected = (sunId) => {
+  scene3D.onEntitySelected = (ent) => {
     if (isSyncing) return;
     isSyncing = true;
     try {
-      if (!sunId) {
+      if (!ent) {
         orbitalGraph.selectedEntity = null;
         tacticalMap.selectedItem = null;
         paletteUI.renderInspector(null);
       } else {
-        const sun = orbitalGraph.suns.find(s => s.id === sunId);
-        if (sun) {
-          orbitalGraph.selectedEntity = sun;
-          tacticalMap.selectedItem = scene3D.entities.get(sunId) || null;
-          paletteUI.renderInspector(sun);
-        }
+        const familySun = orbitalGraph.suns.find(s => s.id === ent.familyId) || null;
+        orbitalGraph.selectedEntity = familySun;
+        tacticalMap.selectedItem = ent;
+        paletteUI.renderInspector(ent);
       }
     } finally {
       isSyncing = false;
@@ -144,7 +142,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (targetSunId) {
           scene3D.selectEntityBySunId(targetSunId);
-          tacticalMap.selectedItem = scene3D.entities.get(targetSunId) || null;
+          tacticalMap.selectedItem = scene3D.selectedEntity || null;
         }
       } else {
         scene3D.selectEntity(null);
@@ -240,11 +238,21 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-3d-rotate')?.addEventListener('click', () => setTool('rotate'));
   document.getElementById('btn-3d-scale')?.addEventListener('click', () => setTool('scale'));
   document.getElementById('btn-3d-frame')?.addEventListener('click', () => scene3D.frameSelectedEntity());
+  document.getElementById('btn-3d-duplicate')?.addEventListener('click', () => scene3D.duplicateSelectedEntity());
+  document.getElementById('btn-3d-delete')?.addEventListener('click', () => scene3D.deleteSelectedEntity());
 
   // Keyboard shortcut listener
   window.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
-    if (e.code === 'KeyG') setTool('translate');
+    if ((e.ctrlKey || e.metaKey) && e.code === 'KeyD') {
+      e.preventDefault();
+      scene3D.duplicateSelectedEntity();
+    } else if (e.code === 'Delete' || e.code === 'Backspace') {
+      if (scene3D.selectedEntity) {
+        e.preventDefault();
+        scene3D.deleteSelectedEntity();
+      }
+    } else if (e.code === 'KeyG') setTool('translate');
     else if (e.code === 'KeyR') setTool('rotate');
     else if (e.code === 'KeyS' && !e.ctrlKey) setTool('scale');
     else if (e.code === 'KeyO') setTool('orbit');
