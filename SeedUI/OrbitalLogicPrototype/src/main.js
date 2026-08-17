@@ -244,6 +244,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Keyboard shortcut listener
   window.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+    if (scene3D && scene3D.isPlaying) return;
     if ((e.ctrlKey || e.metaKey) && e.code === 'KeyD') {
       e.preventDefault();
       scene3D.duplicateSelectedEntity();

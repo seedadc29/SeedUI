@@ -167,6 +167,10 @@ export class Scene3D {
       scale: { x: 1, y: 1, z: 1 },
       dimensions: { x: 1.0, y: 0.7, z: 1.4 },
       initialPos: camGroup.position.clone(),
+      velocity: new THREE.Vector3(),
+      isGrounded: true,
+      currentGroundY: 1.1,
+      animTime: 0,
       hasCollision: false,
       isSolid: false
     };
@@ -1066,7 +1070,8 @@ export class Scene3D {
 
     this.entities.forEach(ent => {
       if (ent.mesh) ent.initialPos.copy(ent.mesh.position);
-      ent.velocity.set(0, 0, 0);
+      if (!ent.velocity) ent.velocity = new THREE.Vector3();
+      else ent.velocity.set(0, 0, 0);
       ent.isGrounded = true;
       ent.currentGroundY = 1.1;
     });
@@ -1087,7 +1092,7 @@ export class Scene3D {
     this.entities.forEach(ent => {
       if (ent.mesh) {
         ent.mesh.position.copy(ent.initialPos);
-        ent.velocity.set(0, 0, 0);
+        if (ent.velocity) ent.velocity.set(0, 0, 0);
         if (ent.scale) {
           ent.mesh.scale.set(ent.scale.x, ent.scale.y, ent.scale.z);
         }
