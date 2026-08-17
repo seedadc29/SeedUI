@@ -9,12 +9,15 @@ export class Scene3D {
     this.scene = null;
     this.perspectiveCamera = null;
     this.orthoCamera = null;
+    this.gameCamera = null;
     this.activeCamera = null;
     this.renderer = null;
     this.controls = null;
     this.transformControls = null;
     this.grid = null;
     this.selectionBoxHelper = null;
+    this.cameraHelper = null;
+    this.cameraHelperMesh = null;
     this.raycaster = new THREE.Raycaster();
     this.mouse = new THREE.Vector2();
 
@@ -24,6 +27,18 @@ export class Scene3D {
     this.isPlaying = false;
     this.isPaused = false;
     this.isOrthographic = false;
+    this.isPilotingGameCamera = false;
+
+    // Game Camera Configuration
+    this.cameraConfig = {
+      mode: 'follow', // 'follow' | 'static'
+      preset: 'platformer', // 'platformer' | 'third_person' | 'top_down' | 'first_person' | 'static'
+      offset: new THREE.Vector3(0, 3.2, 13.0),
+      lookAtOffset: new THREE.Vector3(0, 1.2, 0),
+      fov: 48,
+      smoothSpeed: 6.0,
+      trackRotation: false
+    };
 
     // Input state during play
     this.keys = { w: false, a: false, s: false, d: false, space: false, shift: false };
@@ -32,10 +47,12 @@ export class Scene3D {
     this.onEntitySelected = null;
     this.onTransformChange = null;
     this.onCollisionEvent = null;
+    this.onCameraConfigChange = null;
 
     this.init();
     this.initControls();
     this.initTransformControls();
+    this.initGameCameraEntity();
     this.initShortcuts();
     this.animate();
   }
@@ -47,11 +64,11 @@ export class Scene3D {
     const rect = this.canvas.parentElement.getBoundingClientRect();
     const aspect = rect.width / rect.height;
 
-    // 1. Perspective Camera
+    // 1. Perspective Camera (Editor Orbit)
     this.perspectiveCamera = new THREE.PerspectiveCamera(45, aspect, 0.1, 1000);
     this.perspectiveCamera.position.set(12, 10, 16);
 
-    // 2. Orthographic Camera
+    // 2. Orthographic Camera (Editor 2D Projection)
     const frustumSize = 18;
     this.orthoCamera = new THREE.OrthographicCamera(
       (-frustumSize * aspect) / 2,
@@ -62,6 +79,11 @@ export class Scene3D {
       1000
     );
     this.orthoCamera.position.set(12, 10, 16);
+
+    // 3. Dedicated Game / Player View Camera
+    this.gameCamera = new THREE.PerspectiveCamera(this.cameraConfig.fov, aspect, 0.1, 1000);
+    this.gameCamera.position.set(0, 3.5, 14.0);
+    this.gameCamera.lookAt(0, 1.2, 0);
 
     this.activeCamera = this.perspectiveCamera;
 
@@ -95,8 +117,65 @@ export class Scene3D {
     window.addEventListener('resize', () => this.onResize());
   }
 
+  // --- Visual 3D Cinema Camera in World ---
+  initGameCameraEntity() {
+    const camGroup = new THREE.Group();
+    camGroup.name = 'Câmera de Jogo';
+
+    // Camera Body
+    const bodyGeo = new THREE.BoxGeometry(1.0, 0.7, 1.4);
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x1f293d, metalness: 0.8, roughness: 0.2 });
+    const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
+    bodyMesh.castShadow = true;
+    camGroup.add(bodyMesh);
+
+    // Camera Lens
+    const lensGeo = new THREE.CylinderGeometry(0.35, 0.42, 0.6, 24);
+    const lensMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, metalness: 0.9, roughness: 0.1 });
+    const lensMesh = new THREE.Mesh(lensGeo, lensMat);
+    lensMesh.rotation.x = Math.PI / 2;
+    lensMesh.position.z = -0.9;
+    camGroup.add(lensMesh);
+
+    // Top Viewfinder / Handle
+    const handleGeo = new THREE.BoxGeometry(0.2, 0.3, 0.7);
+    const handleMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, metalness: 0.5, roughness: 0.3 });
+    const handleMesh = new THREE.Mesh(handleGeo, handleMat);
+    handleMesh.position.set(0, 0.45, 0);
+    camGroup.add(handleMesh);
+
+    // Frustum Visual Wireframe
+    this.cameraHelper = new THREE.CameraHelper(this.gameCamera);
+    this.cameraHelper.material.opacity = 0.4;
+    this.cameraHelper.material.transparent = true;
+    this.scene.add(this.cameraHelper);
+
+    camGroup.position.copy(this.gameCamera.position);
+    this.scene.add(camGroup);
+    this.cameraHelperMesh = camGroup;
+
+    // Register as an interactive 3D entity in the world
+    const camEntity = {
+      id: 'game-camera-1',
+      name: 'Câmera de Jogo',
+      familyId: 'camera-family',
+      familyName: 'Câmera de Jogo',
+      type: 'camera',
+      shape: 'box',
+      mesh: camGroup,
+      baseSize: { x: 1.0, y: 0.7, z: 1.4 },
+      scale: { x: 1, y: 1, z: 1 },
+      dimensions: { x: 1.0, y: 0.7, z: 1.4 },
+      initialPos: camGroup.position.clone(),
+      hasCollision: false,
+      isSolid: false
+    };
+
+    this.entities.set('game-camera-1', camEntity);
+  }
+
   initControls() {
-    this.controls = new OrbitControls(this.activeCamera, this.canvas);
+    this.controls = new OrbitControls(this.perspectiveCamera, this.canvas);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.08;
     this.controls.screenSpacePanning = true;
@@ -111,7 +190,7 @@ export class Scene3D {
     let downPos = { x: 0, y: 0 };
     this.canvas.addEventListener('pointerdown', (e) => {
       downPos = { x: e.clientX, y: e.clientY };
-      if (this.isPlaying) {
+      if (this.isPlaying || this.isPilotingGameCamera) {
         if (e.button === 0 && !e.altKey) this.controls.enabled = false;
         else this.controls.enabled = true;
       } else {
@@ -125,7 +204,7 @@ export class Scene3D {
 
     // Hover feedback over 3D objects
     this.canvas.addEventListener('pointermove', (e) => {
-      if (this.isPlaying) return;
+      if (this.isPlaying || this.isPilotingGameCamera) return;
       if (this.transformControls && this.transformControls.dragging) return;
 
       const rect = this.canvas.getBoundingClientRect();
@@ -145,7 +224,7 @@ export class Scene3D {
 
     // Raycast selection on click
     this.canvas.addEventListener('click', (e) => {
-      if (this.isPlaying) return;
+      if (this.isPlaying || this.isPilotingGameCamera) return;
       if (Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y) > 10) return;
       if (this.transformControls && this.transformControls.dragging) return;
 
@@ -187,7 +266,7 @@ export class Scene3D {
 
   // --- Interactive Transform Gizmo (Translate, Rotate, Scale) ---
   initTransformControls() {
-    this.transformControls = new TransformControls(this.activeCamera, this.canvas);
+    this.transformControls = new TransformControls(this.perspectiveCamera, this.canvas);
     this.transformControls.size = 0.85;
     this.transformControls.setSpace('world');
     this.transformControls.setMode('translate');
@@ -204,12 +283,28 @@ export class Scene3D {
           this.selectedEntity.scale.y = this.selectedEntity.mesh.scale.y;
           this.selectedEntity.scale.z = this.selectedEntity.mesh.scale.z;
         }
+
+        // Sync game camera position with helper mesh
+        if (this.selectedEntity.type === 'camera') {
+          this.gameCamera.position.copy(this.selectedEntity.mesh.position);
+          this.gameCamera.quaternion.copy(this.selectedEntity.mesh.quaternion);
+          const p = this.getPlayerEntity();
+          if (p && p.mesh) {
+            this.cameraConfig.offset.copy(this.gameCamera.position).sub(p.mesh.position);
+          }
+          this.cameraHelper.update();
+        }
       }
     });
 
     this.transformControls.addEventListener('change', () => {
       if (this.selectedEntity) {
         if (this.selectionBoxHelper) this.selectionBoxHelper.update();
+        if (this.selectedEntity.type === 'camera') {
+          this.gameCamera.position.copy(this.selectedEntity.mesh.position);
+          this.gameCamera.quaternion.copy(this.selectedEntity.mesh.quaternion);
+          this.cameraHelper.update();
+        }
         if (this.onTransformChange) {
           this.onTransformChange(this.selectedEntity);
         }
@@ -220,7 +315,7 @@ export class Scene3D {
     this.scene.add(helper);
   }
 
-  setGizmoMode(mode) { // 'translate' | 'rotate' | 'scale'
+  setGizmoMode(mode) {
     if (this.transformControls) {
       this.transformControls.setMode(mode);
     }
@@ -237,7 +332,7 @@ export class Scene3D {
     if (entity && entity.mesh) {
       this.transformControls.attach(entity.mesh);
 
-      this.selectionBoxHelper = new THREE.BoxHelper(entity.mesh, 0x38bdf8);
+      this.selectionBoxHelper = new THREE.BoxHelper(entity.mesh, entity.type === 'camera' ? 0x38bdf8 : 0xa855f7);
       this.selectionBoxHelper.material.linewidth = 2;
       this.selectionBoxHelper.material.depthTest = false;
       this.selectionBoxHelper.renderOrder = 999;
@@ -268,7 +363,6 @@ export class Scene3D {
       this.selectEntity(null);
       return;
     }
-    // Find first instance belonging to this family
     for (const ent of this.entities.values()) {
       if (ent.familyId === sunId || ent.id === sunId) {
         this.selectEntity(ent);
@@ -277,9 +371,84 @@ export class Scene3D {
     }
   }
 
-  // --- Duplication of 3D Objects in World (Belonging to the same Orbital Family) ---
+  // --- Game Camera Modes & Presets ---
+  setGameCameraMode(mode) { // 'follow' | 'static'
+    this.cameraConfig.mode = mode;
+    if (this.onCameraConfigChange) this.onCameraConfigChange(this.cameraConfig);
+  }
+
+  setGameCameraPreset(preset) {
+    this.cameraConfig.preset = preset;
+    const player = this.getPlayerEntity();
+    const pPos = player && player.mesh ? player.mesh.position : new THREE.Vector3(0, 1.1, 0);
+
+    if (preset === 'platformer') {
+      this.cameraConfig.mode = 'follow';
+      this.cameraConfig.offset.set(0, 3.0, 14.0);
+      this.cameraConfig.lookAtOffset.set(0, 1.2, 0);
+      this.cameraConfig.fov = 46;
+    } else if (preset === 'third_person') {
+      this.cameraConfig.mode = 'follow';
+      this.cameraConfig.offset.set(0, 4.5, 9.5);
+      this.cameraConfig.lookAtOffset.set(0, 1.2, 0);
+      this.cameraConfig.fov = 52;
+    } else if (preset === 'top_down') {
+      this.cameraConfig.mode = 'follow';
+      this.cameraConfig.offset.set(0, 16.0, 0.1);
+      this.cameraConfig.lookAtOffset.set(0, 0, 0);
+      this.cameraConfig.fov = 48;
+    } else if (preset === 'first_person') {
+      this.cameraConfig.mode = 'follow';
+      this.cameraConfig.offset.set(0, 1.7, 0.3);
+      this.cameraConfig.lookAtOffset.set(0, 1.7, -5.0);
+      this.cameraConfig.fov = 65;
+    } else if (preset === 'static') {
+      this.cameraConfig.mode = 'static';
+    }
+
+    this.gameCamera.fov = this.cameraConfig.fov;
+    this.gameCamera.updateProjectionMatrix();
+
+    if (this.cameraHelperMesh) {
+      this.cameraHelperMesh.position.copy(pPos).add(this.cameraConfig.offset);
+      this.gameCamera.position.copy(this.cameraHelperMesh.position);
+      this.gameCamera.lookAt(pPos.clone().add(this.cameraConfig.lookAtOffset));
+      this.cameraHelperMesh.quaternion.copy(this.gameCamera.quaternion);
+      this.cameraHelper.update();
+    }
+
+    if (this.selectionBoxHelper && this.selectedEntity?.type === 'camera') {
+      this.selectionBoxHelper.update();
+    }
+
+    if (this.onCameraConfigChange) this.onCameraConfigChange(this.cameraConfig);
+  }
+
+  toggleGameCameraView() {
+    this.isPilotingGameCamera = !this.isPilotingGameCamera;
+
+    if (this.isPilotingGameCamera) {
+      this.activeCamera = this.gameCamera;
+      this.controls.object = this.gameCamera;
+      this.transformControls.camera = this.gameCamera;
+      if (this.cameraHelperMesh) this.cameraHelperMesh.visible = false;
+      if (this.cameraHelper) this.cameraHelper.visible = false;
+      this.selectEntity(null);
+    } else {
+      this.activeCamera = this.perspectiveCamera;
+      this.controls.object = this.perspectiveCamera;
+      this.transformControls.camera = this.perspectiveCamera;
+      if (this.cameraHelperMesh) this.cameraHelperMesh.visible = true;
+      if (this.cameraHelper) this.cameraHelper.visible = true;
+    }
+
+    this.onResize();
+    return this.isPilotingGameCamera;
+  }
+
+  // --- Duplication of 3D Objects in World ---
   duplicateSelectedEntity() {
-    if (!this.selectedEntity || !this.selectedEntity.mesh) return null;
+    if (!this.selectedEntity || !this.selectedEntity.mesh || this.selectedEntity.type === 'camera') return null;
 
     if (this.historyManager) {
       this.historyManager.saveSnapshot();
@@ -291,10 +460,9 @@ export class Scene3D {
     const newId = `inst-${src.familyId}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     const newName = `${src.familyName || src.name} #${nextIdx}`;
 
-    // Create cloned mesh
     const { mesh, baseSize } = this.createMeshForShape(src.shape, src.type, nextIdx);
     mesh.position.copy(src.mesh.position);
-    mesh.position.x += (src.dimensions?.x || 2.0) + 1.2; // Offset in world
+    mesh.position.x += (src.dimensions?.x || 2.0) + 1.2;
     mesh.rotation.copy(src.mesh.rotation);
     mesh.scale.copy(src.mesh.scale);
     mesh.name = newName;
@@ -321,7 +489,7 @@ export class Scene3D {
   }
 
   deleteSelectedEntity() {
-    if (!this.selectedEntity) return;
+    if (!this.selectedEntity || this.selectedEntity.type === 'camera') return;
 
     if (this.historyManager) {
       this.historyManager.saveSnapshot();
@@ -345,7 +513,7 @@ export class Scene3D {
         if (e.familyId === entityId) { ent = e; break; }
       }
     }
-    if (!ent || !ent.mesh) return;
+    if (!ent || !ent.mesh || ent.type === 'camera') return;
 
     const baseW = ent.baseSize?.x || 1.8;
     const baseH = ent.baseSize?.y || 2.2;
@@ -370,7 +538,7 @@ export class Scene3D {
         if (e.familyId === entityId) { ent = e; break; }
       }
     }
-    if (!ent || !ent.mesh) return;
+    if (!ent || !ent.mesh || ent.type === 'camera') return;
 
     ent.mesh.scale.set(Math.max(0.05, sx), Math.max(0.05, sy), Math.max(0.05, sz));
     ent.scale = { x: ent.mesh.scale.x, y: ent.mesh.scale.y, z: ent.mesh.scale.z };
@@ -403,6 +571,11 @@ export class Scene3D {
       (rzDeg * Math.PI) / 180
     );
 
+    if (ent.type === 'camera') {
+      this.gameCamera.quaternion.copy(ent.mesh.quaternion);
+      if (this.cameraHelper) this.cameraHelper.update();
+    }
+
     if (this.selectionBoxHelper) this.selectionBoxHelper.update();
     if (this.onTransformChange) this.onTransformChange(ent);
   }
@@ -418,6 +591,15 @@ export class Scene3D {
 
     ent.mesh.position.set(px, py, pz);
     ent.initialPos.copy(ent.mesh.position);
+
+    if (ent.type === 'camera') {
+      this.gameCamera.position.copy(ent.mesh.position);
+      const player = this.getPlayerEntity();
+      if (player && player.mesh) {
+        this.cameraConfig.offset.copy(this.gameCamera.position).sub(player.mesh.position);
+      }
+      if (this.cameraHelper) this.cameraHelper.update();
+    }
 
     if (this.selectionBoxHelper) this.selectionBoxHelper.update();
     if (this.onTransformChange) this.onTransformChange(ent);
@@ -440,6 +622,30 @@ export class Scene3D {
   initShortcuts() {
     window.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+
+      // Camera toggle view shortcut
+      if (e.code === 'KeyC' && !e.ctrlKey) {
+        e.preventDefault();
+        this.toggleGameCameraView();
+        const btn = document.getElementById('btn-toggle-game-camera');
+        const icon = document.getElementById('icon-game-camera');
+        const lbl = document.getElementById('lbl-game-camera');
+        if (btn && icon && lbl) {
+          if (this.isPilotingGameCamera) {
+            btn.style.background = '#0284c7';
+            btn.style.color = '#ffffff';
+            icon.className = 'ti ti-eye';
+            lbl.textContent = 'Visão de Jogo (Ativa)';
+          } else {
+            btn.style.background = '';
+            btn.style.color = '#38bdf8';
+            icon.className = 'ti ti-video';
+            lbl.textContent = 'Câmera de Jogo (C)';
+          }
+        }
+        return;
+      }
+
       if (this.isPlaying) return;
 
       // Duplicate shortcut
@@ -451,7 +657,7 @@ export class Scene3D {
 
       // Delete shortcut
       if (e.code === 'Delete' || e.code === 'Backspace') {
-        if (this.selectedEntity) {
+        if (this.selectedEntity && this.selectedEntity.type !== 'camera') {
           e.preventDefault();
           this.deleteSelectedEntity();
           return;
@@ -495,7 +701,7 @@ export class Scene3D {
 
   setCameraView(viewName) {
     const target = this.controls.target.clone();
-    const dist = this.activeCamera.position.distanceTo(target);
+    const dist = this.perspectiveCamera.position.distanceTo(target);
     const newPos = target.clone();
 
     switch (viewName) {
@@ -557,21 +763,23 @@ export class Scene3D {
   // --- Dynamic Synchronization with Orbital Families (Suns) ---
   syncWithOrbitalSuns(suns) {
     if (!suns || suns.length === 0) {
-      this.entities.forEach(ent => {
+      this.entities.forEach((ent, id) => {
+        if (ent.type === 'camera') return;
         if (ent.mesh) {
           this.scene.remove(ent.mesh);
           ent.mesh.geometry?.dispose();
         }
+        this.entities.delete(id);
       });
-      this.entities.clear();
       this.selectEntity(null);
       return;
     }
 
     const activeFamilyIds = new Set(suns.map(s => s.id));
 
-    // 1. Remove deleted families' instances
+    // 1. Remove deleted families' instances (except camera)
     this.entities.forEach((ent, instanceId) => {
+      if (ent.type === 'camera') return;
       if (!activeFamilyIds.has(ent.familyId)) {
         if (ent.mesh) {
           this.scene.remove(ent.mesh);
@@ -665,11 +873,9 @@ export class Scene3D {
         else modelShape = 'plane';
       }
 
-      // Find all existing instances for this family
       const familyInstances = Array.from(this.entities.values()).filter(e => e.familyId === sun.id);
 
       if (familyInstances.length === 0) {
-        // Create initial default instance #1
         const instanceId = `inst-${sun.id}-1`;
         const { mesh, baseSize } = this.createMeshForShape(modelShape, entityType, index);
         mesh.name = `${sun.name} #1`;
@@ -707,7 +913,6 @@ export class Scene3D {
           this.selectEntity(ent);
         }
       } else {
-        // Update all existing instances belonging to this family
         familyInstances.forEach((ent) => {
           if (ent.shape !== modelShape || ent.type !== entityType) {
             const oldPos = ent.mesh.position.clone();
@@ -854,6 +1059,11 @@ export class Scene3D {
     this.isPaused = false;
     this.selectEntity(null);
 
+    // Switch to Game Camera
+    this.activeCamera = this.gameCamera;
+    if (this.cameraHelperMesh) this.cameraHelperMesh.visible = false;
+    if (this.cameraHelper) this.cameraHelper.visible = false;
+
     this.entities.forEach(ent => {
       if (ent.mesh) ent.initialPos.copy(ent.mesh.position);
       ent.velocity.set(0, 0, 0);
@@ -867,6 +1077,12 @@ export class Scene3D {
   stopPlay() {
     this.isPlaying = false;
     this.isPaused = false;
+
+    if (!this.isPilotingGameCamera) {
+      this.activeCamera = this.perspectiveCamera;
+      if (this.cameraHelperMesh) this.cameraHelperMesh.visible = true;
+      if (this.cameraHelper) this.cameraHelper.visible = true;
+    }
 
     this.entities.forEach(ent => {
       if (ent.mesh) {
@@ -934,6 +1150,9 @@ export class Scene3D {
     this.perspectiveCamera.aspect = aspect;
     this.perspectiveCamera.updateProjectionMatrix();
 
+    this.gameCamera.aspect = aspect;
+    this.gameCamera.updateProjectionMatrix();
+
     const frustumSize = 18;
     this.orthoCamera.left = (-frustumSize * aspect) / 2;
     this.orthoCamera.right = (frustumSize * aspect) / 2;
@@ -945,15 +1164,70 @@ export class Scene3D {
   }
 
   update(delta) {
-    this.controls.update();
-
-    if (!this.isPlaying || this.isPaused) return;
+    if (this.activeCamera === this.perspectiveCamera || this.activeCamera === this.orthoCamera) {
+      this.controls.update();
+    }
 
     const playerEnt = this.getPlayerEntity();
 
+    // --- GAME CAMERA TRACKING LOGIC (Follow vs Static) ---
+    if (playerEnt && playerEnt.mesh) {
+      const pPos = playerEnt.mesh.position;
+
+      if (this.cameraConfig.mode === 'follow') {
+        const lerpFactor = Math.min(1.0, (this.cameraConfig.smoothSpeed || 6.0) * delta);
+
+        if (this.cameraConfig.preset === 'platformer') {
+          // 2.5D Lateral platformer tracking: slides horizontally (X) and vertically (Y), fixed Z distance
+          const targetCamX = pPos.x + this.cameraConfig.offset.x;
+          const targetCamY = pPos.y + this.cameraConfig.offset.y;
+          const targetCamZ = this.cameraConfig.offset.z;
+
+          this.gameCamera.position.x += (targetCamX - this.gameCamera.position.x) * lerpFactor;
+          this.gameCamera.position.y += (targetCamY - this.gameCamera.position.y) * lerpFactor;
+          this.gameCamera.position.z += (targetCamZ - this.gameCamera.position.z) * lerpFactor;
+
+          const lookTarget = new THREE.Vector3(pPos.x, pPos.y + this.cameraConfig.lookAtOffset.y, pPos.z);
+          this.gameCamera.lookAt(lookTarget);
+        } else if (this.cameraConfig.preset === 'top_down') {
+          const targetCamX = pPos.x + this.cameraConfig.offset.x;
+          const targetCamY = pPos.y + this.cameraConfig.offset.y;
+          const targetCamZ = pPos.z + this.cameraConfig.offset.z;
+
+          this.gameCamera.position.x += (targetCamX - this.gameCamera.position.x) * lerpFactor;
+          this.gameCamera.position.y += (targetCamY - this.gameCamera.position.y) * lerpFactor;
+          this.gameCamera.position.z += (targetCamZ - this.gameCamera.position.z) * lerpFactor;
+
+          this.gameCamera.lookAt(pPos.x, pPos.y, pPos.z);
+        } else {
+          // Third-person / Custom 3D follow
+          const targetPos = pPos.clone().add(this.cameraConfig.offset);
+          this.gameCamera.position.lerp(targetPos, lerpFactor);
+
+          const lookTarget = pPos.clone().add(this.cameraConfig.lookAtOffset);
+          this.gameCamera.lookAt(lookTarget);
+        }
+
+        if (this.cameraHelperMesh && !this.isPlaying && !this.isPilotingGameCamera) {
+          this.cameraHelperMesh.position.copy(this.gameCamera.position);
+          this.cameraHelperMesh.quaternion.copy(this.gameCamera.quaternion);
+        }
+      } else if (this.cameraConfig.mode === 'static') {
+        // Static Camera: stays fixed at its placed world position
+        if (this.isPlaying && this.cameraConfig.trackRotation) {
+          const lookTarget = pPos.clone().add(this.cameraConfig.lookAtOffset);
+          this.gameCamera.lookAt(lookTarget);
+        }
+      }
+
+      if (this.cameraHelper) this.cameraHelper.update();
+    }
+
+    if (!this.isPlaying || this.isPaused) return;
+
     // 1. Calculate dynamic ground height for entities (Standing on obstacles/platforms)
     this.entities.forEach((ent) => {
-      if (!ent.mesh || ent.shape === 'plane') return;
+      if (!ent.mesh || ent.shape === 'plane' || ent.type === 'camera') return;
 
       ent.animTime += delta;
 
@@ -1014,10 +1288,10 @@ export class Scene3D {
       ent.mesh.position.z += ent.velocity.z * delta;
 
       // 1.2 DYNAMIC PLATFORM & OBSTACLE GROUND LEVEL (Stand on top of obstacles)
-      let targetFloorY = 1.1; // Default floor
+      let targetFloorY = 1.1;
 
       this.entities.forEach((otherEnt) => {
-        if (otherEnt === ent || !otherEnt.mesh || otherEnt.shape === 'plane' || !otherEnt.hasCollision || !otherEnt.isSolid) return;
+        if (otherEnt === ent || !otherEnt.mesh || otherEnt.shape === 'plane' || otherEnt.type === 'camera' || !otherEnt.hasCollision || !otherEnt.isSolid) return;
 
         const oPos = otherEnt.mesh.position;
         const sx = otherEnt.mesh.scale.x;
@@ -1036,7 +1310,6 @@ export class Scene3D {
         const topY = oPos.y + halfH;
         const entFeetY = ent.mesh.position.y - 1.1;
 
-        // Check if entity is horizontally inside obstacle's footprint
         const dx = ent.mesh.position.x - oPos.x;
         const dz = ent.mesh.position.z - oPos.z;
         const cosR = Math.cos(-rotY);
@@ -1073,7 +1346,7 @@ export class Scene3D {
         }
       }
 
-      // 1.4 PROCEDURAL ANIMATION (Applied only to characters/animated actors)
+      // 1.4 PROCEDURAL ANIMATION
       if (ent.hasAnimation) {
         const speed2D = Math.hypot(ent.velocity.x, ent.velocity.z);
         const baseSx = ent.scale?.x || 1.0;
@@ -1091,12 +1364,12 @@ export class Scene3D {
       }
     });
 
-    // 2. GRAVITATIONAL ATTRACTION (ATRAIR MECÂNICA - Supports any entity with 'Atrair')
+    // 2. GRAVITATIONAL ATTRACTION (ATRAIR MECÂNICA)
     this.entities.forEach((attractorEnt) => {
-      if (!attractorEnt.hasAttract || !attractorEnt.mesh || attractorEnt.shape === 'plane') return;
+      if (!attractorEnt.hasAttract || !attractorEnt.mesh || attractorEnt.shape === 'plane' || attractorEnt.type === 'camera') return;
 
       this.entities.forEach((targetEnt) => {
-        if (targetEnt === attractorEnt || !targetEnt.mesh || targetEnt.shape === 'plane') return;
+        if (targetEnt === attractorEnt || !targetEnt.mesh || targetEnt.shape === 'plane' || targetEnt.type === 'camera') return;
 
         const aPos = attractorEnt.mesh.position;
         const tPos = targetEnt.mesh.position;
@@ -1121,7 +1394,7 @@ export class Scene3D {
     // 3. RIGID BODY LATERAL COLLISION & TRIGGER DETECTION
     if (playerEnt && playerEnt.mesh) {
       this.entities.forEach((otherEnt) => {
-        if (otherEnt === playerEnt || !otherEnt.mesh || otherEnt.shape === 'plane') return;
+        if (otherEnt === playerEnt || !otherEnt.mesh || otherEnt.shape === 'plane' || otherEnt.type === 'camera') return;
 
         const pPos = playerEnt.mesh.position;
         const oPos = otherEnt.mesh.position;
@@ -1147,7 +1420,7 @@ export class Scene3D {
           return;
         }
 
-        // 3.2 SOLID LATERAL COLLISION WITH BLOCKS, WALLS, PLATFORMS & PROPS
+        // 3.2 SOLID LATERAL COLLISION
         if (playerEnt.hasCollision && otherEnt.hasCollision && otherEnt.isSolid) {
           const sx = otherEnt.mesh.scale.x;
           const sy = otherEnt.mesh.scale.y;
@@ -1167,17 +1440,9 @@ export class Scene3D {
           const playerFeetY = pPos.y - 1.1;
           const playerHeadY = pPos.y + 1.1;
 
-          // If the player is on top of the obstacle surface, skip lateral push!
-          if (playerFeetY >= topY - 0.25) {
-            return;
-          }
+          if (playerFeetY >= topY - 0.25) return;
+          if (playerHeadY <= bottomY + 0.1) return;
 
-          // If the player is completely below the bottom of a floating platform, skip lateral push!
-          if (playerHeadY <= bottomY + 0.1) {
-            return;
-          }
-
-          // Transform player into local 2D space of the obstacle (XZ plane)
           const dx = pPos.x - oPos.x;
           const dz = pPos.z - oPos.z;
           const cosR = Math.cos(-rotY);
@@ -1187,7 +1452,6 @@ export class Scene3D {
 
           const playerRadius = 0.7;
 
-          // Clamped closest point in box coordinates
           const closestX = Math.max(-halfW, Math.min(halfW, localX));
           const closestZ = Math.max(-halfD, Math.min(halfD, localZ));
 

@@ -16,6 +16,7 @@ export class PaletteUI {
     this.initMaximizeControls();
     this.initAnimationToggle();
     this.initHistory();
+    this.initGameCameraButton();
 
     // Initial 3D sync
     this.scene3D.syncWithOrbitalSuns(this.orbitalGraph.suns);
@@ -23,6 +24,12 @@ export class PaletteUI {
     // Live update Inspector when user drags 3D Transform Gizmo
     this.scene3D.onTransformChange = (ent) => {
       this.syncInspectorWith3DTransform(ent);
+    };
+
+    this.scene3D.onCameraConfigChange = () => {
+      if (this.scene3D.selectedEntity?.type === 'camera') {
+        this.renderInspector(this.scene3D.selectedEntity);
+      }
     };
   }
 
@@ -202,6 +209,234 @@ export class PaletteUI {
     });
   }
 
+  renderCameraInspector() {
+    const titleEl = document.getElementById('inspector-node-title');
+    const typeEl = document.getElementById('inspector-node-type');
+    const bodyEl = document.getElementById('inspector-body');
+    if (!titleEl || !bodyEl) return;
+
+    const camCfg = this.scene3D.cameraConfig;
+    const camMesh = this.scene3D.cameraHelperMesh;
+
+    titleEl.textContent = 'Câmera de Jogo';
+    typeEl.textContent = 'VISÃO DO JOGADOR (GAME CAMERA)';
+
+    const posX = camMesh ? camMesh.position.x.toFixed(1) : '0.0';
+    const posY = camMesh ? camMesh.position.y.toFixed(1) : '3.5';
+    const posZ = camMesh ? camMesh.position.z.toFixed(1) : '14.0';
+
+    const rotXDeg = camMesh ? Math.round((camMesh.rotation.x * 180) / Math.PI) % 360 : 0;
+    const rotYDeg = camMesh ? Math.round((camMesh.rotation.y * 180) / Math.PI) % 360 : 0;
+    const rotZDeg = camMesh ? Math.round((camMesh.rotation.z * 180) / Math.PI) % 360 : 0;
+
+    const normRotX = rotXDeg < 0 ? rotXDeg + 360 : rotXDeg;
+    const normRotY = rotYDeg < 0 ? rotYDeg + 360 : rotYDeg;
+    const normRotZ = rotZDeg < 0 ? rotZDeg + 360 : rotZDeg;
+
+    let html = `
+      <div class="inspector-row" style="background: rgba(56, 189, 248, 0.12); padding: 8px; border-radius: 6px; border: 1px solid rgba(56, 189, 248, 0.35); margin-bottom: 10px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+          <div>
+            <div style="font-size: 12px; font-weight: 700; color: #38bdf8;">
+              <i class="ti ti-video"></i> Modo da Câmera
+            </div>
+            <div style="font-size: 10px; color: #94a3b8; margin-top: 2px;">
+              ${camCfg.mode === 'follow' ? '🏃 Segue o jogador no cenário' : '🔒 Fixa estática na sala'}
+            </div>
+          </div>
+          <button class="btn-scenery-preset ${this.scene3D.isPilotingGameCamera ? 'active' : ''}" id="btn-cam-pilot-toggle" style="padding: 4px 8px; color: #38bdf8; border-color: #38bdf8;">
+            <i class="ti ti-eye"></i> ${this.scene3D.isPilotingGameCamera ? 'Sair da Visão' : 'Ver Visão (C)'}
+          </button>
+        </div>
+      </div>
+
+      <div class="scenery-transform-box">
+        <div class="scenery-box-header">
+          <i class="ti ti-settings"></i> <span>🎮 COMPORTAMENTO & PRESETS</span>
+        </div>
+
+        <div class="inspector-row" style="margin-top: 6px;">
+          <span class="inspector-label">Comportamento:</span>
+          <select class="inspector-input" id="sel-cam-mode" style="width: 150px;">
+            <option value="follow" ${camCfg.mode === 'follow' ? 'selected' : ''}>🏃 Seguir Jogador</option>
+            <option value="static" ${camCfg.mode === 'static' ? 'selected' : ''}>🔒 Câmera Estática (Fixa)</option>
+          </select>
+        </div>
+
+        <div class="scenery-presets-label" style="margin-top: 8px;">Presets Rápidos de Visão:</div>
+        <div class="scenery-presets-grid" style="grid-template-columns: 1fr 1fr; gap: 4px;">
+          <button class="btn-scenery-preset ${camCfg.preset === 'platformer' ? 'active' : ''}" id="preset-cam-platformer" title="Visão lateral 2.5D de lado perfeita para jogos de plataforma">🎮 Plataforma 2.5D</button>
+          <button class="btn-scenery-preset ${camCfg.preset === 'third_person' ? 'active' : ''}" id="preset-cam-third" title="Câmera atrás e acima do personagem em terceira pessoa">🕹️ 3ª Pessoa 3D</button>
+          <button class="btn-scenery-preset ${camCfg.preset === 'top_down' ? 'active' : ''}" id="preset-cam-topdown" title="Câmera no alto olhando para baixo">🚁 Top-Down Aérea</button>
+          <button class="btn-scenery-preset ${camCfg.preset === 'first_person' ? 'active' : ''}" id="preset-cam-first" title="Câmera na altura dos olhos do personagem">👁️ 1ª Pessoa</button>
+          <button class="btn-scenery-preset ${camCfg.preset === 'static' ? 'active' : ''}" id="preset-cam-static" style="grid-column: 1 / -1;" title="Câmera estática no ponto atual da cena">🎥 Fixa / Estática</button>
+        </div>
+
+        <!-- 1. 3D POSITION / OFFSET -->
+        <div class="scenery-box-header" style="margin-top: 12px;">
+          <i class="ti ti-arrows-move"></i> <span>📍 POSIÇÃO / DISTÂNCIA DA CÂMERA</span>
+        </div>
+        <div class="dim-control-group">
+          <div class="dim-row">
+            <span class="dim-axis-badge axis-x">X</span>
+            <span class="dim-label">Posição X:</span>
+            <input type="range" min="-30" max="30" step="0.5" value="${posX}" class="dim-slider" id="slider-cam-x" />
+            <input type="number" step="0.1" value="${posX}" class="dim-number" id="inp-cam-x" />
+            <span class="dim-unit">m</span>
+          </div>
+          <div class="dim-row">
+            <span class="dim-axis-badge axis-y">Y</span>
+            <span class="dim-label">Altura (Y):</span>
+            <input type="range" min="0.5" max="30" step="0.5" value="${posY}" class="dim-slider" id="slider-cam-y" />
+            <input type="number" step="0.1" value="${posY}" class="dim-number" id="inp-cam-y" />
+            <span class="dim-unit">m</span>
+          </div>
+          <div class="dim-row">
+            <span class="dim-axis-badge axis-z">Z</span>
+            <span class="dim-label">Distância (Z):</span>
+            <input type="range" min="-30" max="40" step="0.5" value="${posZ}" class="dim-slider" id="slider-cam-z" />
+            <input type="number" step="0.1" value="${posZ}" class="dim-number" id="inp-cam-z" />
+            <span class="dim-unit">m</span>
+          </div>
+        </div>
+
+        <!-- 2. ROTATION -->
+        <div class="scenery-box-header" style="margin-top: 10px;">
+          <i class="ti ti-rotate-3d"></i> <span>🔄 INCLINAÇÃO / ROTAÇÃO (GRAUS)</span>
+        </div>
+        <div class="rot-control-group">
+          <div class="dim-row">
+            <span class="dim-axis-badge axis-x">X</span>
+            <span class="dim-label">Pitch (X):</span>
+            <input type="range" min="0" max="360" step="5" value="${normRotX}" class="dim-slider" id="slider-cam-rot-x" />
+            <input type="number" min="0" max="360" step="1" value="${normRotX}" class="dim-number" id="inp-cam-rot-x" />
+            <span class="dim-unit">°</span>
+          </div>
+          <div class="dim-row">
+            <span class="dim-axis-badge axis-y">Y</span>
+            <span class="dim-label">Yaw (Y):</span>
+            <input type="range" min="0" max="360" step="5" value="${normRotY}" class="dim-slider" id="slider-cam-rot-y" />
+            <input type="number" min="0" max="360" step="1" value="${normRotY}" class="dim-number" id="inp-cam-rot-y" />
+            <span class="dim-unit">°</span>
+          </div>
+        </div>
+
+        <!-- 3. OPTICS & FOV -->
+        <div class="scenery-box-header" style="margin-top: 10px;">
+          <i class="ti ti-camera"></i> <span>🔭 ÓPTICA & CAMPO DE VISÃO (FOV)</span>
+        </div>
+        <div class="dim-row">
+          <span class="dim-label" style="width: 100px;">FOV (Ângulo):</span>
+          <input type="range" min="25" max="100" step="1" value="${camCfg.fov || 48}" class="dim-slider" id="slider-cam-fov" />
+          <input type="number" min="25" max="100" step="1" value="${camCfg.fov || 48}" class="dim-number" id="inp-cam-fov" />
+          <span class="dim-unit">°</span>
+        </div>
+      </div>
+    `;
+
+    bodyEl.innerHTML = html;
+
+    // Mode Selector Handler
+    document.getElementById('sel-cam-mode')?.addEventListener('change', (e) => {
+      this.scene3D.setGameCameraMode(e.target.value);
+    });
+
+    // Preset Handlers
+    document.getElementById('preset-cam-platformer')?.addEventListener('click', () => {
+      this.scene3D.setGameCameraPreset('platformer');
+      this.renderCameraInspector();
+    });
+
+    document.getElementById('preset-cam-third')?.addEventListener('click', () => {
+      this.scene3D.setGameCameraPreset('third_person');
+      this.renderCameraInspector();
+    });
+
+    document.getElementById('preset-cam-topdown')?.addEventListener('click', () => {
+      this.scene3D.setGameCameraPreset('top_down');
+      this.renderCameraInspector();
+    });
+
+    document.getElementById('preset-cam-first')?.addEventListener('click', () => {
+      this.scene3D.setGameCameraPreset('first_person');
+      this.renderCameraInspector();
+    });
+
+    document.getElementById('preset-cam-static')?.addEventListener('click', () => {
+      this.scene3D.setGameCameraPreset('static');
+      this.renderCameraInspector();
+    });
+
+    // Pilot Button
+    document.getElementById('btn-cam-pilot-toggle')?.addEventListener('click', () => {
+      this.scene3D.toggleGameCameraView();
+      this.renderCameraInspector();
+    });
+
+    // Position Handlers
+    const setupCamPos = (axis, sliderId, numId) => {
+      const slider = document.getElementById(sliderId);
+      const num = document.getElementById(numId);
+
+      const onVal = (val) => {
+        const curX = parseFloat(document.getElementById('inp-cam-x')?.value) || 0;
+        const curY = parseFloat(document.getElementById('inp-cam-y')?.value) || 3.5;
+        const curZ = parseFloat(document.getElementById('inp-cam-z')?.value) || 14.0;
+
+        if (axis === 'x') this.scene3D.setEntityPosition('game-camera-1', val, curY, curZ);
+        else if (axis === 'y') this.scene3D.setEntityPosition('game-camera-1', curX, val, curZ);
+        else this.scene3D.setEntityPosition('game-camera-1', curX, curY, val);
+
+        if (slider && document.activeElement !== slider) slider.value = val;
+        if (num && document.activeElement !== num) num.value = val;
+      };
+
+      slider?.addEventListener('input', (e) => onVal(parseFloat(e.target.value) || 0));
+      num?.addEventListener('input', (e) => onVal(parseFloat(e.target.value) || 0));
+    };
+
+    setupCamPos('x', 'slider-cam-x', 'inp-cam-x');
+    setupCamPos('y', 'slider-cam-y', 'inp-cam-y');
+    setupCamPos('z', 'slider-cam-z', 'inp-cam-z');
+
+    // Rotation Handlers
+    const setupCamRot = (axis, sliderId, numId) => {
+      const slider = document.getElementById(sliderId);
+      const num = document.getElementById(numId);
+
+      const onVal = (deg) => {
+        const curX = parseFloat(document.getElementById('inp-cam-rot-x')?.value) || 0;
+        const curY = parseFloat(document.getElementById('inp-cam-rot-y')?.value) || 0;
+
+        if (axis === 'x') this.scene3D.setEntityRotation('game-camera-1', deg, curY, 0);
+        else this.scene3D.setEntityRotation('game-camera-1', curX, deg, 0);
+
+        if (slider && document.activeElement !== slider) slider.value = deg;
+        if (num && document.activeElement !== num) num.value = deg;
+      };
+
+      slider?.addEventListener('input', (e) => onVal(parseFloat(e.target.value) || 0));
+      num?.addEventListener('input', (e) => onVal(parseFloat(e.target.value) || 0));
+    };
+
+    setupCamRot('x', 'slider-cam-rot-x', 'inp-cam-rot-x');
+    setupCamRot('y', 'slider-cam-rot-y', 'inp-cam-rot-y');
+
+    // FOV Slider & Input
+    const sliderFov = document.getElementById('slider-cam-fov');
+    const inpFov = document.getElementById('inp-cam-fov');
+    const onFovChange = (fovVal) => {
+      camCfg.fov = fovVal;
+      this.scene3D.gameCamera.fov = fovVal;
+      this.scene3D.gameCamera.updateProjectionMatrix();
+      if (this.scene3D.cameraHelper) this.scene3D.cameraHelper.update();
+      if (sliderFov && document.activeElement !== sliderFov) sliderFov.value = fovVal;
+      if (inpFov && document.activeElement !== inpFov) inpFov.value = fovVal;
+    };
+    sliderFov?.addEventListener('input', (e) => onFovChange(parseFloat(e.target.value) || 48));
+    inpFov?.addEventListener('input', (e) => onFovChange(parseFloat(e.target.value) || 48));
+  }
+
   renderInspector(entity) {
     const titleEl = document.getElementById('inspector-node-title');
     const typeEl = document.getElementById('inspector-node-type');
@@ -211,7 +446,12 @@ export class PaletteUI {
     if (!entity) {
       titleEl.textContent = 'Propriedades';
       typeEl.textContent = 'Nenhum';
-      bodyEl.innerHTML = `<div class="inspector-empty-hint">Clique diretamente em qualquer <b>Objeto 3D</b> no mundo, Sol, Planeta ou Sala Tática para alterar posição, tamanho e rotação.</div>`;
+      bodyEl.innerHTML = `<div class="inspector-empty-hint">Clique diretamente na <b>Câmera</b>, em qualquer <b>Objeto 3D</b> no mundo, Sol, Planeta ou Sala Tática para alterar posição, tamanho e rotação.</div>`;
+      return;
+    }
+
+    if (entity.type === 'camera') {
+      this.renderCameraInspector();
       return;
     }
 
@@ -220,12 +460,10 @@ export class PaletteUI {
     let targetSun = null;
 
     if (entity.mesh) {
-      // Direct 3D instance passed
       ent3D = entity;
       targetSun = this.orbitalGraph.suns.find(s => s.id === ent3D.familyId) || null;
     } else if (entity.type === 'sun') {
       targetSun = entity;
-      // Find currently selected 3D instance or first instance of this family
       if (this.scene3D.selectedEntity && this.scene3D.selectedEntity.familyId === targetSun.id) {
         ent3D = this.scene3D.selectedEntity;
       } else {
@@ -503,8 +741,6 @@ export class PaletteUI {
 
     bodyEl.innerHTML = html;
 
-    const targetId = ent3D ? ent3D.id : (targetSun ? targetSun.id : entity.id);
-
     // Duplicate button
     document.getElementById('btn-duplicate-inspector')?.addEventListener('click', () => {
       this.scene3D.duplicateSelectedEntity();
@@ -755,6 +991,27 @@ export class PaletteUI {
   syncInspectorWith3DTransform(ent) {
     if (!ent || !ent.mesh) return;
 
+    if (ent.type === 'camera') {
+      const posX = ent.mesh.position.x.toFixed(1);
+      const posY = ent.mesh.position.y.toFixed(1);
+      const posZ = ent.mesh.position.z.toFixed(1);
+
+      const sliderPosX = document.getElementById('slider-cam-x');
+      const numPosX = document.getElementById('inp-cam-x');
+      const sliderPosY = document.getElementById('slider-cam-y');
+      const numPosY = document.getElementById('inp-cam-y');
+      const sliderPosZ = document.getElementById('slider-cam-z');
+      const numPosZ = document.getElementById('inp-cam-z');
+
+      if (sliderPosX && document.activeElement !== sliderPosX) sliderPosX.value = posX;
+      if (numPosX && document.activeElement !== numPosX) numPosX.value = posX;
+      if (sliderPosY && document.activeElement !== sliderPosY) sliderPosY.value = posY;
+      if (numPosY && document.activeElement !== numPosY) numPosY.value = posY;
+      if (sliderPosZ && document.activeElement !== sliderPosZ) sliderPosZ.value = posZ;
+      if (numPosZ && document.activeElement !== numPosZ) numPosZ.value = posZ;
+      return;
+    }
+
     // 1. Position sync
     const posX = ent.mesh.position.x.toFixed(1);
     const posY = ent.mesh.position.y.toFixed(1);
@@ -824,6 +1081,29 @@ export class PaletteUI {
     if (lblTopY) {
       const topY = ((ent.mesh.position.y || 1.1) + (baseH * ent.mesh.scale.y) / 2).toFixed(2);
       lblTopY.textContent = `${topY} m`;
+    }
+  }
+
+  initGameCameraButton() {
+    const btn = document.getElementById('btn-toggle-game-camera');
+    const icon = document.getElementById('icon-game-camera');
+    const lbl = document.getElementById('lbl-game-camera');
+
+    if (btn) {
+      btn.addEventListener('click', () => {
+        const isPiloting = this.scene3D.toggleGameCameraView();
+        if (isPiloting) {
+          btn.style.background = '#0284c7';
+          btn.style.color = '#ffffff';
+          if (icon) icon.className = 'ti ti-eye';
+          if (lbl) lbl.textContent = 'Visão de Jogo (Ativa)';
+        } else {
+          btn.style.background = '';
+          btn.style.color = '#38bdf8';
+          if (icon) icon.className = 'ti ti-video';
+          if (lbl) lbl.textContent = 'Câmera de Jogo (C)';
+        }
+      });
     }
   }
 
