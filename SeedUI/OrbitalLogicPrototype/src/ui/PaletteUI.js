@@ -911,26 +911,26 @@ export class PaletteUI {
     }
   }
 
-  // --- History (Undo / Redo) Keyboard Hooks ---
+  // --- History (Undo / Redo) Keyboard Hooks & Button Handlers ---
   initHistory() {
     window.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
 
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ' && !e.shiftKey) {
         e.preventDefault();
-        const prev = this.historyManager.undo();
-        if (prev) {
-          this.orbitalGraph.loadState(prev);
-          this.scene3D.syncWithOrbitalSuns(this.orbitalGraph.suns);
-        }
+        this.historyManager.undo();
       } else if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyY' || (e.code === 'KeyZ' && e.shiftKey))) {
         e.preventDefault();
-        const next = this.historyManager.redo();
-        if (next) {
-          this.orbitalGraph.loadState(next);
-          this.scene3D.syncWithOrbitalSuns(this.orbitalGraph.suns);
-        }
+        this.historyManager.redo();
       }
+    });
+
+    document.getElementById('btn-undo')?.addEventListener('click', () => {
+      this.historyManager.undo();
+    });
+
+    document.getElementById('btn-redo')?.addEventListener('click', () => {
+      this.historyManager.redo();
     });
   }
 

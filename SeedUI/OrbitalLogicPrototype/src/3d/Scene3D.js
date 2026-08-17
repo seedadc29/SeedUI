@@ -3,8 +3,9 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 
 export class Scene3D {
-  constructor(canvas) {
+  constructor(canvas, historyManager = null) {
     this.canvas = canvas;
+    this.historyManager = historyManager;
     this.scene = null;
     this.perspectiveCamera = null;
     this.orthoCamera = null;
@@ -194,6 +195,9 @@ export class Scene3D {
 
     this.transformControls.addEventListener('dragging-changed', (e) => {
       this.controls.enabled = !e.value;
+      if (e.value && this.historyManager) {
+        this.historyManager.saveSnapshot();
+      }
       if (!e.value && this.selectedEntity) {
         this.selectedEntity.initialPos.copy(this.selectedEntity.mesh.position);
         if (this.selectedEntity.scale) {

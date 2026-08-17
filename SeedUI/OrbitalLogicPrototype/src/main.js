@@ -5,20 +5,86 @@ import { PaletteUI } from './ui/PaletteUI.js';
 import { HistoryManager } from './core/HistoryManager.js';
 
 document.addEventListener('DOMContentLoaded', () => {
-  // 1. History Manager (Undo / Redo)
-  const historyManager = new HistoryManager(null);
+  // 1. History Manager (Undo / Redo with complete state capture)
+  let scene3D, orbitalGraph, tacticalMap, paletteUI;
+
+  const getFullAppState = () => {
+    if (!orbitalGraph || !scene3D || !tacticalMap) return null;
+    const orbitalSuns = JSON.parse(JSON.stringify(orbitalGraph.suns, (k, v) => {
+      if (k === 'parentSun' || k === 'parentPlanet') return undefined;
+      return v;
+    }));
+
+    const scenery3D = [];
+    scene3D.entities.forEach((ent, sunId) => {
+      if (ent.mesh) {
+        scenery3D.push({
+          sunId,
+          position: { x: ent.mesh.position.x, y: ent.mesh.position.y, z: ent.mesh.position.z },
+          rotation: { x: ent.mesh.rotation.x, y: ent.mesh.rotation.y, z: ent.mesh.rotation.z },
+          scale: { x: ent.mesh.scale.x, y: ent.mesh.scale.y, z: ent.mesh.scale.z },
+          collisionPadding: ent.collisionPadding || 0,
+          walkableTop: ent.walkableTop !== false,
+          isSolid: ent.isSolid !== false
+        });
+      }
+    });
+
+    const tacticalRooms = JSON.parse(JSON.stringify(tacticalMap.rooms));
+
+    return { orbitalSuns, scenery3D, tacticalRooms };
+  };
+
+  const restoreFullAppState = (state) => {
+    if (!state) return;
+
+    if (state.orbitalSuns) {
+      orbitalGraph.suns = state.orbitalSuns;
+      orbitalGraph.selectedEntity = null;
+      scene3D.syncWithOrbitalSuns(orbitalGraph.suns);
+    }
+
+    if (state.scenery3D) {
+      state.scenery3D.forEach(s => {
+        const ent = scene3D.entities.get(s.sunId);
+        if (ent && ent.mesh) {
+          ent.mesh.position.set(s.position.x, s.position.y, s.position.z);
+          ent.initialPos.copy(ent.mesh.position);
+          ent.mesh.rotation.set(s.rotation.x, s.rotation.y, s.rotation.z);
+          ent.mesh.scale.set(s.scale.x, s.scale.y, s.scale.z);
+          ent.scale = { x: s.scale.x, y: s.scale.y, z: s.scale.z };
+          ent.collisionPadding = s.collisionPadding;
+          ent.walkableTop = s.walkableTop;
+          ent.isSolid = s.isSolid;
+        }
+      });
+      if (scene3D.selectionBoxHelper) scene3D.selectionBoxHelper.update();
+    }
+
+    if (state.tacticalRooms) {
+      tacticalMap.rooms = state.tacticalRooms;
+      tacticalMap.selectedRoom = null;
+    }
+
+    if (paletteUI) {
+      paletteUI.updateStatsCounters();
+      paletteUI.renderInspector(null);
+    }
+  };
+
+  const historyManager = new HistoryManager(getFullAppState, restoreFullAppState);
 
   // 2. Initialize 3D Viewport Scene
   const canvas3D = document.getElementById('canvas-3d');
-  const scene3D = new Scene3D(canvas3D);
+  scene3D = new Scene3D(canvas3D, historyManager);
 
   // 3. Initialize 2D Orbital Logic Graph
   const canvasOrbital = document.getElementById('canvas-orbital');
-  const orbitalGraph = new OrbitalGraph(canvasOrbital, null, null, historyManager);
+  orbitalGraph = new OrbitalGraph(canvasOrbital, null, null, historyManager);
 
   // 4. Initialize Level 2D Blueprint / Tactical Command Map
   const canvasTactical = document.getElementById('canvas-tactical');
-  const tacticalMap = new TacticalMap(
+  tacticalMap = new TacticalMap(
     canvasTactical,
     scene3D,
     orbitalGraph,
@@ -33,7 +99,7 @@ document.addEventListener('DOMContentLoaded', () => {
   );
 
   // 5. Initialize UI, Inspector, Splitters & Accordions
-  const paletteUI = new PaletteUI(orbitalGraph, scene3D, historyManager, tacticalMap);
+  paletteUI = new PaletteUI(orbitalGraph, scene3D, historyManager, tacticalMap);
 
   // 6. Cross-Selection Synchronization (3D <-> Orbital Graph <-> Tactical Map)
   let isSyncing = false;

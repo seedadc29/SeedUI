@@ -1,66 +1,123 @@
 export class HistoryManager {
-  constructor(onChange) {
+  constructor(getStateFn = null, restoreStateFn = null) {
+    this.getStateFn = getStateFn;
+    this.restoreStateFn = restoreStateFn;
     this.undoStack = [];
     this.redoStack = [];
-    this.maxHistory = 50;
-    this.onChange = onChange;
+    this.maxHistory = 60;
+    this.isRestoring = false;
   }
 
-  serialize(state) {
+  saveSnapshot() {
+    if (this.isRestoring || !this.getStateFn) return;
     try {
-      return JSON.stringify(state, (key, value) => {
-        if (key === 'parentSun' || key === 'parentPlanet') return undefined;
-        return value;
-      });
+      const state = this.getStateFn();
+      if (!state) return;
+      const serialized = JSON.stringify(state);
+
+      // Prevent duplicate identical states on consecutive calls
+      if (this.undoStack.length > 0 && this.undoStack[this.undoStack.length - 1] === serialized) {
+        return;
+      }
+
+      this.undoStack.push(serialized);
+      if (this.undoStack.length > this.maxHistory) {
+        this.undoStack.shift();
+      }
+      this.redoStack = [];
     } catch (err) {
-      console.warn('Serialization fallback:', err);
-      return null;
+      console.warn('History save error:', err);
     }
   }
 
   pushState(state) {
-    const snapshot = this.serialize(state);
-    if (!snapshot) return;
-
-    this.undoStack.push(snapshot);
-    if (this.undoStack.length > this.maxHistory) {
-      this.undoStack.shift();
+    if (this.getStateFn) {
+      this.saveSnapshot();
+      return;
     }
-    this.redoStack = [];
+    // Fallback direct state push
+    try {
+      const snapshot = JSON.stringify(state, (k, v) => {
+        if (k === 'parentSun' || k === 'parentPlanet') return undefined;
+        return v;
+      });
+      if (!snapshot) return;
+      this.undoStack.push(snapshot);
+      if (this.undoStack.length > this.maxHistory) {
+        this.undoStack.shift();
+      }
+      this.redoStack = [];
+    } catch (e) {}
   }
 
-  undo(currentState) {
+  undo() {
     if (this.undoStack.length === 0) return null;
-    const currentSnapshot = this.serialize(currentState);
-    if (currentSnapshot) this.redoStack.push(currentSnapshot);
-
-    const previousSnapshot = this.undoStack.pop();
-    if (!previousSnapshot) return null;
 
     try {
-      const restoredState = JSON.parse(previousSnapshot);
-      if (this.onChange) this.onChange(restoredState);
-      return restoredState;
+      if (this.getStateFn && this.restoreStateFn) {
+        const currentState = this.getStateFn();
+        this.redoStack.push(JSON.stringify(currentState));
+
+        const previousSerialized = this.undoStack.pop();
+        if (!previousSerialized) return null;
+
+        const state = JSON.parse(previousSerialized);
+        this.isRestoring = true;
+        this.restoreStateFn(state);
+        this.isRestoring = false;
+        return state;
+      }
     } catch (e) {
+      console.error('Undo error:', e);
+      this.isRestoring = false;
       return null;
     }
+
+    // Direct fallback
+    const prev = this.undoStack.pop();
+    if (prev) {
+      try {
+        return JSON.parse(prev);
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
   }
 
-  redo(currentState) {
+  redo() {
     if (this.redoStack.length === 0) return null;
-    const currentSnapshot = this.serialize(currentState);
-    if (currentSnapshot) this.undoStack.push(currentSnapshot);
-
-    const nextSnapshot = this.redoStack.pop();
-    if (!nextSnapshot) return null;
 
     try {
-      const restoredState = JSON.parse(nextSnapshot);
-      if (this.onChange) this.onChange(restoredState);
-      return restoredState;
+      if (this.getStateFn && this.restoreStateFn) {
+        const currentState = this.getStateFn();
+        this.undoStack.push(JSON.stringify(currentState));
+
+        const nextSerialized = this.redoStack.pop();
+        if (!nextSerialized) return null;
+
+        const state = JSON.parse(nextSerialized);
+        this.isRestoring = true;
+        this.restoreStateFn(state);
+        this.isRestoring = false;
+        return state;
+      }
     } catch (e) {
+      console.error('Redo error:', e);
+      this.isRestoring = false;
       return null;
     }
+
+    // Direct fallback
+    const next = this.redoStack.pop();
+    if (next) {
+      try {
+        return JSON.parse(next);
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
   }
 
   canUndo() {
